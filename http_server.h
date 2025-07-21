@@ -1,3 +1,5 @@
+#include <stddef.h>
+#include <stdbool.h>
 #ifndef HTTP_SERVER_H
 #define HTTP_SERVER_H
 
@@ -20,6 +22,13 @@
 // 디버그 모드 (0: 비활성화, 1: 기본, 2: 상세)
 #define HTTP_DEBUG_LEVEL        0
 
+#define HTTP_404_HTML \
+    "<!DOCTYPE html>\n" \
+    "<html><head><title>404 Not Found</title></head>\n" \
+    "<body><h1>404 Not Found</h1>\n" \
+    "<p>The requested resource was not found on this server.</p>\n" \
+    "</body></html>"
+    
 // ========================
 // HTTP 열거형 타입
 // ========================
@@ -92,11 +101,11 @@ void http_send_json_response(uint8_t sock, http_status_t status, const char* jso
 void http_send_html_response(uint8_t sock, http_status_t status, const char* html_data);
 void http_send_404(uint8_t sock);
 void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t file_size, 
-                                const char* content_type, bool is_compressed);
-
-// ========================
-// API 핸들러 함수
-// ========================
+    const char* content_type, bool is_compressed);
+    
+    // ========================
+    // API 핸들러 함수
+    // ========================
 void http_handler_root(const http_request_t *request, http_response_t *response);
 void http_handler_status(const http_request_t *request, http_response_t *response);
 void http_handler_api_info(const http_request_t *request, http_response_t *response);
@@ -112,7 +121,10 @@ void http_handler_static_file(const http_request_t *request, http_response_t *re
 const char* get_content_type(const char* file_extension);
 const char* get_embedded_file(const char* path, size_t* file_size, bool* is_compressed, size_t* original_size);
 const char* get_embedded_file_with_content_type(const char* path, size_t* file_size, 
-                                               bool* is_compressed, size_t* original_size, 
-                                               const char** content_type);
-
+    bool* is_compressed, size_t* original_size, 
+    const char** content_type);
+    
+// 대용량 파일 스트리밍 응답 함수
+void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t file_size, const char* content_type, bool is_compressed);
 #endif // HTTP_SERVER_H
+    

@@ -270,6 +270,26 @@ void http_register_handler(const char* uri, http_method_t method, http_handler_t
     }
 }
 
+// HTTP 헤더 생성 함수
+static int http_build_header(char* header_buf, size_t buf_size, int status, const char* status_text, const char* content_type, size_t content_length, bool is_gzipped, bool cache_control)
+{
+    return snprintf(header_buf, buf_size,
+        "HTTP/1.1 %d %s\r\n"
+        "Content-Type: %s\r\n"
+        "%s"
+        "Content-Length: %zu\r\n"
+        "Connection: close\r\n"
+        "%s"
+        "\r\n",
+        status,
+        status_text,
+        content_type ? content_type : "application/octet-stream",
+        is_gzipped ? "Content-Encoding: gzip\r\n" : "",
+        content_length,
+        cache_control ? "Cache-Control: public, max-age=3600\r\n" : ""
+    );
+}
+
 void http_send_response(uint8_t sock, const http_response_t *response)
 {
     // 스트리밍이 필요한 경우
@@ -279,11 +299,11 @@ void http_send_response(uint8_t sock, const http_response_t *response)
                                    response->content_type, response->stream_compressed);
         return;
     }
-    
+
     char header[512];
     char actual_content_type[64];
     bool is_gzipped = false;
-    
+
     // Content-Type에서 압축 정보 분리
     const char* pipe_pos = strchr(response->content_type, '|');
     if (pipe_pos && strcmp(pipe_pos, "|gzip") == 0) {
@@ -294,29 +314,22 @@ void http_send_response(uint8_t sock, const http_response_t *response)
     } else {
         strcpy(actual_content_type, response->content_type);
     }
-    
-    // HTTP 헤더 생성 (단순하고 안정적인 방식)
-    int header_len = sprintf(header, 
-        "HTTP/1.1 %d %s\r\n"
-        "Content-Type: %s\r\n"
-        "%s"
-        "Content-Length: %d\r\n"
-        "Connection: close\r\n"
-        "\r\n",
+
+    int header_len = http_build_header(
+        header, sizeof(header),
         response->status,
         get_status_text(response->status),
         actual_content_type,
-        is_gzipped ? "Content-Encoding: gzip\r\n" : "",
-        response->content_length
+        response->content_length,
+        is_gzipped,
+        false // cache_control
     );
-    
-    // 헤더 및 콘텐츠 전송
+
     send(sock, (uint8_t*)header, header_len);
     if(response->content_length > 0) {
         send(sock, (uint8_t*)response->content, response->content_length);
     }
-    
-    // 활동 시간 업데이트
+
     last_activity_time = to_ms_since_boot(get_absolute_time());
 }
 
@@ -342,30 +355,25 @@ void http_send_html_response(uint8_t sock, http_status_t status, const char* htm
     http_send_response(sock, &response);
 }
 
+// 404 HTML 응답 문자열은 헤더에서 선언된 상수 사용
 void http_send_404(uint8_t sock)
 {
-    const char* html_404 = 
-        "<!DOCTYPE html>\n"
-        "<html><head><title>404 Not Found</title></head>\n"
-        "<body><h1>404 Not Found</h1>\n"
-        "<p>The requested resource was not found on this server.</p>\n"
-        "</body></html>";
-    
-    http_send_html_response(sock, HTTP_NOT_FOUND, html_404);
+    http_send_html_response(sock, HTTP_NOT_FOUND, HTTP_404_HTML);
 }
 
+// 대용량 파일 스트리밍 함수 선언은 http_server.h로 이동 필요
 void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t file_size, const char* content_type, bool is_compressed)
 {
     char header[512];
     size_t bytes_sent = 0;
     int retry_count = 0;
-    const int max_retries = 200;  // 재시도 횟수 증가
-    
+    static const int max_retries = 200;
+
     printf("=== Starting large file stream ===\n");
     printf("File size: %zu bytes\n", file_size);
     printf("Content-Type: %s\n", content_type ? content_type : "application/octet-stream");
     printf("Compressed: %s\n", is_compressed ? "yes" : "no");
-    
+
     // 소켓 상태 확인
     uint8_t socket_status = getSn_SR(sock);
     printf("Initial socket status: %d\n", socket_status);
@@ -373,43 +381,34 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
         printf("Socket not in ESTABLISHED state, aborting\n");
         return;
     }
-    
-    // HTTP 헤더 구성 및 전송
-    int header_len = snprintf(header, sizeof(header),
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: %s\r\n"
-        "Content-Length: %zu\r\n"
-        "%s"
-        "Connection: close\r\n"
-        "Cache-Control: public, max-age=3600\r\n"
-        "\r\n",
-        content_type ? content_type : "application/octet-stream",
-        file_size,
-        is_compressed ? "Content-Encoding: gzip\r\n" : ""
+
+    // HTTP 헤더 구성 및 전송 (캐시 허용)
+    int header_len = http_build_header(
+        header, sizeof(header),
+        200, "OK",
+        content_type, file_size, is_compressed, true
     );
-    
+
     printf("Sending header (%d bytes): %.*s\n", header_len, header_len, header);
-    
+
     int32_t header_result = send(sock, (uint8_t*)header, header_len);
     if (header_result <= 0) {
         printf("Failed to send header: %d\n", header_result);
         return;
     }
-    
+
     printf("Header sent successfully: %d bytes\n", header_result);
-    
+
     // 파일 데이터를 안전한 청크 단위로 전송
     while (bytes_sent < file_size && retry_count < max_retries) {
-        // 소켓 상태 확인
         uint8_t socket_status = getSn_SR(sock);
         if (socket_status != SOCK_ESTABLISHED) {
             printf("Socket disconnected during transfer: %d\n", socket_status);
             break;
         }
-        
-        // TX 버퍼 여유 공간 확인
+
         uint16_t free_size = getSn_TX_FSR(sock);
-        if (free_size < 1024) {  // 최소 1KB 여유 공간 필요
+        if (free_size < 1024) {
             sleep_ms(5);
             retry_count++;
             if (retry_count % 20 == 0) {
@@ -418,53 +417,43 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
             }
             continue;
         }
-        
-        // 전송할 청크 크기 결정
+
         size_t remaining = file_size - bytes_sent;
         size_t chunk_size = (remaining > STREAM_CHUNK_SIZE) ? STREAM_CHUNK_SIZE : remaining;
-        
-        // TX 버퍼 크기에 맞춰 조정
-        if (chunk_size > free_size - 256) {  // 256바이트 여유 공간 확보
-            chunk_size = free_size - 256;
-        }
-        
+        if (chunk_size > free_size - 256) chunk_size = free_size > 256 ? free_size - 256 : 0;
         if (chunk_size == 0) {
             sleep_ms(5);
             retry_count++;
             continue;
         }
-        
-        // 데이터 전송
+
         int32_t ret = send(sock, (uint8_t*)(file_data + bytes_sent), chunk_size);
         if (ret <= 0) {
             printf("Send failed: %d\n", ret);
             break;
         }
-        
+
         bytes_sent += ret;
-        retry_count = 0;  // 성공적으로 전송되면 재시도 카운터 리셋
-        
-        // 진행 상황 로그 (10% 단위)
-        if (bytes_sent % (file_size / 10 + 1) == 0) {
+        retry_count = 0;
+
+        if (file_size > 0 && bytes_sent % (file_size / 10 + 1) == 0) {
             printf("Progress: %zu/%zu bytes (%.1f%%)\n", 
                    bytes_sent, file_size, (float)bytes_sent / file_size * 100);
         }
-        
-        // 전송 속도 조절
+
         if (ret < chunk_size) {
             sleep_ms(2);
         } else {
-            sleep_us(100);  // 매우 짧은 대기
+            sleep_us(100);
         }
     }
-    
+
     if (bytes_sent == file_size) {
         printf("File streaming completed successfully: %zu bytes\n", bytes_sent);
     } else {
         printf("File streaming incomplete: %zu/%zu bytes\n", bytes_sent, file_size);
     }
-    
-    // 활동 시간 업데이트
+
     last_activity_time = to_ms_since_boot(get_absolute_time());
 }
 

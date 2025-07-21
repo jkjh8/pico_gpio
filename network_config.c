@@ -1,4 +1,5 @@
 
+
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
@@ -7,97 +8,61 @@
 #include "socket.h"
 #include "dhcp.h"
 
-// 네트워크 정보 출력 및 전역 변수 업데이트 (DHCP/STATIC 공통)
-void network_print_and_update_info(bool is_initial) {
-    wiz_NetInfo current_info;
-    wizchip_getnetinfo(&current_info);
-
-    printf("=== NETWORK INFO ===\n");
-    printf("IP: %d.%d.%d.%d\n", current_info.ip[0], current_info.ip[1], current_info.ip[2], current_info.ip[3]);
-    printf("Subnet: %d.%d.%d.%d\n", current_info.sn[0], current_info.sn[1], current_info.sn[2], current_info.sn[3]);
-    printf("Gateway: %d.%d.%d.%d\n", current_info.gw[0], current_info.gw[1], current_info.gw[2], current_info.gw[3]);
-    printf("DNS: %d.%d.%d.%d\n", current_info.dns[0], current_info.dns[1], current_info.dns[2], current_info.dns[3]);
-
-    if (is_initial) {
-        printf("Web server will be available at: http://%d.%d.%d.%d\n",
-               current_info.ip[0], current_info.ip[1], current_info.ip[2], current_info.ip[3]);
-    }
-    printf("====================\n");
-
-    // 전역 변수 업데이트
-    memcpy(&g_net_info, &current_info, sizeof(wiz_NetInfo));
-}
-
-// SPI 콜백 함수들
-static void wizchip_select(void) {
-    gpio_put(SPI_CS, 0);
-}
-
-static void wizchip_deselect(void) {
-    gpio_put(SPI_CS, 1);
-}
-
+// SPI 콜백 함수들 (효율적으로 구현)
+static void wizchip_select(void) { gpio_put(SPI_CS, 0); }
+static void wizchip_deselect(void) { gpio_put(SPI_CS, 1); }
 static uint8_t wizchip_read(void) {
-    uint8_t data;
+    uint8_t data = 0;
     spi_read_blocking(SPI_PORT, 0, &data, 1);
     return data;
 }
-
 static void wizchip_write(uint8_t wb) {
     spi_write_blocking(SPI_PORT, &wb, 1);
 }
 
+// 네트워크 정보 출력 및 전역 변수 업데이트
+void network_print_and_update_info(bool is_initial) {
+    wizchip_getnetinfo(&g_net_info);
+    printf("IP:%d.%d.%d.%d SN:%d.%d.%d.%d GW:%d.%d.%d.%d DNS:%d.%d.%d.%d\n",
+        g_net_info.ip[0], g_net_info.ip[1], g_net_info.ip[2], g_net_info.ip[3],
+        g_net_info.sn[0], g_net_info.sn[1], g_net_info.sn[2], g_net_info.sn[3],
+        g_net_info.gw[0], g_net_info.gw[1], g_net_info.gw[2], g_net_info.gw[3],
+        g_net_info.dns[0], g_net_info.dns[1], g_net_info.dns[2], g_net_info.dns[3]);
+    if (is_initial)
+        printf("Web server: http://%d.%d.%d.%d\n", g_net_info.ip[0], g_net_info.ip[1], g_net_info.ip[2], g_net_info.ip[3]);
+}
+
 // W5500 하드웨어 초기화
 static bool w5500_hardware_init(void) {
-    // SPI 초기화 (5MHz)
+    // SPI 및 핀 설정만 담당 (최초 1회만 호출)
     spi_init(SPI_PORT, 5000 * 1000);
-    
-    // SPI 핀 설정
     gpio_set_function(SPI_SCK, GPIO_FUNC_SPI);
     gpio_set_function(SPI_MOSI, GPIO_FUNC_SPI);
     gpio_set_function(SPI_MISO, GPIO_FUNC_SPI);
-    
-    // CS 및 RST 핀 설정
     gpio_init(SPI_CS);
     gpio_set_dir(SPI_CS, GPIO_OUT);
     gpio_put(SPI_CS, 1);
-    
     gpio_init(SPI_RST);
     gpio_set_dir(SPI_RST, GPIO_OUT);
-    
-    // W5500 리셋 시퀀스
-    gpio_put(SPI_RST, 0);
-    sleep_ms(100);
-    gpio_put(SPI_RST, 1);
-    sleep_ms(100);
-    
     return true;
 }
 
 // W5500 초기화
 w5500_init_result_t w5500_initialize(void) {
-    // 하드웨어 초기화
+    // SPI 및 핀 설정 (최초 1회만)
     if (!w5500_hardware_init()) {
         return W5500_INIT_ERROR_SPI;
     }
-    
-    // WIZchip 콜백 함수 등록
-    reg_wizchip_cs_cbfunc(wizchip_select, wizchip_deselect);
-    reg_wizchip_spi_cbfunc(wizchip_read, wizchip_write);
-    
-    // W5500 소켓 버퍼 초기화 및 설정 (최적화 - HTTP 서버에 더 많은 버퍼 할당)
-    uint8_t tx_sizes[8] = {2, 8, 2, 2, 2, 0, 0, 0};
-    uint8_t rx_sizes[8] = {2, 8, 2, 2, 2, 0, 0, 0};
-    if (wizchip_init(tx_sizes, rx_sizes) == -1) {
-        return W5500_INIT_ERROR_CHIP;
-    }
-    
+    printf("W5500 hardware initialized\n");
+    // 하드웨어 리셋 및 WIZchip 재초기화(콜백, 버퍼)는 통합 함수로 처리
+    w5500_reset_network();
+
     // 버전 확인
     uint8_t version = getVERSIONR();
     if (version != 0x04) {
         return W5500_INIT_ERROR_CHIP;
     }
-    
+
     // 링크 상태 확인 (최대 10초 대기)
     for (int i = 0; i < 20; i++) {
         if (getPHYCFGR() & PHYCFGR_LNK_ON) {
@@ -105,7 +70,7 @@ w5500_init_result_t w5500_initialize(void) {
         }
         sleep_ms(500);
     }
-    
+
     return W5500_INIT_SUCCESS;
 }
 
@@ -122,101 +87,56 @@ bool w5500_set_static_ip(wiz_NetInfo *net_info) {
 
 // DHCP 설정 (W5500용 수정된 코드)
 bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
-    // DHCP 모드로 변경
     net_info->dhcp = NETINFO_DHCP;
-    
-    // MAC 주소 설정
     setSHAR(net_info->mac);
-    
-    // MAC 주소 뒤 두 자리를 사용해서 Link-local 주소 생성
-    uint8_t temp_ip[4] = {169, 254, net_info->mac[4], net_info->mac[5]};    // MAC 기반 Link-local 주소
-    uint8_t temp_gw[4] = {0, 0, 0, 0};                   // MAC 기반 임시 게이트웨이
-    uint8_t temp_sn[4] = {255, 255, 0, 0};                                  // 서브넷 마스크
-    
+
+    // 임시 Link-local IP, 게이트웨이, 서브넷 설정
+    uint8_t temp_ip[4] = {169, 254, net_info->mac[4], net_info->mac[5]};
+    uint8_t temp_gw[4] = {0, 0, 0, 0};
+    uint8_t temp_sn[4] = {255, 255, 0, 0};
     setSIPR(temp_ip);
     setGAR(temp_gw);
     setSUBR(temp_sn);
-    
-    // 네트워크 설정 적용 대기
-    sleep_ms(200);
-    
-    // 먼저 모든 소켓 닫기
-    for(int i = 0; i < 8; i++) {
-        close(i);
-    }
-    
-    // 잠시 대기
     sleep_ms(100);
-    
-    // 소켓 0번을 UDP 모드로 열기 (DHCP 클라이언트 포트: 68)
-    uint8_t sock_ret = socket(0, Sn_MR_UDP, 68, 0);
-    if(sock_ret != 0) {
-        return false;
-    }
-    if(sock_ret != 0) {
-        return false;
-    }
-    
-    // 링크 상태 확인
-    uint8_t phy_status = getPHYCFGR();
-    if(!(phy_status & 0x01)) {
+
+    // 모든 소켓 닫기
+    for (int i = 0; i < 8; i++) close(i);
+
+    // DHCP 소켓 오픈
+    if (socket(0, Sn_MR_UDP, 68, 0) != 0) return false;
+
+    // 링크 확인
+    if (!(getPHYCFGR() & PHYCFGR_LNK_ON)) {
         close(0);
         return false;
     }
-    
-    // DHCP 초기화 및 시작
+
     DHCP_init(0, g_ethernet_buf);
-    
-    uint32_t dhcp_timeout = 0;
-    while (dhcp_timeout < 60) { // 60초 타임아웃으로 증가
-        uint8_t dhcp_status = DHCP_run();
-        
-        // PHY 링크 상태도 확인
-        uint8_t phy_status = getPHYCFGR();
-        if(!(phy_status & 0x01)) {
+
+    for (uint32_t t = 0; t < 60; t++) {
+        if (!(getPHYCFGR() & PHYCFGR_LNK_ON)) {
             close(0);
             return false;
         }
-        
-        switch(dhcp_status) {
-            case DHCP_IP_LEASED:
-                goto dhcp_success;
-            case DHCP_FAILED:
-                close(0);
-                sleep_ms(1000);
-                
-                // 소켓 재시작
-                if(socket(0, Sn_MR_UDP, 68, 0) != 0) {
-                    return false;
-                }
-                
-                // DHCP 재초기화
-                DHCP_init(0, g_ethernet_buf);
-                dhcp_timeout -= 5; // 실패 시 타임아웃 감소량 줄이기
-                break;
-            default:
-                break;
+        uint8_t dhcp_status = DHCP_run();
+        if (dhcp_status == DHCP_IP_LEASED) {
+            getIPfromDHCP(net_info->ip);
+            getGWfromDHCP(net_info->gw);
+            getSNfromDHCP(net_info->sn);
+            getDNSfromDHCP(net_info->dns);
+            wizchip_setnetinfo(net_info);
+            close(0);
+            return true;
+        } else if (dhcp_status == DHCP_FAILED) {
+            close(0);
+            sleep_ms(500);
+            if (socket(0, Sn_MR_UDP, 68, 0) != 0) return false;
+            DHCP_init(0, g_ethernet_buf);
         }
-        
         sleep_ms(1000);
-        dhcp_timeout++;
     }
-    
     close(0);
     return false;
-
-dhcp_success:
-    // DHCP에서 받은 정보를 net_info에 복사
-    getIPfromDHCP(net_info->ip);
-    getGWfromDHCP(net_info->gw);
-    getSNfromDHCP(net_info->sn);
-    getDNSfromDHCP(net_info->dns);
-    
-    // WIZchip에 네트워크 정보 설정
-    wizchip_setnetinfo(net_info);
-    
-    close(0); // DHCP 소켓 닫기
-    return true;
 }
 
 // 네트워크 설정 적용
@@ -251,15 +171,13 @@ bool network_is_cable_connected(void) {
 
 // 네트워크 연결 상태 확인 (IP 할당 포함)
 bool network_is_connected(void) {
-    if (!network_is_cable_connected()) {
-        return false;
-    }
-    
+    if (!network_is_cable_connected()) return false;
+
     uint8_t ip[4];
     getSIPR(ip);
-    
-    // IP가 할당되었는지 확인 (0.0.0.0이 아님)
-    return !(ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0);
+
+    // IP가 0.0.0.0이 아니면 연결된 것으로 간주
+    return *(uint32_t*)ip != 0;
 }
 
 // 네트워크 재초기화 함수
@@ -275,11 +193,9 @@ bool network_reinitialize(void) {
     }
     
     // 네트워크 설정 재적용 (전역 변수 g_net_info와 DHCP 모드 사용)
-    extern wiz_NetInfo g_net_info;
     if (!w5500_apply_network_config(&g_net_info, NETWORK_MODE_DHCP)) {
         return false;
     }
-    
     return true;
 }
 
@@ -297,27 +213,22 @@ static uint32_t reconnect_attempts = 0;
 static bool cable_was_connected = false;
 
 void network_monitor_process(void) {
-    uint32_t current_time = to_ms_since_boot(get_absolute_time());
+    static uint32_t last_check = 0;
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+
+    if (now - last_check < 1000) return;
+    last_check = now;
+
     bool cable_connected = network_is_cable_connected();
-    bool network_connected = network_is_connected();
-    
-    // 케이블 연결 상태 변화 감지
+    bool net_connected = network_is_connected();
+
+    // 케이블 연결 변화 감지
     if (cable_connected != cable_was_connected) {
-        if (cable_connected) {
-            network_state = NETWORK_STATE_CONNECTING;
-            reconnect_attempts = 0;
-        } else {
-            network_state = NETWORK_STATE_DISCONNECTED;
-        }
         cable_was_connected = cable_connected;
+        reconnect_attempts = 0;
+        network_state = cable_connected ? NETWORK_STATE_CONNECTING : NETWORK_STATE_DISCONNECTED;
     }
-    
-    // 주기적 상태 확인 (1초마다)
-    if (current_time - last_connection_check < 1000) {
-        return;
-    }
-    last_connection_check = current_time;
-    
+
     switch (network_state) {
         case NETWORK_STATE_DISCONNECTED:
             if (cable_connected) {
@@ -325,44 +236,34 @@ void network_monitor_process(void) {
                 reconnect_attempts = 0;
             }
             break;
-            
         case NETWORK_STATE_CONNECTING:
             if (!cable_connected) {
                 network_state = NETWORK_STATE_DISCONNECTED;
-            } else if (network_connected) {
+            } else if (net_connected) {
                 network_state = NETWORK_STATE_CONNECTED;
                 reconnect_attempts = 0;
-            } else {
-                reconnect_attempts++;
-                if (reconnect_attempts > 10) {  // 10초 후 재초기화 시도
-                    network_state = NETWORK_STATE_RECONNECTING;
-                    reconnect_attempts = 0;
-                }
-            }
-            break;
-            
-        case NETWORK_STATE_CONNECTED:
-            if (!cable_connected) {
-                network_state = NETWORK_STATE_DISCONNECTED;
-            } else if (!network_connected) {
+            } else if (++reconnect_attempts > 10) {
                 network_state = NETWORK_STATE_RECONNECTING;
                 reconnect_attempts = 0;
             }
             break;
-            
+        case NETWORK_STATE_CONNECTED:
+            if (!cable_connected) {
+                network_state = NETWORK_STATE_DISCONNECTED;
+            } else if (!net_connected) {
+                network_state = NETWORK_STATE_RECONNECTING;
+                reconnect_attempts = 0;
+            }
+            break;
         case NETWORK_STATE_RECONNECTING:
             if (!cable_connected) {
                 network_state = NETWORK_STATE_DISCONNECTED;
-            } else {
-                if (network_reinitialize()) {
-                    network_state = NETWORK_STATE_CONNECTING;
-                } else {
-                    reconnect_attempts++;
-                    if (reconnect_attempts > 5) {  // 5번 시도 후 대기
-                        network_state = NETWORK_STATE_DISCONNECTED;
-                        sleep_ms(5000);  // 5초 대기
-                    }
-                }
+            } else if (network_reinitialize()) {
+                network_state = NETWORK_STATE_CONNECTING;
+                reconnect_attempts = 0;
+            } else if (++reconnect_attempts > 5) {
+                network_state = NETWORK_STATE_DISCONNECTED;
+                sleep_ms(5000);
             }
             break;
     }
@@ -379,21 +280,31 @@ const char* network_get_state_string(void) {
     }
 }
 
-// W5500 네트워크 리셋 함수 구현
+// W5500 네트워크 리셋 및 재초기화 (하드웨어 리셋 포함)
 void w5500_reset_network(void) {
     // 모든 소켓 닫기
-    for (int i = 0; i < 8; i++) {
-        close(i);
-    }
-    // 하드웨어 리셋
+    // printf("Resetting W5500 network...\n");
+    // for (int i = 0; i < 8; i++) {
+    //     uint8_t status = getSn_SR(i);
+    //     if (status != 0x00) { // 0x00: CLOSED
+    //         int ret = close(i);
+    //         printf("close(%d) ret=%d, status(before)=0x%02X\n", i, ret, status);
+    //     } else {
+    //         printf("socket(%d) already closed (status=0x%02X)\n", i, status);
+    //     }
+    // }
+    // printf("All sockets checked and close() called if needed\n");
+    // 하드웨어 리셋 시퀀스
     gpio_put(SPI_RST, 0);
     sleep_ms(100);
     gpio_put(SPI_RST, 1);
     sleep_ms(100);
-    // WIZchip 재초기화
+    printf("W5500 hardware reset complete\n");
+    // WIZchip 콜백 및 버퍼 재초기화
     reg_wizchip_cs_cbfunc(wizchip_select, wizchip_deselect);
     reg_wizchip_spi_cbfunc(wizchip_read, wizchip_write);
     uint8_t tx_sizes[8] = {2, 8, 2, 2, 2, 0, 0, 0};
     uint8_t rx_sizes[8] = {2, 8, 2, 2, 2, 0, 0, 0};
     wizchip_init(tx_sizes, rx_sizes);
+    printf("W5500 network reset and reinitialized\n");
 }
