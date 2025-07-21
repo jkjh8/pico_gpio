@@ -22,26 +22,7 @@ wiz_NetInfo g_net_info = {
 // 시스템 재시작 요청 플래그
 static volatile bool restart_requested = false;
 
-// DHCP IP 정보 출력 및 전역 변수 업데이트 (공통 함수)
-static void display_and_update_dhcp_info(bool is_initial) {
-    wiz_NetInfo current_info;
-    wizchip_getnetinfo(&current_info);
-    
-    printf("=== DHCP IP ASSIGNED ===\n");
-    printf("IP: %d.%d.%d.%d\n", current_info.ip[0], current_info.ip[1], current_info.ip[2], current_info.ip[3]);
-    printf("Subnet: %d.%d.%d.%d\n", current_info.sn[0], current_info.sn[1], current_info.sn[2], current_info.sn[3]);
-    printf("Gateway: %d.%d.%d.%d\n", current_info.gw[0], current_info.gw[1], current_info.gw[2], current_info.gw[3]);
-    printf("DNS: %d.%d.%d.%d\n", current_info.dns[0], current_info.dns[1], current_info.dns[2], current_info.dns[3]);
-    
-    if (is_initial) {
-        printf("Web server will be available at: http://%d.%d.%d.%d\n", 
-               current_info.ip[0], current_info.ip[1], current_info.ip[2], current_info.ip[3]);
-    }
-    printf("======================\n");
-    
-    // 전역 변수 업데이트
-    memcpy(&g_net_info, &current_info, sizeof(wiz_NetInfo));
-}
+// network_config.c로 이동 및 통합됨
 
 // 네트워크 설정 재시도 로직 (공통 함수)
 static bool apply_network_config_with_retry(network_mode_t mode, bool is_initial) {
@@ -52,7 +33,7 @@ static bool apply_network_config_with_retry(network_mode_t mode, bool is_initial
         if (w5500_apply_network_config(&g_net_info, mode)) {
             // DHCP인 경우 IP 정보 출력
             if (mode == NETWORK_MODE_DHCP) {
-            display_and_update_dhcp_info(is_initial);
+            network_print_and_update_info(is_initial);
             }
             return true;
         } else {
@@ -118,33 +99,26 @@ int main()
     generate_mac_from_board_id(&g_net_info);
     
     // W5500 및 네트워크 초기화
-    if (w5500_initialize() == W5500_INIT_SUCCESS) {
+    if (w5500_initialize() != W5500_INIT_SUCCESS) {
+        printf("ERROR: W5500 initialization failed\n");
+    } else {
         printf("W5500 initialization successful\n");
-        
-        // 초기 네트워크 설정 (공통 함수 사용)
-        bool initial_config_success = apply_network_config_with_retry(NETWORK_MODE_DHCP, true);
-        
-        // DHCP 성공 여부와 관계없이 HTTP 서버 시작 (네트워크 복구 시 자동 재시작됨)
+        bool config_ok = apply_network_config_with_retry(NETWORK_MODE_DHCP, true);
+
         if (http_server_init(80)) {
             printf("HTTP server started on port 80\n");
-            if (initial_config_success) {
-                printf("Network configuration successful - ready to serve\n");
-            } else {
-                printf("Network configuration failed - server will retry automatically\n");
-            }
+            printf(config_ok ? "Network configuration successful - ready to serve\n"
+                             : "Network configuration failed - server will retry automatically\n");
         } else {
             printf("ERROR: HTTP server failed to start\n");
         }
-    } else {
-        printf("ERROR: W5500 initialization failed\n");
     }
+
+    // 메인 루프: 네트워크/서버 상태 관리
     while (true) {
-        // 재시작 요청 확인 및 처리
         if (is_restart_requested()) {
             handle_network_restart();
         }
-        
-        // HTTP 서버 처리
         http_server_process();
     }
 }

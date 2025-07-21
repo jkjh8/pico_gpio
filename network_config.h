@@ -28,6 +28,7 @@ bool w5500_set_static_ip(wiz_NetInfo *net_info);
 bool w5500_set_dhcp_mode(wiz_NetInfo *net_info);
 bool w5500_apply_network_config(wiz_NetInfo *net_info, network_mode_t mode);
 void w5500_print_network_status(void);
+void network_print_and_update_info(bool is_initial);
 bool w5500_check_link_status(void);
 void w5500_reset_network(void);
 

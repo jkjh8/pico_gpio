@@ -1,7 +1,32 @@
+
+#include <stdbool.h>
+#include <string.h>
 #include <stdio.h>
 #include "network_config.h"
+#include "main.h"
 #include "socket.h"
 #include "dhcp.h"
+
+// 네트워크 정보 출력 및 전역 변수 업데이트 (DHCP/STATIC 공통)
+void network_print_and_update_info(bool is_initial) {
+    wiz_NetInfo current_info;
+    wizchip_getnetinfo(&current_info);
+
+    printf("=== NETWORK INFO ===\n");
+    printf("IP: %d.%d.%d.%d\n", current_info.ip[0], current_info.ip[1], current_info.ip[2], current_info.ip[3]);
+    printf("Subnet: %d.%d.%d.%d\n", current_info.sn[0], current_info.sn[1], current_info.sn[2], current_info.sn[3]);
+    printf("Gateway: %d.%d.%d.%d\n", current_info.gw[0], current_info.gw[1], current_info.gw[2], current_info.gw[3]);
+    printf("DNS: %d.%d.%d.%d\n", current_info.dns[0], current_info.dns[1], current_info.dns[2], current_info.dns[3]);
+
+    if (is_initial) {
+        printf("Web server will be available at: http://%d.%d.%d.%d\n",
+               current_info.ip[0], current_info.ip[1], current_info.ip[2], current_info.ip[3]);
+    }
+    printf("====================\n");
+
+    // 전역 변수 업데이트
+    memcpy(&g_net_info, &current_info, sizeof(wiz_NetInfo));
+}
 
 // SPI 콜백 함수들
 static void wizchip_select(void) {
