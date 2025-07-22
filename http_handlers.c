@@ -1,11 +1,15 @@
 #include "http_handlers.h"
-#include "network_config.h"
+#include "network/network_config.h"
 #include "static_files.h"
 #include "main.h"
 #include "cJSON.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "hardware/watchdog.h"
+#include "pico/stdlib.h"
+#include "hardware/sync.h"
+
 
 // 기본 핸들러 구현
 void http_handler_root(const http_request_t *request, http_response_t *response)
@@ -163,17 +167,8 @@ void http_handler_network_setup(const http_request_t *request, http_response_t *
     
     if (dhcp_enabled) {
         g_net_info.dhcp = NETINFO_DHCP;  // DHCP 플래그 명시적 설정
-        
-        // DHCP 설정 함수 호출 (즉시 적용)
-        bool dhcp_result = w5500_set_dhcp_mode(&g_net_info);
-        if (dhcp_result) {
-            printf("DHCP configuration successful\n");
-        } else {
-            printf("DHCP configuration failed - will retry on restart\n");
-        }
     } else {
         g_net_info.dhcp = NETINFO_STATIC;  // Static 플래그 명시적 설정
-        
         const char *fields[] = NETWORK_FIELDS;
         uint8_t *targets[] = {g_net_info.ip, g_net_info.sn, g_net_info.gw, g_net_info.dns};
         cJSON *objs[] = {ip, subnet, gateway, dns};
@@ -181,80 +176,37 @@ void http_handler_network_setup(const http_request_t *request, http_response_t *
         for (int i = 0; i < NETWORK_FIELD_COUNT; ++i) {
             if (objs[i] && cJSON_IsString(objs[i])) {
                 uint8_t new_addr[4];
-                
-                // 새 주소 파싱
                 int parsed = PARSE_IP_ADDRESS(objs[i]->valuestring, new_addr);
-                
                 if (parsed != 4) {
                     printf("Invalid IP format for %s: %s\n", fields[i], objs[i]->valuestring);
                     continue;
                 }
-                
-                // IP 주소 유효성 간단 검사 (0.0.0.0은 허용하지 않음)
                 if (i == 0 && (new_addr[0] == 0 || new_addr[0] >= 240)) {  // IP 주소
-                    printf("Invalid IP address: %d.%d.%d.%d\n", 
-                           new_addr[0], new_addr[1], new_addr[2], new_addr[3]);
+                    printf("Invalid IP address: %d.%d.%d.%d\n", new_addr[0], new_addr[1], new_addr[2], new_addr[3]);
                     continue;
                 }
-                
-                // 주소 업데이트
                 memcpy(targets[i], new_addr, 4);
             }
         }
-        
-        // Static IP 설정 함수 호출 (즉시 적용)
-        bool static_result = w5500_set_static_ip(&g_net_info);
-        if (static_result) {
-            printf("Static IP configuration successful\n");
-        } else {
-            printf("Static IP configuration failed - will retry on restart\n");
-        }
-    }
-    
-    // API 호출 시 항상 재시작 (안정성 우선)
-    printf("Network configuration applied - system will restart\n");
-
-    cJSON *response_json = cJSON_CreateObject();
-    cJSON *settings = cJSON_CreateObject();
-
-    cJSON_AddStringToObject(response_json, "status", "success");
-    // API 호출 시 항상 재시작
-    cJSON_AddStringToObject(response_json, "message", "Network configuration applied. System will restart for stability.");
-    cJSON_AddBoolToObject(response_json, "network_changed", true);
-    
-    // 새로운 네트워크 정보를 응답에 포함
-    char new_ip_str[16];
-    if (dhcp_enabled) {
-        cJSON_AddStringToObject(response_json, "new_ip", "DHCP assigned - check router for IP");
-    } else {
-        snprintf(new_ip_str, sizeof(new_ip_str), "%d.%d.%d.%d",
-            g_net_info.ip[0], g_net_info.ip[1], g_net_info.ip[2], g_net_info.ip[3]);
-        cJSON_AddStringToObject(response_json, "new_ip", new_ip_str);
-    }
-    cJSON_AddItemToObject(response_json, "settings", settings);
-
-    cJSON_AddBoolToObject(settings, "dhcp_enabled", dhcp_enabled);
-
-    // IP, subnet, gateway, dns를 반복문으로 처리
-    const char *keys[] = NETWORK_JSON_KEYS;
-    cJSON *values[] = {ip, subnet, gateway, dns};
-    for (int i = 0; i < NETWORK_FIELD_COUNT; ++i) {
-        cJSON_AddStringToObject(settings, keys[i], 
-            values[i] && cJSON_IsString(values[i]) ? values[i]->valuestring : "auto");
     }
 
-    char *json_string = cJSON_PrintUnformatted(response_json);
-
+    // 단순화된 응답: {"result":true}
+    const char* simple_json = "{\"result\":true}";
     response->status = HTTP_OK;
     strcpy(response->content_type, "application/json");
-    strncpy(response->content, json_string, sizeof(response->content) - 1);
+    strncpy(response->content, simple_json, sizeof(response->content) - 1);
     response->content[sizeof(response->content) - 1] = '\0';
     response->content_length = strlen(response->content);
-
     cJSON_Delete(json);
-    cJSON_Delete(response_json);
-    free(json_string);
+    // 네트워크 설정 저장
+    network_config_save_to_flash(&g_net_info);
+    sleep_ms(200); // flash 안정화 대기
+
+    // // 모든 리소스 정리
+    fflush(stdout);
+    sleep_ms(100);
     
-    // API 호출 시 항상 재시작 (안정성 우선)
-    system_restart_request();
+    printf("Network configuration updated, requesting system restart...\n");
+    watchdog_reboot(0,0,0);
+    while (1) { __wfi(); }
 }

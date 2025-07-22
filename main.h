@@ -32,8 +32,12 @@ extern uint8_t g_ethernet_buf[2048];
 // ipaddress (외부 선언)
 extern wiz_NetInfo g_net_info;
 
+
 // 시스템 재시작 함수
 void system_restart_request(void);
 bool is_restart_requested(void);
+
+// 모든 프로세스 종료 함수
+void terminate_all_processes(void);
 
 #endif // PICO_GPIO_H

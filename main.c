@@ -2,8 +2,8 @@
 #include <string.h>
 #include "pico/stdlib.h"
 #include "main.h"
-#include "mac_utils.h"
-#include "network_config.h"
+#include "network/mac_utils.h"
+#include "network/network_config.h"
 #include "http_server.h"
 
 // 전역 변수 정의
@@ -22,25 +22,26 @@ wiz_NetInfo g_net_info = {
 // 시스템 재시작 요청 플래그
 static volatile bool restart_requested = false;
 
-// network_config.c로 이동 및 통합됨
+// DHCP IP 정보 출력 및 전역 변수 업데이트 (공통 함수)
+// DHCP IP 출력 함수 제거, w5500_print_network_status로 통일
 
 // 네트워크 설정 재시도 로직 (공통 함수)
 static bool apply_network_config_with_retry(network_mode_t mode, bool is_initial) {
     for (int retry = 0; retry < 3; retry++) {
         printf("Network config attempt %d/3...\n", retry + 1);
-        
         setup_wiznet_network(&g_net_info);
-        if (w5500_apply_network_config(&g_net_info, mode)) {
-            // DHCP인 경우 IP 정보 출력
-            if (mode == NETWORK_MODE_DHCP) {
-            network_print_and_update_info(is_initial);
-            }
+        bool result = w5500_apply_network_config(&g_net_info, mode);
+        printf("w5500_apply_network_config() returned: %s\n", result ? "SUCCESS" : "FAIL");
+        if (result) {
+            // DHCP/STATIC 모두 네트워크 상태 출력
+            w5500_print_network_status();
             return true;
         } else {
             if (retry < 2) {
-                sleep_ms(1000);  // 재시도 대기 시간 최적화
+                sleep_ms(1000);
+                http_server_cleanup();
                 w5500_reset_network();
-                sleep_ms(500);   // 리셋 후 대기 시간 최적화
+                sleep_ms(500);
             }
         }
     }
@@ -56,7 +57,7 @@ static void handle_network_restart(void) {
     
     // 네트워크 재설정
     w5500_reset_network();
-    sleep_ms(1500);  // 하드웨어 안정화를 위한 최적화된 대기 시간
+    sleep_ms(1000);  // 하드웨어 안정화를 위한 최적화된 대기 시간
     
     // 네트워크 재초기화 (전역 변수의 DHCP 플래그 확인)
     network_mode_t network_mode = (g_net_info.dhcp == NETINFO_DHCP) ? NETWORK_MODE_DHCP : NETWORK_MODE_STATIC;
@@ -84,6 +85,20 @@ static void handle_network_restart(void) {
     restart_requested = false;
 }
 
+void terminate_all_processes(void) {
+    // 1. HTTP 서버 정리
+    http_server_cleanup();
+
+    // 2. 네트워크 소켓/스택 정리
+    w5500_reset_network();
+
+    // 3. (필요시) 타이머, 인터럽트, 기타 리소스 해제
+    // 예: alarm_pool_destroy(), cancel_repeating_timer(), irq_set_enabled(..., false) 등
+
+    // 4. UART/USB 등 표준 입출력 종료 (필요시)
+    // stdio_usb_exit(); // pico-sdk 1.5.0 이상에서 지원 (사용 불가 환경에서는 주석 처리)
+}
+
 int main()
 {
     // RP2350 호환 초기화
@@ -93,32 +108,44 @@ int main()
     // RP2350 안정화를 위한 더 긴 시작 대기
     printf("Starting Pico GPIO Server...\n");
     printf("Board: %s\n", PICO_BOARD);
-    sleep_ms(3000);  // 추가 안정화 시간
     
+    // 저장된 네트워크 설정 로드
+    printf("Loading network configuration from flash...\n");
+    network_config_load_from_flash(&g_net_info);
+
     // MAC 주소 초기화
     generate_mac_from_board_id(&g_net_info);
     
     // W5500 및 네트워크 초기화
-    if (w5500_initialize() != W5500_INIT_SUCCESS) {
-        printf("ERROR: W5500 initialization failed\n");
-    } else {
+    if (w5500_initialize() == W5500_INIT_SUCCESS) {
         printf("W5500 initialization successful\n");
-        bool config_ok = apply_network_config_with_retry(NETWORK_MODE_DHCP, true);
-
+        
+        // 초기 네트워크 설정 (공통 함수 사용)
+        network_mode_t mode = (g_net_info.dhcp == NETINFO_DHCP) ? NETWORK_MODE_DHCP : NETWORK_MODE_STATIC;
+        printf("Network mode: %s\n", (mode == NETWORK_MODE_DHCP) ? "DHCP" : "STATIC");
+        bool initial_config_success = apply_network_config_with_retry(mode, true);
+        
+        // DHCP 성공 여부와 관계없이 HTTP 서버 시작 (네트워크 복구 시 자동 재시작됨)
         if (http_server_init(80)) {
             printf("HTTP server started on port 80\n");
-            printf(config_ok ? "Network configuration successful - ready to serve\n"
-                             : "Network configuration failed - server will retry automatically\n");
+            if (initial_config_success) {
+                printf("Network configuration successful - ready to serve\n");
+            } else {
+                printf("Network configuration failed - server will retry automatically\n");
+            }
         } else {
             printf("ERROR: HTTP server failed to start\n");
         }
+    } else {
+        printf("ERROR: W5500 initialization failed\n");
     }
-
-    // 메인 루프: 네트워크/서버 상태 관리
     while (true) {
+        // 재시작 요청 확인 및 처리
         if (is_restart_requested()) {
             handle_network_restart();
         }
+        
+        // HTTP 서버 처리
         http_server_process();
     }
 }
