@@ -5,7 +5,9 @@
 #include "network/mac_utils.h"
 #include "network/network_config.h"
 #include "http_server.h"
-
+#include "hardware/watchdog.h"
+#include "pico/stdlib.h"
+#include "hardware/sync.h"
 // 전역 변수 정의
 uint8_t g_ethernet_buf[2048];
 
@@ -21,6 +23,7 @@ wiz_NetInfo g_net_info = {
 
 // 시스템 재시작 요청 플래그
 static volatile bool restart_requested = false;
+static volatile bool network_restarted = false;
 
 // DHCP IP 정보 출력 및 전역 변수 업데이트 (공통 함수)
 // DHCP IP 출력 함수 제거, w5500_print_network_status로 통일
@@ -82,21 +85,7 @@ static void handle_network_restart(void) {
     }
     
     // 재시작 플래그 리셋
-    restart_requested = false;
-}
-
-void terminate_all_processes(void) {
-    // 1. HTTP 서버 정리
-    http_server_cleanup();
-
-    // 2. 네트워크 소켓/스택 정리
-    w5500_reset_network();
-
-    // 3. (필요시) 타이머, 인터럽트, 기타 리소스 해제
-    // 예: alarm_pool_destroy(), cancel_repeating_timer(), irq_set_enabled(..., false) 등
-
-    // 4. UART/USB 등 표준 입출력 종료 (필요시)
-    // stdio_usb_exit(); // pico-sdk 1.5.0 이상에서 지원 (사용 불가 환경에서는 주석 처리)
+    network_restarted = false;
 }
 
 int main()
@@ -140,11 +129,15 @@ int main()
         printf("ERROR: W5500 initialization failed\n");
     }
     while (true) {
-        // 재시작 요청 확인 및 처리
-        if (is_restart_requested()) {
-            handle_network_restart();
-        }
+        // 네트워크 재시작 요청 확인 및 처리
+        // if (is_network_restart_requested()) {
+        //     handle_network_restart();
+        // }
         
+        // 시스템 재시작 요청 확인 및 처리
+        if (is_system_restart_requested()) {
+            system_restart();
+        }
         // HTTP 서버 처리
         http_server_process();
     }
@@ -156,6 +149,24 @@ void system_restart_request(void) {
 }
 
 // 재시작 요청 상태 확인 함수
-bool is_restart_requested(void) {
+bool is_network_restart_requested(void) {
+   return network_restarted;
+}
+
+// 네트워크 재시작 요청 함수
+void network_restart_request(void) {
+    network_restarted = true;
+}
+
+bool is_system_restart_requested(void) {
     return restart_requested;
+}
+
+void system_restart(void) {
+    printf("System restart requested...\n");
+    sleep_ms(500);  // 안정화를 위한 대기
+    fflush(stdout);
+    sleep_ms(500);
+    watchdog_reboot(0, 0, 0);
+    while (1) { __wfi(); }  // 무한 대기
 }

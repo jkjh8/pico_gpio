@@ -35,9 +35,11 @@ extern wiz_NetInfo g_net_info;
 
 // 시스템 재시작 함수
 void system_restart_request(void);
-bool is_restart_requested(void);
+void network_restart_request(void);
+void system_restart(void);
 
-// 모든 프로세스 종료 함수
-void terminate_all_processes(void);
+bool is_network_restart_requested(void);
+bool is_system_restart_requested(void);
+
 
 #endif // PICO_GPIO_H

@@ -6,10 +6,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "hardware/watchdog.h"
-#include "pico/stdlib.h"
-#include "hardware/sync.h"
-
 
 // 기본 핸들러 구현
 void http_handler_root(const http_request_t *request, http_response_t *response)
@@ -189,7 +185,10 @@ void http_handler_network_setup(const http_request_t *request, http_response_t *
             }
         }
     }
-
+    // 플래시 메모리에 저장
+    network_config_save_to_flash(&g_net_info);
+    // 리부팅 플래그
+    system_restart_request();
     // 단순화된 응답: {"result":true}
     const char* simple_json = "{\"result\":true}";
     response->status = HTTP_OK;
@@ -198,15 +197,5 @@ void http_handler_network_setup(const http_request_t *request, http_response_t *
     response->content[sizeof(response->content) - 1] = '\0';
     response->content_length = strlen(response->content);
     cJSON_Delete(json);
-    // 네트워크 설정 저장
-    network_config_save_to_flash(&g_net_info);
-    sleep_ms(200); // flash 안정화 대기
-
-    // // 모든 리소스 정리
-    fflush(stdout);
-    sleep_ms(100);
-    
-    printf("Network configuration updated, requesting system restart...\n");
-    watchdog_reboot(0,0,0);
-    while (1) { __wfi(); }
+    sleep_ms(1000); // 잠시 대기하여 설정 안정화
 }

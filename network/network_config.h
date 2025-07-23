@@ -40,6 +40,5 @@ bool network_is_cable_connected(void);
 bool network_is_connected(void);
 bool network_reinitialize(void);
 void network_monitor_process(void);
-const char* network_get_state_string(void);
 
 #endif // NETWORK_CONFIG_H

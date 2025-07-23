@@ -8,8 +8,28 @@
 #include "socket.h"
 #include "dhcp.h"
 
-extern wiz_NetInfo g_net_info;
 #define NETWORK_CONFIG_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - 4096)
+extern wiz_NetInfo g_net_info;
+
+// SPI 콜백 함수들
+static void wizchip_select(void) {
+    gpio_put(SPI_CS, 0);
+}
+
+static void wizchip_deselect(void) {
+    gpio_put(SPI_CS, 1);
+}
+
+static uint8_t wizchip_read(void) {
+    uint8_t data;
+    spi_read_blocking(SPI_PORT, 0, &data, 1);
+    return data;
+}
+
+static void wizchip_write(uint8_t wb) {
+    spi_write_blocking(SPI_PORT, &wb, 1);
+}
+
 
 void network_config_save_to_flash(const wiz_NetInfo* config) {
     uint32_t ints = save_and_disable_interrupts();
@@ -54,24 +74,6 @@ void network_config_load_from_flash(wiz_NetInfo* config) {
     
 }
 
-// SPI 콜백 함수들
-static void wizchip_select(void) {
-    gpio_put(SPI_CS, 0);
-}
-
-static void wizchip_deselect(void) {
-    gpio_put(SPI_CS, 1);
-}
-
-static uint8_t wizchip_read(void) {
-    uint8_t data;
-    spi_read_blocking(SPI_PORT, 0, &data, 1);
-    return data;
-}
-
-static void wizchip_write(uint8_t wb) {
-    spi_write_blocking(SPI_PORT, &wb, 1);
-}
 
 // W5500 초기화
 w5500_init_result_t w5500_initialize(void) {
@@ -132,13 +134,6 @@ bool w5500_set_static_ip(wiz_NetInfo *net_info) {
 bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
     // DHCP 모드로 변경
     net_info->dhcp = NETINFO_DHCP;
-    // setSHAR(net_info->mac);
-    // uint8_t temp_ip[4] = {169, 254, net_info->mac[4], net_info->mac[5]};
-    // uint8_t temp_gw[4] = {0, 0, 0, 0};
-    // uint8_t temp_sn[4] = {255, 255, 0, 0};
-    // setSIPR(temp_ip);
-    // setGAR(temp_gw);
-    // setSUBR(temp_sn);
     sleep_ms(200);
     for(int i = 0; i < 8; i++) close(i);
     sleep_ms(100);
@@ -287,62 +282,66 @@ void network_monitor_process(void) {
     
     switch (network_state) {
         case NETWORK_STATE_DISCONNECTED:
+            printf("[DEBUG] 상태: DISCONNECTED (케이블 연결 안됨)\n");
             if (cable_connected) {
+                printf("[DEBUG] 케이블 연결 감지, CONNECTING으로 전환\n");
                 network_state = NETWORK_STATE_CONNECTING;
                 reconnect_attempts = 0;
             }
             break;
-            
+
         case NETWORK_STATE_CONNECTING:
+            printf("[DEBUG] 상태: CONNECTING (네트워크 연결 시도 중)\n");
             if (!cable_connected) {
+                printf("[DEBUG] 케이블 분리 감지, DISCONNECTED로 전환\n");
                 network_state = NETWORK_STATE_DISCONNECTED;
             } else if (network_connected) {
+                printf("[DEBUG] 네트워크 연결 성공, CONNECTED로 전환\n");
                 network_state = NETWORK_STATE_CONNECTED;
                 reconnect_attempts = 0;
             } else {
                 reconnect_attempts++;
+                printf("[DEBUG] 연결 시도 %u회 (최대 10회)\n", reconnect_attempts);
                 if (reconnect_attempts > 10) {  // 10초 후 재초기화 시도
+                    printf("[DEBUG] 연결 실패, RECONNECTING으로 전환\n");
                     network_state = NETWORK_STATE_RECONNECTING;
                     reconnect_attempts = 0;
                 }
             }
             break;
-            
+
         case NETWORK_STATE_CONNECTED:
+            printf("[DEBUG] 상태: CONNECTED (네트워크 연결됨)\n");
             if (!cable_connected) {
+                printf("[DEBUG] 케이블 분리 감지, DISCONNECTED로 전환\n");
                 network_state = NETWORK_STATE_DISCONNECTED;
             } else if (!network_connected) {
+                printf("[DEBUG] 네트워크 연결 끊김, RECONNECTING으로 전환\n");
                 network_state = NETWORK_STATE_RECONNECTING;
                 reconnect_attempts = 0;
             }
             break;
-            
+
         case NETWORK_STATE_RECONNECTING:
+            printf("[DEBUG] 상태: RECONNECTING (네트워크 재연결 시도 중)\n");
             if (!cable_connected) {
+                printf("[DEBUG] 케이블 분리 감지, DISCONNECTED로 전환\n");
                 network_state = NETWORK_STATE_DISCONNECTED;
             } else {
                 if (network_reinitialize()) {
+                    printf("[DEBUG] 네트워크 재초기화 성공, CONNECTING으로 전환\n");
                     network_state = NETWORK_STATE_CONNECTING;
                 } else {
                     reconnect_attempts++;
+                    printf("[DEBUG] 재연결 시도 %u회 (최대 5회)\n", reconnect_attempts);
                     if (reconnect_attempts > 5) {  // 5번 시도 후 대기
+                        printf("[DEBUG] 재연결 실패, DISCONNECTED로 전환 및 5초 대기\n");
                         network_state = NETWORK_STATE_DISCONNECTED;
                         sleep_ms(5000);  // 5초 대기
                     }
                 }
             }
             break;
-    }
-}
-
-// 현재 네트워크 상태 반환
-const char* network_get_state_string(void) {
-    switch (network_state) {
-        case NETWORK_STATE_DISCONNECTED: return "연결 해제";
-        case NETWORK_STATE_CONNECTING: return "연결 중";
-        case NETWORK_STATE_CONNECTED: return "연결됨";
-        case NETWORK_STATE_RECONNECTING: return "재연결 중";
-        default: return "알 수 없음";
     }
 }
 
