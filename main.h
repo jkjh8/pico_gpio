@@ -26,6 +26,8 @@
 #define WIZNET_OUI_1    0x08
 #define WIZNET_OUI_2    0xDC
 
+// tcp port
+extern uint16_t tcp_port;
 // Ethernet buffer (외부 선언)
 extern uint8_t g_ethernet_buf[2048];
 
@@ -35,10 +37,8 @@ extern wiz_NetInfo g_net_info;
 
 // 시스템 재시작 함수
 void system_restart_request(void);
-void network_restart_request(void);
 void system_restart(void);
 
-bool is_network_restart_requested(void);
 bool is_system_restart_requested(void);
 
 

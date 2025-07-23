@@ -1,14 +1,42 @@
-#include "pico/stdlib.h"
-
 #ifndef NETWORK_CONFIG_H
 #define NETWORK_CONFIG_H
 
+
+#include <stdio.h>
+#include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include "wizchip_conf.h"
 #include "hardware/spi.h"
 #include "hardware/gpio.h"
+#include "hardware/flash.h"
+#include "hardware/sync.h"
+#include "wizchip_conf.h"
+#include "dhcp.h"
+#include "socket.h"
+#include "pico/stdlib.h"
 #include "main.h"
+#include "network/mac_utils.h"
+
+#define NETWORK_CONFIG_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - 4096)
+// 네트워크 상태 모니터링 및 자동 복구
+typedef enum {
+    NETWORK_STATE_DISCONNECTED,
+    NETWORK_STATE_CONNECTING,
+    NETWORK_STATE_CONNECTED,
+    NETWORK_STATE_RECONNECTING
+} network_monitor_state_t;
+
+extern network_monitor_state_t network_state;
+extern uint32_t last_connection_check;
+extern uint32_t reconnect_attempts;
+extern bool cable_was_connected;
+
+// SPI 콜백 함수들
+void wizchip_select(void);
+void wizchip_deselect(void);
+uint8_t wizchip_read(void);
+void wizchip_write(uint8_t wb);
+
 
 // W5500 초기화 결과
 typedef enum {
@@ -39,6 +67,5 @@ void w5500_reset_network(void);
 bool network_is_cable_connected(void);
 bool network_is_connected(void);
 bool network_reinitialize(void);
-void network_monitor_process(void);
 
 #endif // NETWORK_CONFIG_H

@@ -1,12 +1,5 @@
 #include "http_server.h"
 #include "http_handlers.h"
-#include "network/network_config.h"
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include "pico/stdlib.h"
-#include "main.h"
-#include "static_files.h"
 
 // 디버그 매크로
 #if HTTP_DEBUG_LEVEL >= 1
@@ -361,11 +354,6 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
     int retry_count = 0;
     const int max_retries = 200;  // 재시도 횟수 증가
     
-    printf("=== Starting large file stream ===\n");
-    printf("File size: %zu bytes\n", file_size);
-    printf("Content-Type: %s\n", content_type ? content_type : "application/octet-stream");
-    printf("Compressed: %s\n", is_compressed ? "yes" : "no");
-    
     // 소켓 상태 확인
     uint8_t socket_status = getSn_SR(sock);
     printf("Initial socket status: %d\n", socket_status);
@@ -388,8 +376,7 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
         is_compressed ? "Content-Encoding: gzip\r\n" : ""
     );
     
-    printf("Sending header (%d bytes): %.*s\n", header_len, header_len, header);
-    
+   
     int32_t header_result = send(sock, (uint8_t*)header, header_len);
     if (header_result <= 0) {
         printf("Failed to send header: %d\n", header_result);
@@ -451,11 +438,12 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
         }
         
         // 전송 속도 조절
-        if (ret < chunk_size) {
-            sleep_ms(2);
-        } else {
-            sleep_us(100);  // 매우 짧은 대기
-        }
+        sleep_ms(1);
+        // if (ret < chunk_size) {
+        //     sleep_ms(2);
+        // } else {
+        //     sleep_us(50);  // 매우 짧은 대기
+        // }
     }
     
     if (bytes_sent == file_size) {
@@ -488,17 +476,9 @@ static void parse_http_request(const char* raw_request, http_request_t* request)
 {
     char method_str[16] = {0};
     char version[16] = {0};
-    
-    printf("=== RAW HTTP REQUEST ===\n");
-    printf("%s\n", raw_request);
-    printf("=== END RAW REQUEST ===\n");
-    
     // 첫 번째 줄 파싱: "METHOD URI HTTP/1.1"
     sscanf(raw_request, "%15s %511s %15s", method_str, request->uri, version);
     request->method = parse_http_method(method_str);
-    
-    printf("Parsed method: %s, URI: %s, Version: %s\n", method_str, request->uri, version);
-    
     // Keep-Alive 헤더 확인
     const char* connection_header = strstr(raw_request, "Connection:");
     if (connection_header) {
@@ -506,7 +486,6 @@ static void parse_http_request(const char* raw_request, http_request_t* request)
             // Keep-Alive 요청 감지 (현재는 무시하고 close로 처리)
         }
     }
-    
     // Content-Length 찾기 (POST 요청용) - 대소문자 구분 없이
     const char* content_length_str = strstr(raw_request, "Content-Length:");
     if (!content_length_str) {
@@ -518,9 +497,6 @@ static void parse_http_request(const char* raw_request, http_request_t* request)
     
     if(content_length_str) {
         sscanf(content_length_str, "%*[^:]: %hu", &request->content_length);
-        printf("Found Content-Length: %d\n", request->content_length);
-        
-        // 헤더와 본문 구분자 찾기 - 여러 형태 지원
         const char* body_start = strstr(raw_request, "\r\n\r\n");
         if (!body_start) {
             body_start = strstr(raw_request, "\n\n");
@@ -528,7 +504,6 @@ static void parse_http_request(const char* raw_request, http_request_t* request)
         } else {
             body_start += 4;
         }
-        
         if(body_start && request->content_length > 0) {
             uint16_t copy_length = request->content_length;
             if(copy_length > MAX_CONTENT_SIZE - 1)
@@ -536,7 +511,6 @@ static void parse_http_request(const char* raw_request, http_request_t* request)
             
             strncpy(request->content, body_start, copy_length);
             request->content[copy_length] = '\0';
-            printf("Copied body content (%d bytes): %s\n", copy_length, request->content);
         } else {
             printf("No body found or content length is 0\n");
         }

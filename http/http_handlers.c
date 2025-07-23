@@ -197,5 +197,4 @@ void http_handler_network_setup(const http_request_t *request, http_response_t *
     response->content[sizeof(response->content) - 1] = '\0';
     response->content_length = strlen(response->content);
     cJSON_Delete(json);
-    sleep_ms(1000); // 잠시 대기하여 설정 안정화
 }

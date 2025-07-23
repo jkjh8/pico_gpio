@@ -43,8 +43,8 @@ add_executable(main
     main.c 
     network/mac_utils.c
     network/network_config.c
-    http_server.c
-    http_handlers.c
+    http/http_server.c
+    http/http_handlers.c
     static_files.c
 )
 

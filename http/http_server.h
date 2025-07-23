@@ -3,10 +3,17 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include "network/network_config.h"
 #include "wizchip_conf.h"
 #include "socket.h"
-#include <stddef.h>
+
+#include "pico/stdlib.h"
+#include "main.h"
+#include "static_files.h"
 
 // ========================
 // HTTP 서버 설정
