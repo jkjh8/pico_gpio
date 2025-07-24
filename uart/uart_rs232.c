@@ -14,8 +14,8 @@ void load_uart_rs232_baud_from_flash(void) {
     uint32_t baud_array[2];
     memcpy(baud_array, flash_ptr, sizeof(baud_array));
     // 유효성 검사: 0xFFFFFFFF면 기본값 사용
-    uart_rs232_1_baud = (baud_array[0] == 0xFFFFFFFF || baud_array[0] == 0) ? UART_RS232_1_BAUD : baud_array[0];
-    uart_rs232_2_baud = (baud_array[1] == 0xFFFFFFFF || baud_array[1] == 0) ? UART_RS232_2_BAUD : baud_array[1];
+    uart_rs232_1_baud = (baud_array[0] == 0xFFFFFFFF || baud_array[0] == 0) ? 9600 : baud_array[0];
+    uart_rs232_2_baud = (baud_array[1] == 0xFFFFFFFF || baud_array[1] == 0) ? 9600 : baud_array[1];
     printf("[FLASH] RS232 baud 불러오기: %u, %u\n", uart_rs232_1_baud, uart_rs232_2_baud);
 }
 

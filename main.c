@@ -66,9 +66,23 @@ int main()
     } else {
         printf("ERROR: HTTP server failed to start\n");
     }
-
+    // TCP 포트 로드
+    load_tcp_port_from_flash();
+    printf("TCP port loaded: %u\n", tcp_port);
     // TCP 서버 초기화
     tcp_servers_init(tcp_port);
+    printf("TCP servers initialized on port %u\n", tcp_port);
+
+    // UART RS232 설정 로드
+    load_uart_rs232_baud_from_flash();
+    printf("UART RS232 baud rates loaded: Port 1 - %u, Port2 - %u\n", uart_rs232_1_baud, uart_rs232_2_baud);
+    // 네트워크 상태 모니터링 및 자동 복구 설정
+
+    // UART RS232 초기화
+    uart_rs232_init(RS232_PORT_1, uart_rs232_1_baud);
+    uart_rs232_init(RS232_PORT_2, uart_rs232_2_baud);
+    printf("UART RS232 initialized: Port 1 at %u baud, Port 2 at %u baud\n",
+           uart_rs232_1_baud, uart_rs232_2_baud);
 
     while (true) {
         // 시스템 재시작 요청 확인 및 처리

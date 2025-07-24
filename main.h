@@ -13,6 +13,7 @@
 #include "network/network_config.h"
 #include "http/http_server.h"
 #include "tcp/tcp_server.h"
+#include "uart/uart_rs232.h"
 
 // SPI CONFIGURATION
 #define SPI_PORT spi0

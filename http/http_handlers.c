@@ -212,11 +212,59 @@ void http_handler_control_info(const http_request_t *request, http_response_t *r
 
 // 빌드 에러 방지용 더미 핸들러 구현
 void http_handler_control_setup(const http_request_t *request, http_response_t *response) {
-    memset(response, 0, sizeof(http_response_t));
-    response->status = HTTP_NOT_FOUND;
+memset(response, 0, sizeof(http_response_t));
+cJSON *json = cJSON_Parse(request->content);
+if (!json) {
+    response->status = HTTP_BAD_REQUEST;
     strcpy(response->content_type, "application/json");
-    strcpy(response->content, "{\"error\":\"not implemented\"}");
+    snprintf(response->content, sizeof(response->content),
+        "{\"result\":false,\"error\":\"Invalid JSON\"}");
     response->content_length = strlen(response->content);
+    return;
+}
+
+extern uint16_t tcp_port;
+extern uint32_t uart_rs232_1_baud;
+extern uint32_t uart_rs232_2_baud;
+
+cJSON *tcp_port_item = cJSON_GetObjectItem(json, "tcp_port");
+cJSON *rs232_1_baud_item = cJSON_GetObjectItem(json, "rs232_1_baud");
+cJSON *rs232_2_baud_item = cJSON_GetObjectItem(json, "rs232_2_baud");
+
+bool valid = true;
+if (tcp_port_item && cJSON_IsNumber(tcp_port_item)) {
+    tcp_port = (uint16_t)tcp_port_item->valueint;
+    save_tcp_port_to_flash(tcp_port);
+} else {
+    valid = false;
+}
+if (rs232_1_baud_item && cJSON_IsNumber(rs232_1_baud_item)) {
+    uart_rs232_1_baud = (uint32_t)rs232_1_baud_item->valuedouble;
+} else {
+    valid = false;
+}
+if (rs232_2_baud_item && cJSON_IsNumber(rs232_2_baud_item)) {
+    uart_rs232_2_baud = (uint32_t)rs232_2_baud_item->valuedouble;
+} else {
+    valid = false;
+}
+if (valid) {
+    save_uart_rs232_baud_to_flash();
+    system_restart_request();
+    response->status = HTTP_OK;
+    strcpy(response->content_type, "application/json");
+    const char* simple_json = "{\"result\":true}";
+    strncpy(response->content, simple_json, sizeof(response->content) - 1);
+    response->content[sizeof(response->content) - 1] = '\0';
+    response->content_length = strlen(response->content);
+} else {
+    response->status = HTTP_BAD_REQUEST;
+    strcpy(response->content_type, "application/json");
+    snprintf(response->content, sizeof(response->content),
+        "{\"result\":false,\"error\":\"Missing or invalid fields\"}");
+    response->content_length = strlen(response->content);
+}
+cJSON_Delete(json);
 }
 
 void http_handler_restart(const http_request_t *request, http_response_t *response) {
