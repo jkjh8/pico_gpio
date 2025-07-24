@@ -1,6 +1,4 @@
 #include "uart_rs232.h"
-#include <stdio.h>
-#include <string.h>
 
 void save_uart_rs232_baud_to_flash(void) {
     uint32_t ints = save_and_disable_interrupts();
