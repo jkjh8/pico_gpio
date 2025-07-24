@@ -1,7 +1,17 @@
 #ifndef HTTP_HANDLERS_H
 #define HTTP_HANDLERS_H
 
-#include "http_server.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include "network/network_config.h"
+#include "http/http_server.h"
+#include "static_files.h"
+#include "main.h"
+#include "cJSON.h"
+
+#include "tcp/tcp_server.h"
+#include "uart/uart_rs232.h"
 
 // HTML 템플릿 상수들
 #define HTML_ROOT_TEMPLATE \
@@ -43,5 +53,9 @@ void http_handler_root(const http_request_t *request, http_response_t *response)
 void http_handler_network_info(const http_request_t *request, http_response_t *response);
 void http_handler_static_file(const http_request_t *request, http_response_t *response);
 void http_handler_network_setup(const http_request_t *request, http_response_t *response);
+void http_handler_control_info(const http_request_t *request, http_response_t *response);
+void http_handler_control_setup(const http_request_t *request, http_response_t *response);
+
+void http_handler_restart(const http_request_t *request, http_response_t *response);
 
 #endif // HTTP_HANDLERS_H

@@ -1,10 +1,18 @@
 #ifndef PICO_GPIO_H
 #define PICO_GPIO_H
 
+#include <stdio.h>
+#include <string.h>
 #include "pico/stdlib.h"
 #include "wizchip_conf.h"
 #include "hardware/gpio.h"
 #include "hardware/spi.h"
+#include "hardware/sync.h"
+#include "hardware/watchdog.h"
+#include "network/mac_utils.h"
+#include "network/network_config.h"
+#include "http/http_server.h"
+#include "tcp/tcp_server.h"
 
 // SPI CONFIGURATION
 #define SPI_PORT spi0

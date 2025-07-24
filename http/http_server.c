@@ -64,6 +64,10 @@ bool http_server_init(uint16_t port)
     http_register_handler("/system", HTTP_GET, http_handler_root);
     http_register_handler("/api/network", HTTP_GET, http_handler_network_info);
     http_register_handler("/api/network", HTTP_POST, http_handler_network_setup);
+    http_register_handler("/api/control", HTTP_GET, http_handler_control_info);
+    http_register_handler("/api/control", HTTP_POST, http_handler_control_setup);
+
+    http_register_handler("/api/restart", HTTP_GET, http_handler_restart);
 
     printf("HTTP 서버 초기화 완료 (포트: %d)\n", port);
     return true;

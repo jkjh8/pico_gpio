@@ -27,9 +27,6 @@ void wizchip_write(uint8_t wb) {
     spi_write_blocking(SPI_PORT, &wb, 1);
 }
 
-// ...헤더에서 선언된 내용...
-
-
 void network_config_save_to_flash(const wiz_NetInfo* config) {
     uint32_t ints = save_and_disable_interrupts();
     flash_range_erase(NETWORK_CONFIG_FLASH_OFFSET, 4096);

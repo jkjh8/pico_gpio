@@ -46,6 +46,8 @@ add_executable(main
     http/http_server.c
     http/http_handlers.c
     static_files.c
+    tcp/tcp_server.c
+    uart/uart_rs232.c
 )
 
 # define W5500 chip for all source files
