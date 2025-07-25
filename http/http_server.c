@@ -2,17 +2,11 @@
 #include "http_handlers.h"
 
 // 디버그 매크로
-#if HTTP_DEBUG_LEVEL >= 1
-#define HTTP_LOG(fmt, ...) printf("[HTTP] " fmt, ##__VA_ARGS__)
-#else
-#define HTTP_LOG(fmt, ...)
-#endif
 
-#if HTTP_DEBUG_LEVEL >= 2
-#define HTTP_DEBUG(fmt, ...) printf("[DEBUG] " fmt, ##__VA_ARGS__)
-#else
+#undef HTTP_LOG
+#define HTTP_LOG(fmt, ...)
+#undef HTTP_DEBUG
 #define HTTP_DEBUG(fmt, ...)
-#endif
 
 // 전역 변수
 static uint8_t http_buf[HTTP_BUF_SIZE];
@@ -43,7 +37,7 @@ static void handle_default_routes(const http_request_t* request, http_response_t
 
 bool http_server_init(uint16_t port)
 {
-    printf("HTTP 서버 시작 (포트: %d)\n", port);
+    // printf("HTTP 서버 시작 (포트: %d)\n", port);
     
     http_port = port;
     server_state = HTTP_SERVER_IDLE;
@@ -69,7 +63,7 @@ bool http_server_init(uint16_t port)
 
     http_register_handler("/api/restart", HTTP_GET, http_handler_restart);
 
-    printf("HTTP 서버 초기화 완료 (포트: %d)\n", port);
+    // printf("HTTP 서버 초기화 완료 (포트: %d)\n", port);
     return true;
 }
 
@@ -87,14 +81,14 @@ void http_server_process(void)
     // 네트워크 연결 상태 변화 감지
     if (network_connected != network_was_connected) {
         if (network_connected) {
-            printf("네트워크 연결됨 - HTTP 서버 재시작\n");
+            // printf("네트워크 연결됨 - HTTP 서버 재시작\n");
             // 소켓 재초기화
             close(sock);
             sleep_ms(50);  // 대기 시간 단축
             server_state = HTTP_SERVER_IDLE;
             server_ready_logged = false;
         } else {
-            printf("네트워크 연결 끊어짐 - HTTP 서버 대기\n");
+            // printf("네트워크 연결 끊어짐 - HTTP 서버 대기\n");
             close(sock);
             server_state = HTTP_SERVER_IDLE;
             server_ready_logged = false;
@@ -119,7 +113,7 @@ void http_server_process(void)
             if(listen(sock) == SOCK_OK) {
                 server_state = HTTP_SERVER_LISTENING;
                 if (!server_ready_logged) {
-                    printf("HTTP 서버 준비 완료 (포트: %d)\n", http_port);
+                    // printf("HTTP 서버 준비 완료 (포트: %d)\n", http_port);
                     server_ready_logged = true;
                 }
             }
@@ -143,7 +137,7 @@ void http_server_process(void)
                 size = recv(sock, http_buf, size);
                 http_buf[size] = '\0';
                 
-                printf("Received %d bytes\n", size);
+                // printf("Received %d bytes\n", size);
                 
                 // POST 요청인지 확인하고 Content-Length 헤더가 있는지 체크
                 char* method_check = strstr((char*)http_buf, "POST");
@@ -168,12 +162,12 @@ void http_server_process(void)
                         int header_length = header_end - (char*)http_buf + (strstr((char*)http_buf, "\r\n\r\n") ? 4 : 2);
                         int received_body_length = size - header_length;
                         
-                        printf("Expected body: %d bytes, Received body: %d bytes\n", expected_length, received_body_length);
+                        // printf("Expected body: %d bytes, Received body: %d bytes\n", expected_length, received_body_length);
                         
                         // 본문이 부족하면 추가로 읽기
                         if (received_body_length < expected_length) {
                             int remaining = expected_length - received_body_length;
-                            printf("Waiting for %d more bytes...\n", remaining);
+                            // printf("Waiting for %d more bytes...\n", remaining);
                             
                             // 잠시 대기 후 추가 데이터 확인
                             sleep_ms(10);
@@ -185,7 +179,7 @@ void http_server_process(void)
                                 int extra = recv(sock, http_buf + size, additional_size);
                                 size += extra;
                                 http_buf[size] = '\0';
-                                printf("Received additional %d bytes, total: %d\n", extra, size);
+                                // printf("Received additional %d bytes, total: %d\n", extra, size);
                             }
                         }
                     }
@@ -232,12 +226,12 @@ void http_server_stop(void)
 {
     close(HTTP_SOCKET_NUM);
     server_state = HTTP_SERVER_IDLE;
-    printf("HTTP 서버 중지\n");
+            // printf("HTTP 서버 중지\n");
 }
 
 void http_server_cleanup(void)
 {
-    printf("HTTP 서버 정리 중...\n");
+    // printf("HTTP 서버 정리 중...\n");
     
     // 소켓 정리
     if (getSn_SR(HTTP_SOCKET_NUM) != SOCK_CLOSED) {
@@ -248,7 +242,7 @@ void http_server_cleanup(void)
     // 서버 상태 리셋
     server_state = HTTP_SERVER_IDLE;
     
-    printf("HTTP 서버 정리 완료\n");
+    // printf("HTTP 서버 정리 완료\n");
 }
 
 http_server_state_t http_server_get_state(void)
@@ -271,7 +265,7 @@ void http_send_response(uint8_t sock, const http_response_t *response)
 {
     // 스트리밍이 필요한 경우
     if (response->stream_required && response->stream_data) {
-        printf("Sending large file via streaming: %zu bytes\n", response->stream_size);
+        // printf("Sending large file via streaming: %zu bytes\n", response->stream_size);
         http_send_large_file_stream(sock, response->stream_data, response->stream_size, 
                                    response->content_type, response->stream_compressed);
         return;
@@ -360,7 +354,6 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
     
     // 소켓 상태 확인
     uint8_t socket_status = getSn_SR(sock);
-    printf("Initial socket status: %d\n", socket_status);
     if (socket_status != SOCK_ESTABLISHED) {
         printf("Socket not in ESTABLISHED state, aborting\n");
         return;
@@ -383,11 +376,9 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
    
     int32_t header_result = send(sock, (uint8_t*)header, header_len);
     if (header_result <= 0) {
-        printf("Failed to send header: %d\n", header_result);
+        // printf("Failed to send header: %d\n", header_result);
         return;
     }
-    
-    printf("Header sent successfully: %d bytes\n", header_result);
     
     // 파일 데이터를 안전한 청크 단위로 전송
     while (bytes_sent < file_size && retry_count < max_retries) {
@@ -403,10 +394,6 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
         if (free_size < 1024) {  // 최소 1KB 여유 공간 필요
             sleep_ms(5);
             retry_count++;
-            if (retry_count % 20 == 0) {
-                printf("Waiting for TX buffer... free: %d, sent: %zu/%zu\n", 
-                       free_size, bytes_sent, file_size);
-            }
             continue;
         }
         
@@ -428,35 +415,18 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
         // 데이터 전송
         int32_t ret = send(sock, (uint8_t*)(file_data + bytes_sent), chunk_size);
         if (ret <= 0) {
-            printf("Send failed: %d\n", ret);
+            // printf("Send failed: %d\n", ret);
             break;
         }
         
         bytes_sent += ret;
         retry_count = 0;  // 성공적으로 전송되면 재시도 카운터 리셋
         
-        // 진행 상황 로그 (10% 단위)
-        if (bytes_sent % (file_size / 10 + 1) == 0) {
-            printf("Progress: %zu/%zu bytes (%.1f%%)\n", 
-                   bytes_sent, file_size, (float)bytes_sent / file_size * 100);
-        }
-        
         // 전송 속도 조절
-        sleep_ms(1);
-        // if (ret < chunk_size) {
-        //     sleep_ms(2);
-        // } else {
-        //     sleep_us(50);  // 매우 짧은 대기
-        // }
+        sleep_ms(2);
+
     }
-    
-    if (bytes_sent == file_size) {
-        printf("File streaming completed successfully: %zu bytes\n", bytes_sent);
-    } else {
-        printf("File streaming incomplete: %zu/%zu bytes\n", bytes_sent, file_size);
-    }
-    
-    // 활동 시간 업데이트
+
     last_activity_time = to_ms_since_boot(get_absolute_time());
 }
 
@@ -516,10 +486,10 @@ static void parse_http_request(const char* raw_request, http_request_t* request)
             strncpy(request->content, body_start, copy_length);
             request->content[copy_length] = '\0';
         } else {
-            printf("No body found or content length is 0\n");
+            // printf("No body found or content length is 0\n");
         }
     } else {
-        printf("No Content-Length header found\n");
+        // printf("No Content-Length header found\n");
         request->content_length = 0;
         request->content[0] = '\0';
     }
