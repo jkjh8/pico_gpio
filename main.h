@@ -14,14 +14,15 @@
 #include "http/http_server.h"
 #include "tcp/tcp_server.h"
 #include "uart/uart_rs232.h"
+#include "gpio/gpio.h"
 
 // SPI CONFIGURATION
 #define SPI_PORT spi0
-#define SPI_SCK 18
-#define SPI_MOSI 19
-#define SPI_MISO 16
-#define SPI_CS 17
-#define SPI_RST 20
+#define SPI_SCK 6
+#define SPI_MOSI 7
+#define SPI_MISO 4
+#define SPI_CS 5
+#define SPI_RST 8
 
 // LED CONFIGURATION (RP2350 Pico 2 호환)
 #ifdef PICO_DEFAULT_LED_PIN
@@ -42,7 +43,6 @@ extern uint8_t g_ethernet_buf[2048];
 
 // ipaddress (외부 선언)
 extern wiz_NetInfo g_net_info;
-
 
 // 시스템 재시작 함수
 void system_restart_request(void);

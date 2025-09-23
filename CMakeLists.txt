@@ -48,6 +48,7 @@ add_executable(main
     static_files.c
     tcp/tcp_server.c
     uart/uart_rs232.c
+    gpio/gpio.c
 )
 
 # define W5500 chip for all source files
@@ -57,18 +58,19 @@ pico_set_program_name(main "main")
 pico_set_program_version(main "0.1")
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(main 1)
-pico_enable_stdio_usb(main 0)
+pico_enable_stdio_uart(main 0)
+pico_enable_stdio_usb(main 1)
 
 # Add the standard library to the build
 target_link_libraries(main
         pico_stdlib
+        pico_unique_id
         hardware_spi
         hardware_gpio
         hardware_flash
         hardware_sync
         hardware_watchdog
-        pico_unique_id
+        hardware_uart
 )
 
 # Add the standard include files to the build

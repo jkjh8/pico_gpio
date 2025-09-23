@@ -83,6 +83,9 @@ int main()
     uart_rs232_init(RS232_PORT_2, uart_rs232_2_baud);
     printf("UART RS232 initialized: Port 1 at %u baud, Port 2 at %u baud\n",
            uart_rs232_1_baud, uart_rs232_2_baud);
+    // GPIO 초기화
+    gpio_spi_init();
+    printf("GPIO SPI initialized\n");
 
     while (true) {
         // 시스템 재시작 요청 확인 및 처리
@@ -92,6 +95,8 @@ int main()
         // HTTP 서버 처리
         http_server_process();
         tcp_servers_process();
+        // HCT165 읽기
+        hct165_read();
     }
 }
 

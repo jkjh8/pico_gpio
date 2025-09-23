@@ -23,25 +23,47 @@ void load_uart_rs232_baud_from_flash(void) {
 uint32_t uart_rs232_1_baud = UART_RS232_1_BAUD;
 uint32_t uart_rs232_2_baud = UART_RS232_2_BAUD;
 
-void uart_rs232_init(rs232_port_t port, uint32_t baudrate) {
-    // 예: if (port == RS232_PORT_1) uart_init(uart1, baudrate);
-    //     else if (port == RS232_PORT_2) uart_init(uart2, baudrate);
+bool uart_rs232_init(rs232_port_t port, uint32_t baudrate) {
+    if (port == RS232_PORT_1) {
+        uart_init(uart0, baudrate);
+        gpio_set_function(RS232_1_TX_PIN, GPIO_FUNC_UART);
+        gpio_set_function(RS232_1_RX_PIN, GPIO_FUNC_UART);
+        printf("UART RS232 Port 1 initialized at %u baud\n", baudrate);
+        return true;
+    } else if (port == RS232_PORT_2) {
+        uart_init(uart1, baudrate);
+        gpio_set_function(RS232_2_TX_PIN, GPIO_FUNC_UART);
+        gpio_set_function(RS232_2_RX_PIN, GPIO_FUNC_UART);
+        printf("UART RS232 Port 2 initialized at %u baud\n", baudrate);
+        return true;
+    }
 }
 
-int uart_rs232_write(rs232_port_t port, const uint8_t* data, uint32_t len) {
-    // 예: if (port == RS232_PORT_1) return uart_write_blocking(uart1, data, len);
-    //     else if (port == RS232_PORT_2) return uart_write_blocking(uart2, data, len);
-    return 0;
+bool uart_rs232_write(rs232_port_t port, const uint8_t* data, uint32_t len) {
+    if (port == RS232_PORT_1) {
+        uart_write_blocking(uart0, data, len);
+        return true;
+    }
+    else if (port == RS232_PORT_2) {
+        uart_write_blocking(uart1, data, len);
+        return true;
+    }
+    return false;
 }
 
-int uart_rs232_read(rs232_port_t port, uint8_t* buf, uint32_t maxlen) {
-    // 예: if (port == RS232_PORT_1) return uart_read_blocking(uart1, buf, maxlen);
-    //     else if (port == RS232_PORT_2) return uart_read_blocking(uart2, buf, maxlen);
-    return 0;
+bool uart_rs232_read(rs232_port_t port, uint8_t* buf, uint32_t maxlen) {
+    if (port == RS232_PORT_1) {
+        uart_read_blocking(uart0, buf, maxlen);
+        return true;
+    } else if (port == RS232_PORT_2) {
+        uart_read_blocking(uart1, buf, maxlen);
+        return true;
+    }
+    return false;
 }
 
 bool uart_rs232_available(rs232_port_t port) {
-    // 예: if (port == RS232_PORT_1) return uart_is_readable(uart1);
-    //     else if (port == RS232_PORT_2) return uart_is_readable(uart2);
+    if (port == RS232_PORT_1) return uart_is_readable(uart0);
+        else if (port == RS232_PORT_2) return uart_is_readable(uart1);
     return false;
 }

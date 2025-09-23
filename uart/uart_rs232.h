@@ -7,15 +7,17 @@
 #include <string.h>
 #include "hardware/flash.h"
 #include "hardware/sync.h"
+#include "hardware/uart.h"
+#include "hardware/gpio.h"
 #include "pico/stdlib.h"
 
 // RS232 포트별 고정 핀 번호 (예시)
 #define UART_RS232_1_BAUD 9600
 #define UART_RS232_2_BAUD 9600
-#define RS232_1_TX_PIN 4
-#define RS232_1_RX_PIN 5
-#define RS232_2_TX_PIN 8
-#define RS232_2_RX_PIN 9
+#define RS232_1_TX_PIN 0
+#define RS232_1_RX_PIN 1
+#define RS232_2_TX_PIN 2
+#define RS232_2_RX_PIN 3
 
 #define UART_RS232_BAUD_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - 12288) // 마지막에서 세 번째 4KB
 
@@ -44,10 +46,10 @@ extern "C"
   
   void save_uart_rs232_baud_to_flash(void);
   void load_uart_rs232_baud_from_flash(void);
-  void uart_rs232_init(rs232_port_t port, uint32_t baudrate);
+  bool uart_rs232_init(rs232_port_t port, uint32_t baudrate);
   // void uart_rs232_init_ex(const uart_rs232_config_t* config);
-  int uart_rs232_write(rs232_port_t port, const uint8_t *data, uint32_t len);
-  int uart_rs232_read(rs232_port_t port, uint8_t *buf, uint32_t maxlen);
+  bool uart_rs232_write(rs232_port_t port, const uint8_t *data, uint32_t len);
+  bool uart_rs232_read(rs232_port_t port, uint8_t *buf, uint32_t maxlen);
   bool uart_rs232_available(rs232_port_t port);
 
 #ifdef __cplusplus
