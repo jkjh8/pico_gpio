@@ -1,4 +1,5 @@
 #include "tcp_server.h"
+#include "command_handler.h"
 // 필요 라이브러리 include는 헤더에서 처리됨
 uint16_t tcp_port = 5050;
 
@@ -76,7 +77,17 @@ void tcp_servers_process(void) {
                     int len = recv(i, buf, rx_size);
                     buf[len] = 0;
                     printf("TCP[%d] 수신: %s\n", i, buf);
-                    send(i, buf, len); // 에코
+                    
+                    // 명령어 처리
+                    char response[512];
+                    cmd_result_t result = process_command((char*)buf, response, sizeof(response));
+                    if (result == CMD_SUCCESS) {
+                        send(i, (uint8_t*)response, strlen(response));
+                    } else {
+                        char error_msg[128];
+                        snprintf(error_msg, sizeof(error_msg), "Command error: %d\r\n", result);
+                        send(i, (uint8_t*)error_msg, strlen(error_msg));
+                    }
                 }
                 break;
             }
@@ -84,13 +95,17 @@ void tcp_servers_process(void) {
                 disconnect(i);
                 break;
             case SOCK_CLOSED:
-                close(i); // 안전하게 닫기
-                socket(i, Sn_MR_TCP, tcp_port, 0x00);
-                listen(i);
-                printf("TCP 서버 재오픈 (소켓: %d, 포트: %d)\n", i, tcp_port);
+                // 네트워크가 연결된 경우에만 재오픈
+                if (network_is_connected()) {
+                    close(i); // 안전하게 닫기
+                    socket(i, Sn_MR_TCP, tcp_port, 0x00);
+                    listen(i);
+                    printf("TCP 서버 재오픈 (소켓: %d, 포트: %d)\n", i, tcp_port);
+                }
                 break;
             default:
                 break;
         }
     }
 }
+

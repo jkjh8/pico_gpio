@@ -51,15 +51,13 @@ bool uart_rs232_write(rs232_port_t port, const uint8_t* data, uint32_t len) {
     return false;
 }
 
-bool uart_rs232_read(rs232_port_t port, uint8_t* buf, uint32_t maxlen) {
-    if (port == RS232_PORT_1) {
-        uart_read_blocking(uart0, buf, maxlen);
-        return true;
-    } else if (port == RS232_PORT_2) {
-        uart_read_blocking(uart1, buf, maxlen);
-        return true;
+int uart_rs232_read(rs232_port_t port, uint8_t* buf, uint32_t maxlen) {
+    uart_inst_t *uart = (port == RS232_PORT_1) ? uart0 : uart1;
+    int count = 0;
+    while (count < maxlen && uart_is_readable(uart)) {
+        buf[count++] = uart_getc(uart);
     }
-    return false;
+    return count;
 }
 
 bool uart_rs232_available(rs232_port_t port) {

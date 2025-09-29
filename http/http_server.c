@@ -73,28 +73,9 @@ void http_server_process(void)
     uint16_t size = 0;
     uint8_t current_status = getSn_SR(sock);
     static bool server_ready_logged = false;
-    static bool network_was_connected = false;
     
-    // 네트워크 연결 상태 확인
+    // 네트워크 연결 상태 확인 - 재시작 로직 제거
     bool network_connected = network_is_connected();
-    
-    // 네트워크 연결 상태 변화 감지
-    if (network_connected != network_was_connected) {
-        if (network_connected) {
-            // printf("네트워크 연결됨 - HTTP 서버 재시작\n");
-            // 소켓 재초기화
-            close(sock);
-            sleep_ms(50);  // 대기 시간 단축
-            server_state = HTTP_SERVER_IDLE;
-            server_ready_logged = false;
-        } else {
-            // printf("네트워크 연결 끊어짐 - HTTP 서버 대기\n");
-            close(sock);
-            server_state = HTTP_SERVER_IDLE;
-            server_ready_logged = false;
-        }
-        network_was_connected = network_connected;
-    }
     
     // 네트워크가 연결되지 않은 경우 서버 처리 중단
     if (!network_connected) {

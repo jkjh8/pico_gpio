@@ -10,6 +10,7 @@
 #include "hardware/flash.h"
 #include "hardware/sync.h"
 #include "pico/stdlib.h"
+#include "../network/network_config.h"
 
 #define TCP_PORT_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - 8192) // 마지막에서 두 번째 4KB
 

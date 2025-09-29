@@ -41,6 +41,7 @@ pico_sdk_init()
 
 add_executable(main 
     main.c 
+    command_handler.c
     network/mac_utils.c
     network/network_config.c
     http/http_server.c
@@ -62,7 +63,7 @@ pico_enable_stdio_uart(main 0)
 pico_enable_stdio_usb(main 1)
 
 # Add the standard library to the build
-target_link_libraries(main
+target_link_libraries(main 
         pico_stdlib
         pico_unique_id
         hardware_spi

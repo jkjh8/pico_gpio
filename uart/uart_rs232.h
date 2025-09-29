@@ -49,7 +49,7 @@ extern "C"
   bool uart_rs232_init(rs232_port_t port, uint32_t baudrate);
   // void uart_rs232_init_ex(const uart_rs232_config_t* config);
   bool uart_rs232_write(rs232_port_t port, const uint8_t *data, uint32_t len);
-  bool uart_rs232_read(rs232_port_t port, uint8_t *buf, uint32_t maxlen);
+  int uart_rs232_read(rs232_port_t port, uint8_t *buf, uint32_t maxlen);
   bool uart_rs232_available(rs232_port_t port);
 
 #ifdef __cplusplus

@@ -57,8 +57,30 @@ void network_config_load_from_flash(wiz_NetInfo* config) {
     // 출력
     generate_mac_from_board_id(mac);
     memcpy(config->mac, mac, 6);
-    wizchip_setnetinfo(config);
-    printf("Loaded network config from flash:\n");
+    
+    // DHCP가 static이면 IP 값이 0.0.0.0이 아니도록 확인하고 복사
+    if (config->dhcp == NETINFO_STATIC) {
+        // IP가 0.0.0.0이면 기본값으로 설정
+        if (config->ip[0] == 0 && config->ip[1] == 0 && config->ip[2] == 0 && config->ip[3] == 0) {
+            config->ip[0] = 192; config->ip[1] = 168; config->ip[2] = 1; config->ip[3] = 100;
+            printf("Static IP was 0.0.0.0, set to default 192.168.1.100\n");
+        }
+        // 게이트웨이도 확인
+        if (config->gw[0] == 0 && config->gw[1] == 0 && config->gw[2] == 0 && config->gw[3] == 0) {
+            config->gw[0] = 192; config->gw[1] = 168; config->gw[2] = 1; config->gw[3] = 1;
+            printf("Gateway was 0.0.0.0, set to default 192.168.1.1\n");
+        }
+        // 넷마스크도 확인
+        if (config->sn[0] == 0 && config->sn[1] == 0 && config->sn[2] == 0 && config->sn[3] == 0) {
+            config->sn[0] = 255; config->sn[1] = 255; config->sn[2] = 255; config->sn[3] = 0;
+            printf("Subnet Mask was 0.0.0.0, set to default 255.255.255.0\n");
+        }
+        // DNS도 확인
+        if (config->dns[0] == 0 && config->dns[1] == 0 && config->dns[2] == 0 && config->dns[3] == 0) {
+            config->dns[0] = 8; config->dns[1] = 8; config->dns[2] = 8; config->dns[3] = 8;
+            printf("DNS was 0.0.0.0, set to default 8.8.8.8\n");
+        }
+    }
 }
 
 
@@ -151,7 +173,7 @@ bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
                 sleep_ms(1000);
                 if(socket(0, Sn_MR_UDP, 68, 0) != 0) return false;
                 DHCP_init(0, g_ethernet_buf);
-                dhcp_timeout -= 5;
+                // dhcp_timeout을 리셋하지 말고 계속 증가
                 break;
             default:
                 break;
@@ -189,7 +211,7 @@ void w5500_print_network_status(void) {
            current_info.mac[0], current_info.mac[1], current_info.mac[2], 
            current_info.mac[3], current_info.mac[4], current_info.mac[5]);
     printf("DHCP Mode       : %s\n", 
-           current_info.dhcp == NETINFO_DHCP ? "DHCP" : "Static");
+           g_net_info.dhcp == NETINFO_DHCP ? "DHCP" : "Static");
     printf("Link Status     : %s\n", 
            w5500_check_link_status() ? "UP" : "DOWN");
 }
