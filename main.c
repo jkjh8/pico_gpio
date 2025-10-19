@@ -8,11 +8,11 @@ uint8_t g_ethernet_buf[2048];
 // 네트워크 정보 전역 변수
 wiz_NetInfo g_net_info = {
     .mac = { 0x00, 0x08, 0xDC, 0x00, 0x00, 0x00 },
-    .ip = { 0, 0, 0, 0 },
-    .sn = { 255, 255, 0, 0 },
+    .ip = { 192, 168, 1, 100 },
+    .sn = { 255, 255, 255, 0 },
     .gw = { 0, 0, 0, 0 },
     .dns = { 0, 0, 0, 0 },
-    .dhcp = NETINFO_DHCP
+    .dhcp = NETINFO_STATIC
 };
 
 // 시스템 재시작 요청 플래그
@@ -131,16 +131,18 @@ int main()
 
     // UART RS232 설정 로드
     load_uart_rs232_baud_from_flash();
-    printf("UART RS232 baud rates loaded: Port 1 - %u, Port2 - %u\n", uart_rs232_1_baud, uart_rs232_2_baud);
+    printf("UART RS232 baud rate loaded: Port 1 - %u\n", uart_rs232_1_baud);
     // 네트워크 상태 모니터링 및 자동 복구 설정
 
     // UART RS232 초기화
     uart_rs232_init(RS232_PORT_1, uart_rs232_1_baud);
-    // uart_rs232_init(RS232_PORT_2, uart_rs232_2_baud);
     printf("UART RS232 initialized: Port 1 at %u baud\n", uart_rs232_1_baud);
     // GPIO 초기화
     gpio_spi_init();
-    printf("GPIO SPI initialized\n");
+    load_gpio_config_from_flash();
+    printf("GPIO SPI initialized, Device ID: 0x%02X, Mode: %s\n", 
+           get_gpio_device_id(),
+           get_gpio_comm_mode() == GPIO_MODE_JSON ? "JSON" : "TEXT");
 
     while (true) {
         // 시스템 재시작 요청 확인 및 처리
@@ -205,44 +207,8 @@ int main()
         // HCT165 읽기
         hct165_read();
         // UART RS232 데이터 처리
-        uint8_t uart_buf[256];
-        int len;
-        if ((len = uart_rs232_read(RS232_PORT_1, uart_buf, sizeof(uart_buf))) > 0) {
-            printf("UART1 RX: ");
-            for (int i = 0; i < len; i++) {
-                printf("%c", uart_buf[i]);
-            }
-            printf("\n");
+        uart_rs232_process();
 
-            // 명령어 처리
-            char response[512];
-            cmd_result_t result = process_command((char*)uart_buf, response, sizeof(response));
-            if (result == CMD_SUCCESS) {
-                uart_rs232_write(RS232_PORT_1, (uint8_t*)response, strlen(response));
-            } else {
-                char error_msg[128];
-                snprintf(error_msg, sizeof(error_msg), "Command error: %d\r\n", result);
-                uart_rs232_write(RS232_PORT_1, (uint8_t*)error_msg, strlen(error_msg));
-            }
-        }
-        if ((len = uart_rs232_read(RS232_PORT_2, uart_buf, sizeof(uart_buf))) > 0) {
-            printf("UART2 RX: ");
-            for (int i = 0; i < len; i++) {
-                printf("%c", uart_buf[i]);
-            }
-            printf("\n");
-
-            // 명령어 처리
-            char response[512];
-            cmd_result_t result = process_command((char*)uart_buf, response, sizeof(response));
-            if (result == CMD_SUCCESS) {
-                uart_rs232_write(RS232_PORT_2, (uint8_t*)response, strlen(response));
-            } else {
-                char error_msg[128];
-                snprintf(error_msg, sizeof(error_msg), "Command error: %d\r\n", result);
-                uart_rs232_write(RS232_PORT_2, (uint8_t*)error_msg, strlen(error_msg));
-            }
-        }
     }
 }
 

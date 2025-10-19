@@ -56,6 +56,10 @@ void http_handler_network_setup(const http_request_t *request, http_response_t *
 void http_handler_control_info(const http_request_t *request, http_response_t *response);
 void http_handler_control_setup(const http_request_t *request, http_response_t *response);
 
+// GPIO 설정 API 핸들러
+void http_handler_gpio_config_info(const http_request_t *request, http_response_t *response);
+void http_handler_gpio_config_setup(const http_request_t *request, http_response_t *response);
+
 void http_handler_restart(const http_request_t *request, http_response_t *response);
 
 #endif // HTTP_HANDLERS_H

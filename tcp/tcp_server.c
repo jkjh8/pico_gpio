@@ -1,5 +1,7 @@
 #include "tcp_server.h"
 #include "command_handler.h"
+#include "json_handler.h"
+#include "gpio/gpio.h"
 // 필요 라이브러리 include는 헤더에서 처리됨
 uint16_t tcp_port = 5050;
 
@@ -78,10 +80,20 @@ void tcp_servers_process(void) {
                     buf[len] = 0;
                     printf("TCP[%d] 수신: %s\n", i, buf);
                     
-                    // 명령어 처리
+                    // JSON 모드 확인 후 적절한 명령어 처리 함수 호출
                     char response[512];
-                    cmd_result_t result = process_command((char*)buf, response, sizeof(response));
-                    if (result == CMD_SUCCESS) {
+                    cmd_result_t result;
+                    
+                    // JSON 모드인지 확인 (첫 문자가 '{' 인지 또는 모드 설정 확인)
+                    if (get_gpio_comm_mode() == GPIO_MODE_JSON && buf[0] == '{') {
+                        // JSON 명령어 처리
+                        result = process_json_command((char*)buf, response, sizeof(response));
+                    } else {
+                        // 일반 텍스트 명령어 처리
+                        result = process_command((char*)buf, response, sizeof(response));
+                    }
+                    
+                    if (result == CMD_SUCCESS || result == CMD_ERROR_INVALID) {
                         send(i, (uint8_t*)response, strlen(response));
                     } else {
                         char error_msg[128];

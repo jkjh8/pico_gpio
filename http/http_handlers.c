@@ -192,12 +192,10 @@ void http_handler_control_info(const http_request_t *request, http_response_t *r
     memset(response, 0, sizeof(http_response_t));
     extern uint16_t tcp_port;
     extern uint32_t uart_rs232_1_baud;
-    extern uint32_t uart_rs232_2_baud;
     
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "tcp_port", tcp_port);
     cJSON_AddNumberToObject(root, "rs232_1_baud", uart_rs232_1_baud);
-    cJSON_AddNumberToObject(root, "rs232_2_baud", uart_rs232_2_baud);
     char *json_string = cJSON_PrintUnformatted(root);
     
     response->status = HTTP_OK;
@@ -225,11 +223,9 @@ if (!json) {
 
 extern uint16_t tcp_port;
 extern uint32_t uart_rs232_1_baud;
-extern uint32_t uart_rs232_2_baud;
 
 cJSON *tcp_port_item = cJSON_GetObjectItem(json, "tcp_port");
 cJSON *rs232_1_baud_item = cJSON_GetObjectItem(json, "rs232_1_baud");
-cJSON *rs232_2_baud_item = cJSON_GetObjectItem(json, "rs232_2_baud");
 
 bool valid = true;
 if (tcp_port_item && cJSON_IsNumber(tcp_port_item)) {
@@ -240,11 +236,6 @@ if (tcp_port_item && cJSON_IsNumber(tcp_port_item)) {
 }
 if (rs232_1_baud_item && cJSON_IsNumber(rs232_1_baud_item)) {
     uart_rs232_1_baud = (uint32_t)rs232_1_baud_item->valuedouble;
-} else {
-    valid = false;
-}
-if (rs232_2_baud_item && cJSON_IsNumber(rs232_2_baud_item)) {
-    uart_rs232_2_baud = (uint32_t)rs232_2_baud_item->valuedouble;
 } else {
     valid = false;
 }
@@ -265,6 +256,108 @@ if (valid) {
     response->content_length = strlen(response->content);
 }
 cJSON_Delete(json);
+}
+
+// GPIO 설정 정보 조회 API
+void http_handler_gpio_config_info(const http_request_t *request, http_response_t *response)
+{
+    memset(response, 0, sizeof(http_response_t));
+    
+    uint8_t device_id = get_gpio_device_id();
+    gpio_comm_mode_t mode = get_gpio_comm_mode();
+    bool auto_resp = get_gpio_auto_response();
+    
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "device_id", device_id);
+    cJSON_AddStringToObject(root, "comm_mode", mode == GPIO_MODE_JSON ? "json" : "text");
+    cJSON_AddBoolToObject(root, "auto_response", auto_resp);
+    
+    char *json_string = cJSON_PrintUnformatted(root);
+    
+    response->status = HTTP_OK;
+    strcpy(response->content_type, "application/json");
+    strncpy(response->content, json_string, sizeof(response->content) - 1);
+    response->content[sizeof(response->content) - 1] = '\0';
+    response->content_length = strlen(response->content);
+    
+    cJSON_Delete(root);
+    free(json_string);
+}
+
+// GPIO 설정 변경 API
+void http_handler_gpio_config_setup(const http_request_t *request, http_response_t *response) {
+    memset(response, 0, sizeof(http_response_t));
+    cJSON *json = cJSON_Parse(request->content);
+    if (!json) {
+        response->status = HTTP_BAD_REQUEST;
+        strcpy(response->content_type, "application/json");
+        snprintf(response->content, sizeof(response->content),
+            "{\"result\":false,\"error\":\"Invalid JSON\"}");
+        response->content_length = strlen(response->content);
+        return;
+    }
+
+    cJSON *device_id_item = cJSON_GetObjectItem(json, "device_id");
+    cJSON *comm_mode_item = cJSON_GetObjectItem(json, "comm_mode");
+    cJSON *auto_response_item = cJSON_GetObjectItem(json, "auto_response");
+
+    bool valid = true;
+    bool changed = false;
+
+    // 디바이스 ID 변경
+    if (device_id_item && cJSON_IsNumber(device_id_item)) {
+        int new_id = device_id_item->valueint;
+        if (new_id >= 1 && new_id <= 254) {
+            if (set_gpio_device_id((uint8_t)new_id)) {
+                changed = true;
+            }
+        } else {
+            valid = false;
+        }
+    }
+
+    // 통신 모드 변경
+    if (comm_mode_item && cJSON_IsString(comm_mode_item)) {
+        const char* mode_str = comm_mode_item->valuestring;
+        gpio_comm_mode_t new_mode;
+        
+        if (strcmp(mode_str, "text") == 0) {
+            new_mode = GPIO_MODE_TEXT;
+        } else if (strcmp(mode_str, "json") == 0) {
+            new_mode = GPIO_MODE_JSON;
+        } else {
+            valid = false;
+        }
+        
+        if (valid && set_gpio_comm_mode(new_mode)) {
+            changed = true;
+        }
+    }
+
+    // 자동 응답 설정 변경
+    if (auto_response_item && cJSON_IsBool(auto_response_item)) {
+        bool auto_resp = cJSON_IsTrue(auto_response_item);
+        if (set_gpio_auto_response(auto_resp)) {
+            changed = true;
+        }
+    }
+
+    if (valid) {
+        response->status = HTTP_OK;
+        strcpy(response->content_type, "application/json");
+        const char* simple_json = "{\"result\":true}";
+        strncpy(response->content, simple_json, sizeof(response->content) - 1);
+        response->content[sizeof(response->content) - 1] = '\0';
+        response->content_length = strlen(response->content);
+    } else {
+        response->status = HTTP_BAD_REQUEST;
+        strcpy(response->content_type, "application/json");
+        snprintf(response->content, sizeof(response->content),
+            "{\"result\":false,\"error\":\"Invalid field values\"}");
+        response->content_length = strlen(response->content);
+    }
+    
+    cJSON_Delete(json);
 }
 
 void http_handler_restart(const http_request_t *request, http_response_t *response) {
