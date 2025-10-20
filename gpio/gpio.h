@@ -55,6 +55,9 @@ gpio_comm_mode_t get_gpio_comm_mode(void);
 bool set_gpio_auto_response(bool enabled);
 bool get_gpio_auto_response(void);
 
+// GPIO 설정 한번에 갱신 및 저장
+bool update_gpio_config(uint8_t device_id, gpio_comm_mode_t comm_mode, bool auto_response);
+
 // Global variables
 extern uint16_t gpio_input_data;
 extern uint16_t gpio_output_data;

@@ -84,6 +84,8 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
         return cmd_set_subnet(param_part, response, response_size);
     } else if (strcmp(cmd_part, "setgateway") == 0) {
         return cmd_set_gateway(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "setnetwork") == 0) {
+        return cmd_set_network(param_part, response, response_size);
     } else if (strcmp(cmd_part, "settcpport") == 0) {
         return cmd_set_tcp_port(param_part, response, response_size);
     } else if (strcmp(cmd_part, "setdhcp") == 0) {
@@ -443,6 +445,70 @@ cmd_result_t cmd_set_gateway(const char* param, char* response, size_t response_
     return CMD_SUCCESS;
 }
 
+// 네트워크 설정 한번에 설정 (setnetwork,ip,subnet,gateway)
+cmd_result_t cmd_set_network(const char* param, char* response, size_t response_size) {
+    if (param == NULL) {
+        snprintf(response, response_size, "Error: Network parameters required. Use: setnetwork,ip,subnet,gateway\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    // 매개변수를 IP, 서브넷, 게이트웨이로 분리
+    char param_copy[128];
+    strncpy(param_copy, param, sizeof(param_copy) - 1);
+    param_copy[sizeof(param_copy) - 1] = '\0';
+
+    char* ip_str = strtok(param_copy, ",");
+    char* subnet_str = strtok(NULL, ",");
+    char* gateway_str = strtok(NULL, ",");
+
+    if (ip_str == NULL || subnet_str == NULL || gateway_str == NULL) {
+        snprintf(response, response_size, "Error: Use format 'setnetwork,ip,subnet,gateway' (e.g., 'setnetwork,192.168.1.100,255.255.255.0,192.168.1.1')\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    // IP 주소 파싱
+    uint8_t ip[4];
+    if (sscanf(ip_str, "%hhu.%hhu.%hhu.%hhu", &ip[0], &ip[1], &ip[2], &ip[3]) != 4) {
+        snprintf(response, response_size, "Error: Invalid IP format. Use xxx.xxx.xxx.xxx\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    // 서브넷 마스크 파싱
+    uint8_t subnet[4];
+    if (sscanf(subnet_str, "%hhu.%hhu.%hhu.%hhu", &subnet[0], &subnet[1], &subnet[2], &subnet[3]) != 4) {
+        snprintf(response, response_size, "Error: Invalid subnet format. Use xxx.xxx.xxx.xxx\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    // 게이트웨이 파싱
+    uint8_t gateway[4];
+    if (sscanf(gateway_str, "%hhu.%hhu.%hhu.%hhu", &gateway[0], &gateway[1], &gateway[2], &gateway[3]) != 4) {
+        snprintf(response, response_size, "Error: Invalid gateway format. Use xxx.xxx.xxx.xxx\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    // 네트워크 정보 설정
+    memcpy(g_net_info.ip, ip, 4);
+    memcpy(g_net_info.sn, subnet, 4);
+    memcpy(g_net_info.gw, gateway, 4);
+    g_net_info.dhcp = NETINFO_STATIC;
+    
+    // 플래시에 저장
+    network_config_save_to_flash(&g_net_info);
+    
+    snprintf(response, response_size, 
+             "Network configuration set:\r\n"
+             "IP: %d.%d.%d.%d\r\n"
+             "Subnet: %d.%d.%d.%d\r\n"
+             "Gateway: %d.%d.%d.%d\r\n"
+             "DHCP: Disabled\r\n"
+             "Restart required.\r\n",
+             ip[0], ip[1], ip[2], ip[3],
+             subnet[0], subnet[1], subnet[2], subnet[3],
+             gateway[0], gateway[1], gateway[2], gateway[3]);
+    return CMD_SUCCESS;
+}
+
 cmd_result_t cmd_set_tcp_port(const char* param, char* response, size_t response_size) {
     if (param == NULL) {
         snprintf(response, response_size, "Error: TCP port parameter required\r\n");
@@ -627,6 +693,7 @@ cmd_result_t cmd_help(char* response, size_t response_size) {
         "  setip,x.x.x.x             - Set IP address\r\n"
         "  setsubnet,x.x.x.x         - Set subnet mask\r\n"
         "  setgateway,x.x.x.x        - Set gateway\r\n"
+        "  setnetwork,ip,sub,gw      - Set IP, subnet, gateway at once\r\n"
         "  settcpport,port           - Set TCP port\r\n"
         "  setdhcp,on/off            - Enable/disable DHCP\r\n"
         "UART:\r\n"

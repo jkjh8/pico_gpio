@@ -43,6 +43,7 @@ cmd_result_t cmd_get_outputs(const char* param, char* response, size_t response_
 cmd_result_t cmd_set_ip(const char* param, char* response, size_t response_size);
 cmd_result_t cmd_set_subnet(const char* param, char* response, size_t response_size);
 cmd_result_t cmd_set_gateway(const char* param, char* response, size_t response_size);
+cmd_result_t cmd_set_network(const char* param, char* response, size_t response_size);
 cmd_result_t cmd_set_tcp_port(const char* param, char* response, size_t response_size);
 cmd_result_t cmd_set_dhcp(const char* param, char* response, size_t response_size);
 

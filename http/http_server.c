@@ -62,8 +62,8 @@ bool http_server_init(uint16_t port)
     http_register_handler("/api/control", HTTP_POST, http_handler_control_setup);
     
     // GPIO 설정 API
-    http_register_handler("/api/gpio/config", HTTP_GET, http_handler_gpio_config_info);
-    http_register_handler("/api/gpio/config", HTTP_POST, http_handler_gpio_config_setup);
+    http_register_handler("/api/gpio", HTTP_GET, http_handler_gpio_config_info);
+    http_register_handler("/api/gpio", HTTP_POST, http_handler_gpio_config_setup);
 
     http_register_handler("/api/restart", HTTP_GET, http_handler_restart);
 

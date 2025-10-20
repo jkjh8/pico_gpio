@@ -64,8 +64,11 @@ uint16_t hct165_read(void) {
     gpio_put(HCT165_LOAD_PIN, 0); // SH/LD low (load)
     sleep_us(1);
     gpio_put(HCT165_LOAD_PIN, 1); // SH/LD high (shift)
-    uint16_t data;
-    spi_read_blocking(GPIO_PORT, 0x00, (uint8_t*)&data, 2);
+    
+    // 바이트 순서를 맞춰서 읽기 (HCT165 연결 순서에 따라 조정)
+    uint8_t buffer[2];
+    spi_read_blocking(GPIO_PORT, 0x00, buffer, 2);
+    uint16_t data = (buffer[0] << 8) | buffer[1];  // 상위 바이트를 buffer[0]으로
     
     // 값이 변경되었고 자동 응답이 활성화된 경우 피드백 전송
     if (data != gpio_input_data && gpio_config.auto_response) {
@@ -176,6 +179,7 @@ bool set_gpio_device_id(uint8_t new_id) {
 
 // GPIO 디바이스 ID 반환
 uint8_t get_gpio_device_id(void) {
+    printf("[GPIO] get_gpio_device_id: %d\n", gpio_config.device_id);
     return gpio_config.device_id;
 }
 
@@ -205,4 +209,29 @@ bool set_gpio_auto_response(bool enabled) {
 // GPIO 자동 응답 반환
 bool get_gpio_auto_response(void) {
     return gpio_config.auto_response;
+}
+
+// GPIO 설정 한번에 갱신 및 저장
+bool update_gpio_config(uint8_t device_id, gpio_comm_mode_t comm_mode, bool auto_response) {
+    // 유효성 검사
+    if (device_id < 1 || device_id > 254) {
+        printf("[GPIO] Invalid device_id: %d\n", device_id);
+        return false;
+    }
+    if (comm_mode > GPIO_MODE_JSON) {
+        printf("[GPIO] Invalid comm_mode: %d\n", comm_mode);
+        return false;
+    }
+    
+    // 설정 갱신
+    gpio_config.device_id = device_id;
+    gpio_config.comm_mode = comm_mode;
+    gpio_config.auto_response = auto_response;
+    
+    printf("[GPIO] Config updated: ID=%d, Mode=%d, AutoResp=%d\n", 
+           gpio_config.device_id, gpio_config.comm_mode, gpio_config.auto_response);
+    
+    // 플래시에 저장
+    save_gpio_config_to_flash();
+    return true;
 }

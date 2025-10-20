@@ -428,6 +428,68 @@ cmd_result_t process_json_command(const char* json_str, char* response, size_t r
             }
         }
     }
+    else if (strcmp(command, "set_network") == 0) {
+        cJSON *ip_json = cJSON_GetObjectItem(json, "ip");
+        cJSON *netmask_json = cJSON_GetObjectItem(json, "netmask");
+        cJSON *gateway_json = cJSON_GetObjectItem(json, "gateway");
+        
+        extern wiz_NetInfo g_net_info;
+        bool success = true;
+        char error_msg[100] = "";
+        
+        // IP 주소 설정
+        if (cJSON_IsString(ip_json)) {
+            const char* ip_str = cJSON_GetStringValue(ip_json);
+            if (sscanf(ip_str, "%hhu.%hhu.%hhu.%hhu", 
+                      &g_net_info.ip[0], &g_net_info.ip[1], &g_net_info.ip[2], &g_net_info.ip[3]) != 4) {
+                success = false;
+                strcpy(error_msg, "Invalid IP format");
+            }
+        }
+        
+        // 서브넷 마스크 설정
+        if (success && cJSON_IsString(netmask_json)) {
+            const char* netmask_str = cJSON_GetStringValue(netmask_json);
+            if (sscanf(netmask_str, "%hhu.%hhu.%hhu.%hhu", 
+                      &g_net_info.sn[0], &g_net_info.sn[1], &g_net_info.sn[2], &g_net_info.sn[3]) != 4) {
+                success = false;
+                strcpy(error_msg, "Invalid netmask format");
+            }
+        }
+        
+        // 게이트웨이 설정
+        if (success && cJSON_IsString(gateway_json)) {
+            const char* gateway_str = cJSON_GetStringValue(gateway_json);
+            if (sscanf(gateway_str, "%hhu.%hhu.%hhu.%hhu", 
+                      &g_net_info.gw[0], &g_net_info.gw[1], &g_net_info.gw[2], &g_net_info.gw[3]) != 4) {
+                success = false;
+                strcpy(error_msg, "Invalid gateway format");
+            }
+        }
+        
+        if (success) {
+            // DHCP 비활성화
+            g_net_info.dhcp = NETINFO_STATIC;
+            
+            // 플래시에 저장
+            network_config_save_to_flash(&g_net_info);
+            
+            snprintf(response, response_size,
+                    "{\"result\":\"success\",\"network\":{"
+                    "\"ip\":\"%d.%d.%d.%d\","
+                    "\"netmask\":\"%d.%d.%d.%d\","
+                    "\"gateway\":\"%d.%d.%d.%d\","
+                    "\"dhcp\":\"disabled\"}}\r\n",
+                    g_net_info.ip[0], g_net_info.ip[1], g_net_info.ip[2], g_net_info.ip[3],
+                    g_net_info.sn[0], g_net_info.sn[1], g_net_info.sn[2], g_net_info.sn[3],
+                    g_net_info.gw[0], g_net_info.gw[1], g_net_info.gw[2], g_net_info.gw[3]);
+            result = CMD_SUCCESS;
+        } else {
+            snprintf(response, response_size,
+                    "{\"result\":\"error\",\"message\":\"%s\"}\r\n", error_msg);
+            result = CMD_ERROR_INVALID;
+        }
+    }
     else if (strcmp(command, "set_dns") == 0) {
         cJSON *dns_json = cJSON_GetObjectItem(json, "dns");
         

@@ -196,6 +196,9 @@ void http_handler_control_info(const http_request_t *request, http_response_t *r
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "tcp_port", tcp_port);
     cJSON_AddNumberToObject(root, "rs232_1_baud", uart_rs232_1_baud);
+    cJSON_AddStringToObject(root, "mode", get_gpio_comm_mode() == GPIO_MODE_JSON ? "json" : "text");
+    cJSON_AddBoolToObject(root, "auto_response", get_gpio_auto_response());
+    cJSON_AddNumberToObject(root, "device_id", get_gpio_device_id());
     char *json_string = cJSON_PrintUnformatted(root);
     
     response->status = HTTP_OK;
@@ -297,63 +300,78 @@ void http_handler_gpio_config_setup(const http_request_t *request, http_response
         return;
     }
 
+    printf("[HTTP] JSON parsed successfully\n");
+    printf("[HTTP] Raw JSON: %s\n", request->content);
+
     cJSON *device_id_item = cJSON_GetObjectItem(json, "device_id");
     cJSON *comm_mode_item = cJSON_GetObjectItem(json, "comm_mode");
     cJSON *auto_response_item = cJSON_GetObjectItem(json, "auto_response");
 
-    bool valid = true;
-    bool changed = false;
+    printf("[HTTP] device_id_item: %p, comm_mode_item: %p, auto_response_item: %p\n", 
+           device_id_item, comm_mode_item, auto_response_item);
 
-    // 디바이스 ID 변경
+    // 현재 설정값 가져오기
+    uint8_t device_id = get_gpio_device_id();
+    gpio_comm_mode_t comm_mode = get_gpio_comm_mode();
+    bool auto_response = get_gpio_auto_response();
+
+    bool valid = true;
+
+    // 디바이스 ID 파싱
     if (device_id_item && cJSON_IsNumber(device_id_item)) {
-        int new_id = device_id_item->valueint;
+        int new_id = (int)device_id_item->valuedouble;
+        printf("[HTTP] device_id_item found, valuedouble: %f, converted: %d\n", device_id_item->valuedouble, new_id);
         if (new_id >= 1 && new_id <= 254) {
-            if (set_gpio_device_id((uint8_t)new_id)) {
-                changed = true;
-            }
+            device_id = (uint8_t)new_id;
+            printf("[HTTP] device_id updated to: %d\n", device_id);
         } else {
+            printf("[HTTP] device_id out of range: %d\n", new_id);
             valid = false;
         }
+    } else {
+        printf("[HTTP] device_id_item not found or not a number\n");
     }
 
-    // 통신 모드 변경
+    // 통신 모드 파싱
     if (comm_mode_item && cJSON_IsString(comm_mode_item)) {
         const char* mode_str = comm_mode_item->valuestring;
-        gpio_comm_mode_t new_mode;
-        
         if (strcmp(mode_str, "text") == 0) {
-            new_mode = GPIO_MODE_TEXT;
+            comm_mode = GPIO_MODE_TEXT;
         } else if (strcmp(mode_str, "json") == 0) {
-            new_mode = GPIO_MODE_JSON;
+            comm_mode = GPIO_MODE_JSON;
         } else {
             valid = false;
         }
-        
-        if (valid && set_gpio_comm_mode(new_mode)) {
-            changed = true;
-        }
     }
 
-    // 자동 응답 설정 변경
+    // 자동 응답 파싱
     if (auto_response_item && cJSON_IsBool(auto_response_item)) {
-        bool auto_resp = cJSON_IsTrue(auto_response_item);
-        if (set_gpio_auto_response(auto_resp)) {
-            changed = true;
-        }
+        auto_response = cJSON_IsTrue(auto_response_item);
     }
 
+    // 유효성 검사 통과 시 한번에 설정 갱신
     if (valid) {
-        response->status = HTTP_OK;
-        strcpy(response->content_type, "application/json");
-        const char* simple_json = "{\"result\":true}";
-        strncpy(response->content, simple_json, sizeof(response->content) - 1);
-        response->content[sizeof(response->content) - 1] = '\0';
-        response->content_length = strlen(response->content);
+        if (update_gpio_config(device_id, comm_mode, auto_response)) {
+            response->status = HTTP_OK;
+            strcpy(response->content_type, "application/json");
+            const char* success_json = "{\"result\":true}";
+            strncpy(response->content, success_json, sizeof(response->content) - 1);
+            response->content[sizeof(response->content) - 1] = '\0';
+            response->content_length = strlen(response->content);
+        } else {
+            response->status = HTTP_INTERNAL_ERROR;
+            strcpy(response->content_type, "application/json");
+            const char* error_json = "{\"result\":false,\"error\":\"Failed to save configuration\"}";
+            strncpy(response->content, error_json, sizeof(response->content) - 1);
+            response->content[sizeof(response->content) - 1] = '\0';
+            response->content_length = strlen(response->content);
+        }
     } else {
         response->status = HTTP_BAD_REQUEST;
         strcpy(response->content_type, "application/json");
-        snprintf(response->content, sizeof(response->content),
-            "{\"result\":false,\"error\":\"Invalid field values\"}");
+        const char* error_json = "{\"result\":false,\"error\":\"Invalid field values\"}";
+        strncpy(response->content, error_json, sizeof(response->content) - 1);
+        response->content[sizeof(response->content) - 1] = '\0';
         response->content_length = strlen(response->content);
     }
     
