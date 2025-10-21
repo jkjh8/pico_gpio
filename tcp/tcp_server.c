@@ -67,9 +67,22 @@ void tcp_servers_process(void) {
     for (uint8_t i = TCP_SOCKET_START; i < TCP_SOCKET_START + TCP_SOCKET_COUNT; i++) {
         switch (getSn_SR(i)) {
             case SOCK_ESTABLISHED: {
-                // 최초 연결 시에만 환영 메시지 전송
+                // 최초 연결 시에만 환영 메시지 전송 (통신 모드에 따라 다르게)
                 if (getSn_IR(i) & Sn_IR_CON) {
-                    send(i, (uint8_t*)"Welcome to TCP Server!\n", 24);
+                    if (get_gpio_comm_mode() == GPIO_MODE_JSON) {
+                        // JSON 모드 웰컴 메시지
+                        char welcome_json[128];
+                        snprintf(welcome_json, sizeof(welcome_json), 
+                                "{\"device_id\":%d,\"event\":\"connected\",\"mode\":\"json\"}\r\n", 
+                                get_gpio_device_id());
+                        send(i, (uint8_t*)welcome_json, strlen(welcome_json));
+                    } else {
+                        // TEXT 모드 웰컴 메시지
+                        char welcome_text[64];
+                        snprintf(welcome_text, sizeof(welcome_text), 
+                                "Connected,%d,text\r\n", get_gpio_device_id());
+                        send(i, (uint8_t*)welcome_text, strlen(welcome_text));
+                    }
                     setSn_IR(i, Sn_IR_CON);
                 }
                 uint16_t rx_size = getSn_RX_RSR(i);

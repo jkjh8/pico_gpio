@@ -62,20 +62,21 @@ void http_handler_network_info(const http_request_t *request, http_response_t *r
         const char* stored_content_type = NULL;
         const char* file_data = get_embedded_file_with_content_type(request->uri, &file_size, &is_compressed, &original_size, &stored_content_type);
         
-        // printf("Static file request: %s\n", request->uri);
+    printf("[HTTP] Static file request: %s\n", request->uri);
         
         // 응답 구조체 초기화
         memset(response, 0, sizeof(http_response_t));
         
         if (!file_data || file_size == 0) {
-            // printf("File not found: %s\n", request->uri);
+                printf("[HTTP] File not found: %s\n", request->uri);
             response->status = HTTP_NOT_FOUND;
             strcpy(response->content_type, "text/plain");
             response->content_length = 0;
             return;
         }
         
-        // printf("File found: %s, size: %zu, compressed: %s\n", request->uri, file_size, is_compressed ? "yes" : "no");
+     printf("[HTTP] File found: %s, size: %zu, original: %zu, compressed: %s, stored_type: %s\n",
+         request->uri, file_size, original_size, is_compressed ? "yes" : "no", stored_content_type ? stored_content_type : "(null)");
         
         response->status = HTTP_OK;
         
@@ -98,7 +99,7 @@ void http_handler_network_info(const http_request_t *request, http_response_t *r
                 snprintf(content_type_with_encoding, sizeof(content_type_with_encoding), 
                 "%s|gzip", response->content_type);
                 strcpy(response->content_type, content_type_with_encoding);
-                // printf("Setting Content-Encoding: gzip for %s\n", request->uri);
+                printf("[HTTP] Inline response will include Content-Encoding: gzip for %s\n", request->uri);
             }
             
             // printf("Sending file inline: %s, content_length: %d\n", request->uri, response->content_length);
@@ -119,7 +120,8 @@ void http_handler_network_info(const http_request_t *request, http_response_t *r
             }
             
             response->content_length = 0; // 스트리밍의 경우 content는 비움
-            // printf("Stream setup complete: type=%s, compressed=%s\n", response->content_type, is_compressed ? "yes" : "no");
+         printf("[HTTP] Stream setup: uri=%s, type=%s, compressed=%s, stream_size=%zu\n",
+             request->uri, response->content_type, is_compressed ? "yes" : "no", response->stream_size);
         }
     }
     

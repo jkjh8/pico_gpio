@@ -285,6 +285,9 @@ void http_send_response(uint8_t sock, const http_response_t *response)
         is_gzipped ? "Content-Encoding: gzip\r\n" : "",
         response->content_length
     );
+
+    printf("[HTTP] Sending response: status=%d, type=%s, gzipped=%s, content_length=%d\n",
+           response->status, actual_content_type, is_gzipped ? "yes" : "no", response->content_length);
     
     // 헤더 및 콘텐츠 전송
     send(sock, (uint8_t*)header, header_len);
@@ -361,16 +364,17 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
    
     int32_t header_result = send(sock, (uint8_t*)header, header_len);
     if (header_result <= 0) {
-        // printf("Failed to send header: %d\n", header_result);
+        printf("[HTTP] Failed to send header: %d\n", header_result);
         return;
     }
     
     // 파일 데이터를 안전한 청크 단위로 전송
+    size_t last_log_bytes = 0;
     while (bytes_sent < file_size && retry_count < max_retries) {
         // 소켓 상태 확인
         uint8_t socket_status = getSn_SR(sock);
         if (socket_status != SOCK_ESTABLISHED) {
-            printf("Socket disconnected during transfer: %d\n", socket_status);
+            printf("[HTTP] Socket disconnected during transfer: %d\n", socket_status);
             break;
         }
         
@@ -396,23 +400,50 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
             retry_count++;
             continue;
         }
-        
+
         // 데이터 전송
         int32_t ret = send(sock, (uint8_t*)(file_data + bytes_sent), chunk_size);
         if (ret <= 0) {
-            // printf("Send failed: %d\n", ret);
+            printf("[HTTP] Send failed: %d during transfer at bytes_sent=%zu\n", ret, bytes_sent);
             break;
         }
-        
+
         bytes_sent += ret;
         retry_count = 0;  // 성공적으로 전송되면 재시도 카운터 리셋
-        
+
         // 전송 속도 조절
         sleep_ms(2);
+
+        // 진행상황 로그 (약 4KB 단위로 출력)
+        if (bytes_sent - last_log_bytes >= 4096 || bytes_sent == file_size) {
+            printf("[HTTP] Streaming progress: sent %zu / %zu bytes\n", bytes_sent, file_size);
+            last_log_bytes = bytes_sent;
+        }
 
     }
 
     last_activity_time = to_ms_since_boot(get_absolute_time());
+
+    // 전송이 끝난 후 TX 버퍼가 비워질 때까지 잠시 대기하여
+    // W5500가 모든 데이터를 물리적으로 전송할 시간을 줍니다.
+    // 이로써 브라우저 쪽에서의 connection reset 가능성을 줄입니다.
+    int flush_wait_ms = 0;
+    int max_flush_wait_ms = 200; // 최대 200ms 대기
+    while (flush_wait_ms < max_flush_wait_ms) {
+        uint16_t free_tx = getSn_TX_FSR(sock);
+        // TX 버퍼가 충분히 비워졌다면 루프 종료
+        if (free_tx >= STREAM_CHUNK_SIZE) {
+            break;
+        }
+        sleep_ms(5);
+        flush_wait_ms += 5;
+    }
+
+    if (bytes_sent < file_size) {
+        printf("[HTTP] Streaming incomplete: sent %zu of %zu bytes\n", bytes_sent, file_size);
+    } else {
+        printf("[HTTP] Streaming complete: sent %zu bytes, waited %d ms for TX flush\n", bytes_sent, flush_wait_ms);
+    }
 }
 
 const char* get_embedded_file(const char* path, size_t* file_size, bool* is_compressed, size_t* original_size)
