@@ -1,6 +1,8 @@
 
 #include "main.h"
 #include "command_handler.h"
+#include "static_files.h"
+#include "ioLibrary_Driver/Internet/httpServer/httpServer.h"
 
 // 전역 변수 정의
 uint8_t g_ethernet_buf[2048];
@@ -121,6 +123,16 @@ int main()
         printf("HTTP server started on port 80\n");
     } else {
         printf("ERROR: HTTP server failed to start\n");
+    }
+
+    // Register uncompressed embedded files into the HTTP server's runtime table.
+    // reg_httpServer_webContent expects NUL-terminated content; only register files marked not compressed.
+    for (size_t i = 0; i < embedded_files_count; ++i) {
+        if (!embedded_files[i].is_compressed) {
+            // reg_httpServer_webContent takes (uint8_t * name, uint8_t * content)
+            // Note: this will only work correctly for files that are valid C-strings (no 0x00 bytes)
+            reg_httpServer_webContent((uint8_t *)embedded_files[i].path, (uint8_t *)embedded_files[i].data);
+        }
     }
     // TCP 포트 로드
     load_tcp_port_from_flash();
