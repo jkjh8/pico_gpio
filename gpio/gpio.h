@@ -45,6 +45,14 @@ bool gpio_spi_init(void);
 void hct595_write(uint16_t data);
 uint16_t hct165_read(void);
 
+// Simple pin-level accessors used by higher-level modules (CGI, JSON handlers)
+// These provide a convenient view for pins numbered 1..16 (mapping handled
+// inside gpio module). Implementations are in gpio.c.
+// High-level pin accessors to avoid colliding with hardware gpio_* APIs
+// pin numbers are 1..16
+bool gpio_pin_get(int pin);
+void gpio_pin_set(int pin, bool value);
+
 // GPIO 설정 관리 함수
 void save_gpio_config_to_flash(void);
 void load_gpio_config_from_flash(void);

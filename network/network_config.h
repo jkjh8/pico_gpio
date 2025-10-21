@@ -68,4 +68,9 @@ bool network_is_cable_connected(void);
 bool network_is_connected(void);
 bool network_reinitialize(void);
 
+// Serialize current network info into JSON. Returns number of bytes written (excluding null).
+// buf: destination buffer, buf_len: size of buffer.
+// The JSON format is: {"ip":"a.b.c.d","netmask":"a.b.c.d","gateway":"a.b.c.d","dns":"a.b.c.d","mac":"aa:bb:cc:dd:ee:ff","dhcp":"DHCP|Static","link":true}
+size_t network_get_info_json(char *buf, size_t buf_len);
+
 #endif // NETWORK_CONFIG_H

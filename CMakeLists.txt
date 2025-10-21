@@ -45,9 +45,9 @@ add_executable(main
     json_handler.c
     network/mac_utils.c
     network/network_config.c
-    http/http_server.c
-    http/http_handlers.c
     static_files.c
+    http/http_server.c
+    http/http_cgi_handlers.c
     tcp/tcp_server.c
     uart/uart_rs232.c
     gpio/gpio.c
@@ -80,8 +80,9 @@ target_include_directories(main PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
         ${CMAKE_SOURCE_DIR}/ioLibrary_Driver
         ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Ethernet
-        ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Internet/DHCP
-        ${CMAKE_SOURCE_DIR}/cJSON
+    ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Internet/DHCP
+    ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Internet/httpServer
+    ${CMAKE_SOURCE_DIR}/cJSON
 )
 
 # Add source files from the latest driver
@@ -90,6 +91,9 @@ set(WIZNET_SOURCE
     ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Ethernet/W5500/w5500.c
     ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Ethernet/socket.c
     ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Internet/DHCP/dhcp.c
+    ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Internet/httpServer/httpServer.c
+    ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Internet/httpServer/httpUtil.c
+    ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Internet/httpServer/httpParser.c
 )
 
 # Add cJSON source

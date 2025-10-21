@@ -127,6 +127,24 @@ uint16_t hct165_read(void) {
     return data;
 }
 
+// High-level accessors used by network/CGI code. Map 1..16 pin numbers to
+// bit positions inside the 16-bit shift-register state.
+bool gpio_pin_get(int pin) {
+    if (pin < 1 || pin > 16) return false;
+    uint16_t input = hct165_read();
+    return (input & (1u << (pin - 1))) != 0;
+}
+
+void gpio_pin_set(int pin, bool value) {
+    if (pin < 1 || pin > 16) return;
+    if (value) {
+        gpio_output_data |= (1u << (pin - 1));
+    } else {
+        gpio_output_data &= ~(1u << (pin - 1));
+    }
+    hct595_write(gpio_output_data);
+}
+
 // GPIO 설정을 플래시에 저장
 void save_gpio_config_to_flash(void) {
     uint32_t ints = save_and_disable_interrupts();

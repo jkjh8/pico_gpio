@@ -284,3 +284,37 @@ void w5500_reset_network(void) {
     uint8_t rx_sizes[8] = {2, 8, 2, 2, 2, 0, 0, 0};
     wizchip_init(tx_sizes, rx_sizes);
 }
+
+// Serialize current network info into JSON into the provided buffer.
+// Returns number of bytes written (excluding terminating null). Does not write more than buf_len.
+size_t network_get_info_json(char *buf, size_t buf_len) {
+    if (!buf || buf_len == 0) return 0;
+
+    wiz_NetInfo current_info;
+    wizchip_getnetinfo(&current_info);
+
+    // MAC string
+    char mac_str[18] = {0};
+    sprintf(mac_str, "%02X:%02X:%02X:%02X:%02X:%02X",
+            current_info.mac[0], current_info.mac[1], current_info.mac[2],
+            current_info.mac[3], current_info.mac[4], current_info.mac[5]);
+
+    const char *dhcp_str = (g_net_info.dhcp == NETINFO_DHCP) ? "DHCP" : "Static";
+    bool link = w5500_check_link_status();
+
+    int written = snprintf(buf, buf_len,
+        "{\"ip\":\"%d.%d.%d.%d\",\"netmask\":\"%d.%d.%d.%d\",\"gateway\":\"%d.%d.%d.%d\",\"dns\":\"%d.%d.%d.%d\",\"mac\":\"%s\",\"dhcp\":\"%s\",\"link\":%s}",
+        current_info.ip[0], current_info.ip[1], current_info.ip[2], current_info.ip[3],
+        current_info.sn[0], current_info.sn[1], current_info.sn[2], current_info.sn[3],
+        current_info.gw[0], current_info.gw[1], current_info.gw[2], current_info.gw[3],
+        current_info.dns[0], current_info.dns[1], current_info.dns[2], current_info.dns[3],
+        mac_str, dhcp_str, link ? "true" : "false");
+
+    if (written < 0) return 0;
+    if ((size_t)written >= buf_len) {
+        // truncated
+        buf[buf_len-1] = '\0';
+        return buf_len-1;
+    }
+    return (size_t)written;
+}
