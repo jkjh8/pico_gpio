@@ -47,6 +47,7 @@ add_executable(main
     network/network_config.c
     static_files.c
     http/http_server.c
+    http/predefined_cgi.c
     tcp/tcp_server.c
     uart/uart_rs232.c
     gpio/gpio.c
