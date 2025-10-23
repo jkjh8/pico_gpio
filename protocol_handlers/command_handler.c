@@ -1,5 +1,5 @@
-#include "command_handler.h"
-#include "json_handler.h"
+#include "protocol_handlers/command_handler.h"
+#include "protocol_handlers/json_handler.h"
 #include "network/network_config.h"
 #include "gpio/gpio.h"
 #include "uart/uart_rs232.h"

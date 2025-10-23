@@ -1,6 +1,6 @@
 #include "uart_rs232.h"
-#include "command_handler.h"
-#include "json_handler.h"
+#include "protocol_handlers/command_handler.h"
+#include "protocol_handlers/json_handler.h"
 #include "gpio/gpio.h"
 
 void save_uart_rs232_baud_to_flash(void) {

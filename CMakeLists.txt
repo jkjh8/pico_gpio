@@ -41,10 +41,11 @@ pico_sdk_init()
 
 add_executable(main 
     main.c 
-    command_handler.c
-    json_handler.c
+    protocol_handlers/command_handler.c
+    protocol_handlers/json_handler.c
     network/mac_utils.c
     network/network_config.c
+    network/network_dhcp.c
     static_files.c
     http/http_server.c
     http/predefined_cgi.c
@@ -77,9 +78,9 @@ target_link_libraries(main
 
 # Add the standard include files to the build
 target_include_directories(main PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}
-        ${CMAKE_SOURCE_DIR}/ioLibrary_Driver
-        ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Ethernet
+    ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_SOURCE_DIR}/ioLibrary_Driver
+    ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Ethernet
     ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Internet/DHCP
     ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Internet/httpServer
     ${CMAKE_SOURCE_DIR}/cJSON

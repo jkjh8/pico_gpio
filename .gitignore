@@ -2,6 +2,4 @@ build
 !.vscode/*
 .vscode
 
-/cJSON
-/ioLibrary_Driver
 /web

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "command_handler.h"
+#include "protocol_handlers/command_handler.h"
 
 #ifdef __cplusplus
 extern "C" {

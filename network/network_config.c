@@ -1,12 +1,19 @@
 #include "network_config.h"
 
-// 네트워크 상태 관련 전역 변수 구현
-network_monitor_state_t network_state = NETWORK_STATE_DISCONNECTED;
-uint32_t last_connection_check = 0;
-uint32_t reconnect_attempts = 0;
-bool cable_was_connected = false;
+// NOTE: unused monitor variables removed to reduce global state surface.
 
-extern wiz_NetInfo g_net_info;
+// Ethernet buffer and global network info previously defined in main.c
+uint8_t g_ethernet_buf[2048];
+
+// 네트워크 정보 전역 변수 (초기값 유지)
+wiz_NetInfo g_net_info = {
+    .mac = { 0x00, 0x08, 0xDC, 0x00, 0x00, 0x00 },
+    .ip = { 192, 168, 1, 100 },
+    .sn = { 255, 255, 255, 0 },
+    .gw = { 0, 0, 0, 0 },
+    .dns = { 0, 0, 0, 0 },
+    .dhcp = NETINFO_STATIC
+};
 
 // SPI 콜백 함수 구현
 void wizchip_select(void) {
@@ -105,8 +112,8 @@ w5500_init_result_t w5500_initialize(void) {
     reg_wizchip_spi_cbfunc(wizchip_read, wizchip_write);
     
     // W5500 소켓 버퍼 초기화 및 설정 (최적화 - HTTP 서버에 더 많은 버퍼 할당)
-    uint8_t tx_sizes[8] = {2, 8, 2, 2, 2, 0, 0, 0};
-    uint8_t rx_sizes[8] = {2, 8, 2, 2, 2, 0, 0, 0};
+    uint8_t tx_sizes[8] = {2, 2, 2, 2, 2, 2, 2, 2};
+    uint8_t rx_sizes[8] = {2, 2, 2, 2, 2, 2, 2, 2};
     if (wizchip_init(tx_sizes, rx_sizes) == -1) {
         return W5500_INIT_ERROR_CHIP;
     }
@@ -141,47 +148,45 @@ bool w5500_set_static_ip(wiz_NetInfo *net_info) {
 
 // DHCP 설정 (W5500용 수정된 코드)
 bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
-    // DHCP 모드로 변경
+    const uint32_t timeout_ms = 30000; // 30 seconds
+
+    if (!net_info) return false;
     net_info->dhcp = NETINFO_DHCP;
-    sleep_ms(200);
-    for(int i = 0; i < 8; i++) close(i);
-    sleep_ms(100);
-    uint8_t sock_ret = socket(0, Sn_MR_UDP, 68, 0);
-    if(sock_ret != 0) return false;
-    if(sock_ret != 0) return false;
-    uint8_t phy_status = getPHYCFGR();
-    if(!(phy_status & 0x01)) { close(0); return false; }
-    DHCP_init(0, g_ethernet_buf);
-    uint32_t dhcp_timeout = 0;
-    while (dhcp_timeout < 60) {
-        uint8_t dhcp_status = DHCP_run();
-        uint8_t phy_status = getPHYCFGR();
-        if(!(phy_status & 0x01)) { close(0); return false; }
-        switch(dhcp_status) {
-            case DHCP_IP_LEASED:
-                // DHCP에서 받은 정보를 net_info와 g_net_info에 모두 복사
-                getIPfromDHCP(net_info->ip);
-                getGWfromDHCP(net_info->gw);
-                getSNfromDHCP(net_info->sn);
-                getDNSfromDHCP(net_info->dns);
-                memcpy(&g_net_info, net_info, sizeof(wiz_NetInfo));
-                wizchip_setnetinfo(net_info);
-                close(0);
-                return true;
-            case DHCP_FAILED:
-                close(0);
-                sleep_ms(1000);
-                if(socket(0, Sn_MR_UDP, 68, 0) != 0) return false;
-                DHCP_init(0, g_ethernet_buf);
-                // dhcp_timeout을 리셋하지 말고 계속 증가
-                break;
-            default:
-                break;
-        }
-        sleep_ms(1000);
-        dhcp_timeout++;
+
+    // If there's no link, fail fast
+    if (!w5500_check_link_status()) {
+        printf("[DHCP] Link is down, aborting DHCP attempt\n");
+        return false;
     }
-    close(0);
+
+    network_dhcp_start();
+    uint32_t start = to_ms_since_boot(get_absolute_time());
+
+    while ((to_ms_since_boot(get_absolute_time()) - start) < timeout_ms) {
+        // If link drops while waiting, stop and fail
+        if (!w5500_check_link_status()) {
+            printf("[DHCP] Link dropped during DHCP attempt\n");
+            network_dhcp_stop();
+            return false;
+        }
+
+        int res = network_dhcp_process();
+        if (res == 1) {
+            memcpy(net_info, &g_net_info, sizeof(wiz_NetInfo));
+            printf("[DHCP] Lease obtained\n");
+            return true;
+        } else if (res == -1) {
+            // failure from the state machine
+            network_dhcp_stop();
+            printf("[DHCP] DHCP process reported failure\n");
+            return false;
+        }
+        sleep_ms(200);
+    }
+
+    // timeout
+    network_dhcp_stop();
+    printf("[DHCP] Timeout after %u ms\n", (unsigned)timeout_ms);
     return false;
 }
 
@@ -192,6 +197,92 @@ bool w5500_apply_network_config(wiz_NetInfo *net_info, network_mode_t mode) {
     } else {
         return w5500_set_dhcp_mode(net_info);
     }
+}
+
+// Boot-time network setup: initialize W5500 and apply stored config (static or DHCP).
+// Returns true if network configured (IP assigned or static applied), false otherwise.
+bool network_boot_setup(void) {
+    if (w5500_initialize() != W5500_INIT_SUCCESS) {
+        printf("ERROR: W5500 initialization failed\n");
+        return false;
+    }
+
+    // Apply saved network config to W5500
+    wizchip_setnetinfo(&g_net_info);
+    sleep_ms(10);
+    // repeat once to ensure registers take the values (historical workaround)
+    wizchip_setnetinfo(&g_net_info);
+
+    // Show applied config
+    wiz_NetInfo applied_config;
+    wizchip_getnetinfo(&applied_config);
+    uint8_t ip_reg[4], gw_reg[4], sn_reg[4];
+    getSIPR(ip_reg);
+    getGAR(gw_reg);
+    getSUBR(sn_reg);
+
+    printf("Applied network config to W5500:\n");
+    printf("  DHCP Mode: %s\n", applied_config.dhcp == NETINFO_DHCP ? "DHCP" : "Static");
+    printf("  IP Address: %d.%d.%d.%d (reg: %d.%d.%d.%d)\n", applied_config.ip[0], applied_config.ip[1], applied_config.ip[2], applied_config.ip[3], ip_reg[0], ip_reg[1], ip_reg[2], ip_reg[3]);
+
+    bool configured = false;
+    // Apply static IP at boot if configured; do not perform DHCP here.
+    if (g_net_info.dhcp == NETINFO_STATIC) {
+        w5500_set_static_ip(&g_net_info);
+        configured = true;
+    }
+
+    w5500_print_network_status();
+    return configured;
+}
+
+// Synchronous DHCP attempt wrapper. Returns true on lease obtained.
+bool network_try_dhcp_sync(void) {
+    return w5500_set_dhcp_mode(&g_net_info);
+}
+
+// Handle cable connect/disconnect events. Returns true if configured after event.
+bool network_on_cable_change(bool connected) {
+    static bool tcp_servers_initialized_local = false; // internal guard if needed
+
+    if (connected) {
+        if (g_net_info.dhcp == NETINFO_DHCP) {
+            printf("Ethernet cable connected, attempting DHCP...\n");
+            if (network_try_dhcp_sync()) {
+                printf("DHCP successful, network connected\n");
+                w5500_print_network_status();
+                return true;
+            } else {
+                printf("DHCP failed, keeping current IP\n");
+                return false;
+            }
+        } else if (g_net_info.dhcp == NETINFO_STATIC) {
+            printf("Ethernet cable reconnected, applying static IP\n");
+            w5500_set_static_ip(&g_net_info);
+            w5500_print_network_status();
+            return true;
+        }
+        return false;
+    } else {
+        printf("Ethernet cable disconnected\n");
+        network_dhcp_stop();
+        // caller should use network_is_connected() to manage tcp servers
+        return false;
+    }
+}
+
+// Periodic handler called from main loop. Detects cable state changes and
+// invokes network_on_cable_change(). Returns an event code for caller
+// convenience.
+network_event_t network_periodic(void) {
+    static bool last_cable_state = false;
+    bool cable_connected = network_is_cable_connected();
+    if (cable_connected != last_cable_state) {
+        network_on_cable_change(cable_connected);
+        last_cable_state = cable_connected;
+        return cable_connected ? NETWORK_EVENT_CONNECTED : NETWORK_EVENT_DISCONNECTED;
+    }
+    return NETWORK_EVENT_NONE;
 }
 
 // 네트워크 상태 출력
@@ -240,51 +331,6 @@ bool network_is_connected(void) {
     return !(ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0);
 }
 
-// 네트워크 재초기화 함수
-bool network_reinitialize(void) {
-    // W5500 소프트 리셋
-    setMR(MR_RST);
-    sleep_ms(100);
-    
-    // 다시 초기화
-    w5500_init_result_t result = w5500_initialize();
-    if (result != W5500_INIT_SUCCESS) {
-        return false;
-    }
-    
-    // 네트워크 설정 재적용 (전역 변수 g_net_info와 DHCP 모드 사용)
-    if (g_net_info.dhcp == NETINFO_STATIC) {
-        if (!w5500_set_static_ip(&g_net_info)) {
-            return false;
-        }
-    } else {
-        if (!w5500_set_dhcp_mode(&g_net_info)) {
-            return false;
-        }
-    }
-    
-    return true;
-}
-
-// W5500 네트워크 리셋 함수 구현
-void w5500_reset_network(void) {
-    // 모든 소켓 닫기
-    for (int i = 0; i < 8; i++) {
-        close(i);
-    }
-    // 하드웨어 리셋
-    gpio_put(SPI_RST, 0);
-    sleep_ms(100);
-    gpio_put(SPI_RST, 1);
-    sleep_ms(100);
-    // WIZchip 재초기화
-    reg_wizchip_cs_cbfunc(wizchip_select, wizchip_deselect);
-    reg_wizchip_spi_cbfunc(wizchip_read, wizchip_write);
-    uint8_t tx_sizes[8] = {2, 8, 2, 2, 2, 0, 0, 0};
-    uint8_t rx_sizes[8] = {2, 8, 2, 2, 2, 0, 0, 0};
-    wizchip_init(tx_sizes, rx_sizes);
-}
-
 // Serialize current network info into JSON into the provided buffer.
 // Returns number of bytes written (excluding terminating null). Does not write more than buf_len.
 size_t network_get_info_json(char *buf, size_t buf_len) {
@@ -303,7 +349,7 @@ size_t network_get_info_json(char *buf, size_t buf_len) {
     bool link = w5500_check_link_status();
 
     int written = snprintf(buf, buf_len,
-        "{\"ip\":\"%d.%d.%d.%d\",\"netmask\":\"%d.%d.%d.%d\",\"gateway\":\"%d.%d.%d.%d\",\"dns\":\"%d.%d.%d.%d\",\"mac\":\"%s\",\"dhcp\":\"%s\",\"link\":%s}",
+        "{\"ip\":\"%d.%d.%d.%d\",\"sn\":\"%d.%d.%d.%d\",\"gw\":\"%d.%d.%d.%d\",\"dns\":\"%d.%d.%d.%d\",\"mac\":\"%s\",\"dhcp\":\"%s\",\"link\":%s}",
         current_info.ip[0], current_info.ip[1], current_info.ip[2], current_info.ip[3],
         current_info.sn[0], current_info.sn[1], current_info.sn[2], current_info.sn[3],
         current_info.gw[0], current_info.gw[1], current_info.gw[2], current_info.gw[3],
@@ -318,3 +364,5 @@ size_t network_get_info_json(char *buf, size_t buf_len) {
     }
     return (size_t)written;
 }
+
+// DHCP implementation moved to network_dhcp.c

@@ -14,20 +14,23 @@ uint8_t predefined_get_cgi_processor(uint8_t * uri_name, uint8_t * buf, uint16_t
     printf("[CGI] Processing GET request: %s\n", uri_name);
 
     // network.cgi
-    if (strncmp((const char *)uri_name, "network.cgi", strlen("network.cgi")) == 0) {
+    if (strstr((const char *)uri_name, "network.cgi")) {
         printf("[CGI] network.cgi requested\n");
-        size_t n = network_get_info_json((char *)buf, 512);
-        if (n == 0) {
+        char json_buf[512];
+        size_t json_len = network_get_info_json(json_buf, sizeof(json_buf));
+        if (json_len == 0) {
             printf("[CGI] network_get_info_json failed\n");
             return 0;
         }
-        *len = (uint16_t)n;
+        int l = snprintf((char *)buf, 512, "%s", json_buf);
+        if (l < 0) return 0;
+        *len = (uint16_t)l;
         printf("[CGI] network.cgi response: %d bytes\n", *len);
         return 1;
     }
 
     // gpio.cgi?pin=1&action=get
-    if (strncmp((const char *)uri_name, "gpio.cgi", strlen("gpio.cgi")) == 0) {
+    if (strstr((const char *)uri_name, "gpio.cgi")) {
         const char *s = (const char *)uri_name;
         printf("[CGI] gpio.cgi requested: %s\n", s);
         
@@ -37,8 +40,11 @@ uint8_t predefined_get_cgi_processor(uint8_t * uri_name, uint8_t * buf, uint16_t
         // 파라미터가 없는 경우 기본 GPIO 정보 반환
         if (!pinp || !actionp) {
             printf("[CGI] gpio.cgi without parameters, returning GPIO info\n");
-            int l = snprintf((char *)buf, 512, 
+            char json_buf[512];
+            int json_len = snprintf(json_buf, sizeof(json_buf), 
                 "{\"status\":\"ok\",\"message\":\"Use ?pin=1&action=get or ?pin=1&action=set&value=0/1\"}");
+            if (json_len < 0) return 0;
+            int l = snprintf((char *)buf, 512, "%s", json_buf);
             if (l < 0) return 0;
             *len = (uint16_t)l;
             return 1;
@@ -52,7 +58,10 @@ uint8_t predefined_get_cgi_processor(uint8_t * uri_name, uint8_t * buf, uint16_t
             
             if (strcmp(action, "get") == 0) {
                 bool v = gpio_pin_get(pin);
-                int l = snprintf((char *)buf, 512, "{\"pin\":%d,\"value\":%s}", pin, v ? "true" : "false");
+                char json_buf[512];
+                int json_len = snprintf(json_buf, sizeof(json_buf), "{\"pin\":%d,\"value\":%s}", pin, v ? "true" : "false");
+                if (json_len < 0) return 0;
+                int l = snprintf((char *)buf, 512, "%s", json_buf);
                 if (l < 0) return 0;
                 *len = (uint16_t)l;
                 printf("[CGI] gpio.cgi get response: %s\n", buf);
@@ -62,7 +71,10 @@ uint8_t predefined_get_cgi_processor(uint8_t * uri_name, uint8_t * buf, uint16_t
                 if (valp) {
                     int val = atoi(valp + 6);
                     gpio_pin_set(pin, val != 0);
-                    int l = snprintf((char *)buf, 512, "{\"pin\":%d,\"value\":%d,\"status\":\"ok\"}", pin, val);
+                    char json_buf[512];
+                    int json_len = snprintf(json_buf, sizeof(json_buf), "{\"pin\":%d,\"value\":%d,\"status\":\"ok\"}", pin, val);
+                    if (json_len < 0) return 0;
+                    int l = snprintf((char *)buf, 512, "%s", json_buf);
                     if (l < 0) return 0;
                     *len = (uint16_t)l;
                     printf("[CGI] gpio.cgi set response: %s\n", buf);
@@ -85,7 +97,7 @@ uint8_t predefined_set_cgi_processor(uint8_t * uri_name, uint8_t * uri, uint8_t 
     printf("[CGI] Processing POST request: %s, URI: %s\n", uri_name, uri);
 
     // gpio.cgi POST handling: look in uri (may contain body) for pin/value
-    if (strncmp((const char *)uri_name, "gpio.cgi", strlen("gpio.cgi")) == 0) {
+    if (strstr((const char *)uri_name, "gpio.cgi")) {
         const char *s = (const char *)uri;
         printf("[CGI] gpio.cgi POST, URI content: %s\n", s);
         
@@ -97,7 +109,10 @@ uint8_t predefined_set_cgi_processor(uint8_t * uri_name, uint8_t * uri, uint8_t 
             printf("[CGI] gpio.cgi POST pin=%d, value=%d\n", pin, val);
             
             gpio_pin_set(pin, val != 0);
-            int l = snprintf((char *)buf, 128, "{\"pin\":%d,\"value\":%d,\"status\":\"ok\"}", pin, val);
+            char json_buf[128];
+            int json_len = snprintf(json_buf, sizeof(json_buf), "{\"pin\":%d,\"value\":%d,\"status\":\"ok\"}", pin, val);
+            if (json_len < 0) return 0;
+            int l = snprintf((char *)buf, 128, "%s", json_buf);
             if (l < 0) return 0;
             *en = (uint16_t)l;
             printf("[CGI] gpio.cgi POST response: %s\n", buf);

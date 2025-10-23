@@ -18,6 +18,12 @@
 #include "network/mac_utils.h"
 
 #define NETWORK_CONFIG_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - 4096)
+#define SPI_PORT spi0
+#define SPI_SCK 6
+#define SPI_MOSI 7
+#define SPI_MISO 4
+#define SPI_CS 5
+#define SPI_RST 8
 // 네트워크 상태 모니터링 및 자동 복구
 typedef enum {
     NETWORK_STATE_DISCONNECTED,
@@ -25,11 +31,8 @@ typedef enum {
     NETWORK_STATE_CONNECTED,
     NETWORK_STATE_RECONNECTING
 } network_monitor_state_t;
-
-extern network_monitor_state_t network_state;
-extern uint32_t last_connection_check;
-extern uint32_t reconnect_attempts;
-extern bool cable_was_connected;
+// SPI CONFIGURATION
+// Network monitor state globals removed; network module is event-driven now.
 
 // SPI 콜백 함수들
 void wizchip_select(void);
@@ -61,12 +64,42 @@ bool w5500_set_dhcp_mode(wiz_NetInfo *net_info);
 bool w5500_apply_network_config(wiz_NetInfo *net_info, network_mode_t mode);
 void w5500_print_network_status(void);
 bool w5500_check_link_status(void);
-void w5500_reset_network(void);
+// Boot-time network setup: initialize W5500 and apply stored config (static or DHCP).
+// Returns true if network configured (IP assigned or static applied), false otherwise.
+bool network_boot_setup(void);
+
+// Handle cable connect/disconnect events. When connected, applies DHCP or static IP as
+// configured in g_net_info. When disconnected, stops DHCP and performs cleanup.
+// Returns true if network is configured after handling the event.
+bool network_on_cable_change(bool connected);
+
+// Perform a synchronous DHCP attempt using the existing non-blocking state machine.
+// Returns true on lease obtained, false on failure/timeout.
+bool network_try_dhcp_sync(void);
+
+// Periodic network handler: call from main loop to let network module detect
+// cable connect/disconnect and handle transitions. Returns 0 for no event,
+// 1 for connected event, 2 for disconnected event.
+typedef enum {
+    NETWORK_EVENT_NONE = 0,
+    NETWORK_EVENT_CONNECTED = 1,
+    NETWORK_EVENT_DISCONNECTED = 2
+} network_event_t;
+
+network_event_t network_periodic(void);
 
 // 네트워크 모니터링 및 재연결 함수
 bool network_is_cable_connected(void);
 bool network_is_connected(void);
 bool network_reinitialize(void);
+
+// DHCP state-machine APIs (non-blocking)
+// Call network_dhcp_start() to begin DHCP process (opens socket 68 and initializes DHCP)
+// Call network_dhcp_process() periodically from main loop; returns:
+//   0 = still running/not started, 1 = lease obtained, -1 = failed (socket closed)
+int network_dhcp_process(void);
+void network_dhcp_start(void);
+void network_dhcp_stop(void);
 
 // Serialize current network info into JSON. Returns number of bytes written (excluding null).
 // buf: destination buffer, buf_len: size of buffer.

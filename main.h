@@ -16,25 +16,12 @@
 #include "uart/uart_rs232.h"
 #include "gpio/gpio.h"
 
-// SPI CONFIGURATION
-#define SPI_PORT spi0
-#define SPI_SCK 6
-#define SPI_MOSI 7
-#define SPI_MISO 4
-#define SPI_CS 5
-#define SPI_RST 8
-
 // LED CONFIGURATION (RP2350 Pico 2 호환)
 #ifdef PICO_DEFAULT_LED_PIN
 #define LED_PIN PICO_DEFAULT_LED_PIN
 #else
 #define LED_PIN 25  // 기본값 (RP2040 호환)
 #endif
-
-// WIZnet 공식 OUI: 00:08:DC (고정)
-#define WIZNET_OUI_0    0x00
-#define WIZNET_OUI_1    0x08
-#define WIZNET_OUI_2    0xDC
 
 // tcp port
 extern uint16_t tcp_port;
