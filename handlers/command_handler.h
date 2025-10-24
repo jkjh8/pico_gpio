@@ -73,4 +73,7 @@ bool parse_gpio_protocol(const char* input, gpio_protocol_t* protocol);
 bool check_device_id(uint8_t target_id);
 cmd_result_t process_gpio_protocol(const gpio_protocol_t* protocol, char* response, size_t response_size);
 
+cmd_result_t cmd_get_debug(const char* param, char* response, size_t response_size);
+cmd_result_t cmd_set_debug(const char* param, char* response, size_t response_size);
+
 #endif // COMMAND_HANDLER_H

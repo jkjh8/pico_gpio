@@ -10,7 +10,7 @@ void save_tcp_port_to_flash(uint16_t port) {
     flash_range_erase(TCP_PORT_FLASH_OFFSET, 4096);
     flash_range_program(TCP_PORT_FLASH_OFFSET, (const uint8_t*)&port, sizeof(port));
     restore_interrupts(ints);
-    printf("[FLASH] TCP 포트 저장: %u\n", port);
+    DBG_MAIN_PRINT("[FLASH] TCP 포트 저장: %u\n", port);
 }
 
 void load_tcp_port_from_flash(void) {
@@ -20,7 +20,7 @@ void load_tcp_port_from_flash(void) {
     // 유효성 검사: 0, 0xFFFF, 또는 범위(1024~65535) 외 값이면 기본값 사용
     if (port == 0xFFFF || port == 0 || port < 1024 || port > 65535) port = 5050;
     tcp_port = port;
-    printf("[FLASH] TCP 포트 불러오기: %u\n", tcp_port);
+    DBG_MAIN_PRINT("[FLASH] TCP 포트 불러오기: %u\n", tcp_port);
 }
 
 
@@ -39,7 +39,7 @@ void tcp_servers_restart(void) {
         close(i);
         socket(i, Sn_MR_TCP, tcp_port, 0x00);
         listen(i);
-        printf("TCP 서버 재시작 (소켓: %d, 포트: %d)\n", i, tcp_port);
+    DBG_TCP_PRINT("TCP 서버 재시작 (소켓: %d, 포트: %d)\n", i, tcp_port);
     }
 }
 
@@ -50,7 +50,7 @@ void tcp_servers_restart_with_port(uint16_t new_port) {
         close(i);
         socket(i, Sn_MR_TCP, tcp_port, 0x00);
         listen(i);
-        printf("TCP 서버 재시작 (소켓: %d, 포트: %d)\n", i, tcp_port);
+    DBG_TCP_PRINT("TCP 서버 재시작 (소켓: %d, 포트: %d)\n", i, tcp_port);
     }
 }
 
@@ -59,7 +59,7 @@ void tcp_servers_init(uint16_t port) {
         if (getSn_SR(i) != SOCK_CLOSED) close(i);
         socket(i, Sn_MR_TCP, port, 0x00);
         listen(i);
-        printf("TCP 서버 시작 (소켓: %d, 포트: %d)\n", i, port);
+    DBG_TCP_PRINT("TCP 서버 시작 (소켓: %d, 포트: %d)\n", i, port);
     }
 }
 
@@ -91,10 +91,11 @@ void tcp_servers_process(void) {
                     if (rx_size > sizeof(buf)) rx_size = sizeof(buf);
                     int len = recv(i, buf, rx_size);
                     buf[len] = 0;
-                    printf("TCP[%d] 수신: %s\n", i, buf);
+                    DBG_TCP_PRINT("TCP[%d] 수신: %s\n", i, buf);
                     
                     // JSON 모드 확인 후 적절한 명령어 처리 함수 호출
-                    char response[512];
+                    /* Make response buffer larger to avoid truncation for long outputs */
+                    char response[2048];
                     cmd_result_t result;
                     
                     // JSON 모드인지 확인 (첫 문자가 '{' 인지 또는 모드 설정 확인)
@@ -107,11 +108,29 @@ void tcp_servers_process(void) {
                     }
                     
                     if (result == CMD_SUCCESS || result == CMD_ERROR_INVALID) {
-                        send(i, (uint8_t*)response, strlen(response));
+                        size_t resp_len = strlen(response);
+                        size_t sent = 0;
+                        const size_t CHUNK_SIZE = 256;
+                        while (sent < resp_len) {
+                            size_t remaining = resp_len - sent;
+                            uint16_t this_len = (uint16_t)(remaining > CHUNK_SIZE ? CHUNK_SIZE : remaining);
+                            int s = send(i, (uint8_t*)response + sent, this_len);
+                            if (s <= 0) break;
+                            sent += (size_t)s;
+                        }
                     } else {
                         char error_msg[128];
                         snprintf(error_msg, sizeof(error_msg), "Command error: %d\r\n", result);
-                        send(i, (uint8_t*)error_msg, strlen(error_msg));
+                        size_t err_len = strlen(error_msg);
+                        size_t sent = 0;
+                        const size_t CHUNK_SIZE = 256;
+                        while (sent < err_len) {
+                            size_t remaining = err_len - sent;
+                            uint16_t this_len = (uint16_t)(remaining > CHUNK_SIZE ? CHUNK_SIZE : remaining);
+                            int s = send(i, (uint8_t*)error_msg + sent, this_len);
+                            if (s <= 0) break;
+                            sent += (size_t)s;
+                        }
                     }
                 }
                 break;
@@ -125,7 +144,7 @@ void tcp_servers_process(void) {
                     close(i); // 안전하게 닫기
                     socket(i, Sn_MR_TCP, tcp_port, 0x00);
                     listen(i);
-                    printf("TCP 서버 재오픈 (소켓: %d, 포트: %d)\n", i, tcp_port);
+                    DBG_TCP_PRINT("TCP 서버 재오픈 (소켓: %d, 포트: %d)\n", i, tcp_port);
                 }
                 break;
             default:

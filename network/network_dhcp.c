@@ -30,7 +30,7 @@ void network_dhcp_start(void) {
     DHCP_init(0, g_ethernet_buf);
     dhcp_state = 1;
     dhcp_start_time = to_ms_since_boot(get_absolute_time());
-    printf("[DHCP] Started on socket 0, start_time=%u\n", (unsigned)dhcp_start_time);
+    DBG_DHCP_PRINT("Started on socket 0, start_time=%u\n", (unsigned)dhcp_start_time);
 }
 
 int network_dhcp_process(void) {
@@ -53,7 +53,7 @@ int network_dhcp_process(void) {
     }
 
     uint8_t dhcp_status = DHCP_run();
-    printf("[DHCP] DHCP_run() -> %u\n", dhcp_status);
+    DBG_DHCP_PRINT("DHCP_run() -> %u\n", dhcp_status);
     switch (dhcp_status) {
         case DHCP_IP_LEASED: {
             wiz_NetInfo info;
@@ -68,7 +68,7 @@ int network_dhcp_process(void) {
             memcpy(g_net_info.sn, info.sn, 4);
             memcpy(g_net_info.dns, info.dns, 4);
             g_net_info.dhcp = NETINFO_DHCP;
-            printf("[DHCP] Lease obtained; applying to W5500 and preserving MAC %02X:%02X:%02X:%02X:%02X:%02X\n",
+         DBG_DHCP_PRINT("Lease obtained; applying to W5500 and preserving MAC %02X:%02X:%02X:%02X:%02X:%02X\n",
                    g_net_info.mac[0], g_net_info.mac[1], g_net_info.mac[2],
                    g_net_info.mac[3], g_net_info.mac[4], g_net_info.mac[5]);
             // Apply to W5500 registers

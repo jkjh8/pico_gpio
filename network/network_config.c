@@ -1,4 +1,5 @@
 #include "network_config.h"
+#include "debug.h"
 
 // =============================================================================
 // IP Address Utility Functions
@@ -11,7 +12,7 @@ bool is_ip_zero(const uint8_t ip[4]) {
 
 // Print IP address in dotted decimal format
 void print_ip_address(const char* label, const uint8_t ip[4]) {
-    printf("%s: %d.%d.%d.%d\n", label, ip[0], ip[1], ip[2], ip[3]);
+    DBG_NET_PRINT("%s: %d.%d.%d.%d\n", label, ip[0], ip[1], ip[2], ip[3]);
 }
 
 // Set default IP address values
@@ -21,19 +22,19 @@ void set_default_ip(uint8_t ip[4], uint8_t default_ip[4]) {
 
 // Print MAC address in colon-separated format
 void print_network_mac_address(const char* label, const uint8_t mac[6]) {
-    printf("%s: %02X:%02X:%02X:%02X:%02X:%02X\n", label,
+    DBG_NET_PRINT("%s: %02X:%02X:%02X:%02X:%02X:%02X\n", label,
            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 // Print DHCP mode status
 void print_dhcp_mode(void) {
-    printf("DHCP Mode       : %s\n",
+    DBG_NET_PRINT("DHCP Mode       : %s\n",
            g_net_info.dhcp == NETINFO_DHCP ? "DHCP" : "Static");
 }
 
 // Print link status
 void print_link_status(void) {
-    printf("Link Status     : %s\n",
+    DBG_NET_PRINT("Link Status     : %s\n",
            w5500_check_link_status() ? "UP" : "DOWN");
 }
 
@@ -62,7 +63,7 @@ void apply_network_config(const wiz_NetInfo* config) {
 // Apply network configuration with status message
 void apply_network_config_with_status(const wiz_NetInfo* config, const char* status_message) {
     apply_network_config(config);
-    printf("%s\n", status_message);
+    DBG_NET_PRINT("%s\n", status_message);
 }
 
 // =============================================================================
@@ -109,56 +110,56 @@ void network_config_save_to_flash(const wiz_NetInfo* config) {
     flash_range_erase(NETWORK_CONFIG_FLASH_OFFSET, 4096);
     flash_range_program(NETWORK_CONFIG_FLASH_OFFSET, (const uint8_t*)config, sizeof(wiz_NetInfo));
     restore_interrupts(ints);
-    printf("Network configuration saved to flash.\n");
+    DBG_NET_PRINT("Network configuration saved to flash.\n");
 }
 
 void network_config_load_from_flash(wiz_NetInfo* config) {
+wiz_NetInfo tmp;
     uint8_t mac[6];
     const uint8_t* flash_ptr = (const uint8_t*)(XIP_BASE + NETWORK_CONFIG_FLASH_OFFSET);
     memcpy(config, flash_ptr, sizeof(wiz_NetInfo));
+
     // 유효성 검사: MAC이 모두 0xFF면 기본값으로 초기화
     if (is_mac_invalid(config->mac)) {
-        printf("Flash config invalid, using default config\n");
+        DBG_NET_PRINT("Flash config invalid, using default config\n");
         memset(config, 0, sizeof(wiz_NetInfo));
         config->mac[0] = 0x00; config->mac[1] = 0x08; config->mac[2] = 0xDC;
-        config->sn[0] = 255; config->sn[1] = 255; config->sn[2] = 0; config->sn[3] = 0;
-        config->dhcp = NETINFO_DHCP;
+        config->ip[0] = 192; config->ip[1] = 168; config->ip[2] = 1; config->ip[3] = 100;
+        config->sn[0] = 255; config->sn[1] = 255; config->sn[2] = 255; config->sn[3] = 0;
+        config->gw[0] = 192; config->gw[1] = 168; config->gw[2] = 1; config->gw[3] = 1;
+        config->dns[0] = 8; config->dns[1] = 8; config->dns[2] = 8; config->dns[3] = 8;
+        config->dhcp = NETINFO_STATIC;
     }
-    // 출력
+    // 보드 고유 ID로 MAC 생성 및 설정
     generate_mac_from_board_id(mac);
     memcpy(config->mac, mac, 6);
-    
-    // DHCP가 static이면 IP 값이 0.0.0.0이 아니도록 확인하고 복사
+    // 고정 IP 모드일 때, IP/GW/SN/DNS가 0.0.0.0 이면 기본값으로 보정
     if (config->dhcp == NETINFO_STATIC) {
-        // IP가 0.0.0.0이면 기본값으로 설정
         if (is_ip_zero(config->ip)) {
             uint8_t default_ip[4] = {192, 168, 1, 100};
             set_default_ip(config->ip, default_ip);
-            printf("Static IP was 0.0.0.0, set to default 192.168.1.100\n");
+            DBG_NET_PRINT("Static IP was 0.0.0.0, set to default 192.168.1.100\n");
         }
-        // 게이트웨이도 확인
         if (is_ip_zero(config->gw)) {
             uint8_t default_gw[4] = {192, 168, 1, 1};
             set_default_ip(config->gw, default_gw);
-            printf("Gateway was 0.0.0.0, set to default 192.168.1.1\n");
+            DBG_NET_PRINT("Gateway was 0.0.0.0, set to default 192.168.1.1\n");
         }
-        // 넷마스크도 확인
         if (is_ip_zero(config->sn)) {
             uint8_t default_sn[4] = {255, 255, 255, 0};
             set_default_ip(config->sn, default_sn);
-            printf("Subnet Mask was 0.0.0.0, set to default 255.255.255.0\n");
+            DBG_NET_PRINT("Subnet Mask was 0.0.0.0, set to default 255.255.255.0\n");
         }
-        // DNS도 확인
         if (is_ip_zero(config->dns)) {
             uint8_t default_dns[4] = {8, 8, 8, 8};
             set_default_ip(config->dns, default_dns);
-            printf("DNS was 0.0.0.0, set to default 8.8.8.8\n");
+            DBG_NET_PRINT("DNS was 0.0.0.0, set to default 8.8.8.8\n");
         }
     }
+    (void)tmp; // silence unused var if any
+    DBG_NET_PRINT("Network configuration loaded from flash\n");
 }
 
-
-// W5500 초기화
 w5500_init_result_t w5500_initialize(void) {
     // 하드웨어 초기화 (직접 인라인)
     spi_init(SPI_PORT, 5000 * 1000);
@@ -177,20 +178,17 @@ w5500_init_result_t w5500_initialize(void) {
     // WIZchip 콜백 함수 등록
     reg_wizchip_cs_cbfunc(wizchip_select, wizchip_deselect);
     reg_wizchip_spi_cbfunc(wizchip_read, wizchip_write);
-    
     // W5500 소켓 버퍼 초기화 및 설정 (최적화 - HTTP 서버에 더 많은 버퍼 할당)
     uint8_t tx_sizes[8] = {2, 2, 2, 2, 2, 2, 2, 2};
     uint8_t rx_sizes[8] = {2, 2, 2, 2, 2, 2, 2, 2};
     if (wizchip_init(tx_sizes, rx_sizes) == -1) {
         return W5500_INIT_ERROR_CHIP;
     }
-    
     // 버전 확인
     uint8_t version = getVERSIONR();
     if (version != 0x04) {
         return W5500_INIT_ERROR_CHIP;
     }
-    
     // 링크 상태 확인 (최대 10초 대기)
     for (int i = 0; i < 20; i++) {
         if (getPHYCFGR() & PHYCFGR_LNK_ON) {
@@ -198,7 +196,6 @@ w5500_init_result_t w5500_initialize(void) {
         }
         sleep_ms(500);
     }
-    
     return W5500_INIT_SUCCESS;
 }
 
@@ -300,16 +297,16 @@ bool network_is_connected(void) {
 // 네트워크 초기화 함수
 void network_init(void) {
     // 저장된 네트워크 설정 로드 및 MAC 주소 설정
-    printf("Loading network configuration from flash...\n");
+    DBG_NET_PRINT("Loading network configuration from flash...\n");
     network_config_load_from_flash(&g_net_info);
     
     // W5500 및 네트워크 초기화
     if (w5500_initialize() == W5500_INIT_SUCCESS) {
-        printf("W5500 initialization successful\n");
+        DBG_WIZNET_PRINT("W5500 initialization successful\n");
         // W5500에 네트워크 설정 적용
         apply_network_config(&g_net_info);
     } else {
-        printf("ERROR: W5500 initialization failed\n");
+        DBG_WIZNET_PRINT("ERROR: W5500 initialization failed\n");
     }
     
     // 케이블 연결 상태 확인

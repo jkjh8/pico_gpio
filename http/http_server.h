@@ -14,6 +14,7 @@
 #include "pico/stdlib.h"
 #include "main.h"
 #include "static_files.h"
+#include "debug.h"
 
 // ========================
 // HTTP 서버 설정
@@ -28,10 +29,10 @@
 // 디버그 모드 (ioLibrary 스타일로 개선)
 #define _HTTP_SERVER_DEBUG_
 
-// 디버그 매크로
+// 디버그 매크로: route through centralized DBG_HTTP_PRINT so runtime toggles apply
 #ifdef _HTTP_SERVER_DEBUG_
-#define HTTP_DEBUG(fmt, ...) printf("[HTTP] " fmt "\r\n", ##__VA_ARGS__)
-#define HTTP_LOG(fmt, ...) printf("[HTTP] " fmt "\r\n", ##__VA_ARGS__)
+#define HTTP_DEBUG(fmt, ...) DBG_HTTP_PRINT(fmt "\r\n", ##__VA_ARGS__)
+#define HTTP_LOG(fmt, ...) DBG_HTTP_PRINT(fmt "\r\n", ##__VA_ARGS__)
 #else
 #define HTTP_DEBUG(fmt, ...)
 #define HTTP_LOG(fmt, ...)

@@ -5,9 +5,14 @@
 #include "uart/uart_rs232.h"
 #include "tcp/tcp_server.h"
 #include "main.h"
+#include "debug.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+// forward declarations for commands implemented later in this file
+cmd_result_t cmd_get_debug(const char* param, char* response, size_t response_size);
+cmd_result_t cmd_set_debug(const char* param, char* response, size_t response_size);
 
 // 명령어 처리 함수
 cmd_result_t process_command(const char* command, char* response, size_t response_size) {
@@ -104,6 +109,10 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
         return cmd_get_gpio_mode(response, response_size);
     } else if (strcmp(cmd_part, "getgpioconfig") == 0) {
         return cmd_get_gpio_config(response, response_size);
+    } else if (strcmp(cmd_part, "getdebug") == 0) {
+        return cmd_get_debug(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "setdebug") == 0) {
+        return cmd_set_debug(param_part, response, response_size);
     } else if (strcmp(cmd_part, "setautoresponse") == 0) {
         return cmd_set_auto_response(param_part, response, response_size);
     } else if (strcmp(cmd_part, "getautoresponse") == 0) {
@@ -718,8 +727,10 @@ cmd_result_t cmd_help(char* response, size_t response_size) {
         "  getautoresponse           - Get auto response status\r\n"
         "  factoryreset              - Factory reset (IP:192.168.1.100, Port:5050, Baud:9600)\r\n"
         "  restart                   - Restart system\r\n"
-        "  help                      - Show this help\r\n");
-    return CMD_SUCCESS;
+        "  help                      - Show this help\r\n"
+        "  getdebug,<cat>|all        - Get debug status for category or all (MAIN/NET/TCP/HTTP/UART/JSON/GPIO/DHCP/WIZNET)\r\n"
+        "  setdebug,<cat>|all,on|off - Set debug state for category or all\r\n");
+        return CMD_SUCCESS;
 }
 
 cmd_result_t cmd_set_auto_response(const char* param, char* response, size_t response_size) {
@@ -812,4 +823,93 @@ cmd_result_t cmd_factory_reset(char* response, size_t response_size) {
 bool check_device_id_match(uint8_t target_id) {
     uint8_t my_id = get_gpio_device_id();
     return (target_id == 0 || target_id == my_id);
+}
+
+// Debug status 조회: getdebug,<category> or getdebug,all
+cmd_result_t cmd_get_debug(const char* param, char* response, size_t response_size) {
+    if (param == NULL || strlen(param) == 0) {
+        snprintf(response, response_size, "Error: Parameter required. Use: getdebug,<category>|all\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    // support 'all'
+    if (strcasecmp(param, "all") == 0) {
+        const char* names[] = {"MAIN","NET","TCP","HTTP","UART","JSON","GPIO","DHCP","WIZNET"};
+        char buf[256];
+        size_t off = 0;
+        for (size_t i = 0; i < sizeof(names)/sizeof(names[0]); ++i) {
+            bool enabled = false;
+            if (debug_get_by_name(names[i], &enabled)) {
+                int n = snprintf(buf, sizeof(buf), "%s=%s\r\n", names[i], enabled ? "ON" : "OFF");
+                if (off + (size_t)n < response_size) {
+                    memcpy(response + off, buf, n);
+                    off += n;
+                } else {
+                    break;
+                }
+            }
+        }
+        if (off < response_size) response[off] = '\0';
+        else response[response_size - 1] = '\0';
+        return CMD_SUCCESS;
+    }
+
+    // single category
+    bool enabled = false;
+    if (debug_get_by_name(param, &enabled)) {
+        snprintf(response, response_size, "%s=%s\r\n", param, enabled ? "ON" : "OFF");
+        return CMD_SUCCESS;
+    } else {
+        snprintf(response, response_size, "Error: Unknown debug category '%s'\r\n", param);
+        return CMD_ERROR_INVALID;
+    }
+}
+
+// Debug 설정: setdebug,<category>,on|off  또는 setdebug,all,on|off
+cmd_result_t cmd_set_debug(const char* param, char* response, size_t response_size) {
+    if (param == NULL || strlen(param) == 0) {
+        snprintf(response, response_size, "Error: Parameters required. Use: setdebug,<category|all>,on|off\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    char param_copy[128];
+    strncpy(param_copy, param, sizeof(param_copy) - 1);
+    param_copy[sizeof(param_copy) - 1] = '\0';
+
+    char* cat = strtok(param_copy, ",");
+    char* val = strtok(NULL, ",");
+
+    if (cat == NULL || val == NULL) {
+        snprintf(response, response_size, "Error: Use format setdebug,<category|all>,on|off\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    // trim whitespace for val
+    while (*val == ' ' || *val == '\t') val++;
+
+    bool enabled;
+    if (strcasecmp(val, "on") == 0 || strcmp(val, "1") == 0) enabled = true;
+    else if (strcasecmp(val, "off") == 0 || strcmp(val, "0") == 0) enabled = false;
+    else {
+        snprintf(response, response_size, "Error: Unknown value '%s'. Use on/off\r\n", val);
+        return CMD_ERROR_INVALID;
+    }
+
+    if (strcasecmp(cat, "all") == 0) {
+        const char* names[] = {"MAIN","NET","TCP","HTTP","UART","JSON","GPIO","DHCP","WIZNET"};
+        for (size_t i = 0; i < sizeof(names)/sizeof(names[0]); ++i) {
+            debug_set_by_name(names[i], enabled);
+        }
+        snprintf(response, response_size, "OK: set all -> %s\r\n", enabled ? "ON" : "OFF");
+        return CMD_SUCCESS;
+    }
+
+    // single category
+    if (debug_set_by_name(cat, enabled)) {
+        snprintf(response, response_size, "OK: %s -> %s\r\n", cat, enabled ? "ON" : "OFF");
+        return CMD_SUCCESS;
+    } else {
+        snprintf(response, response_size, "Error: Unknown debug category '%s'\r\n", cat);
+        return CMD_ERROR_INVALID;
+    }
 }

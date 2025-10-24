@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "debug.h"
 #include "pico/stdlib.h"
 #include "wizchip_conf.h"
 #include "hardware/gpio.h"

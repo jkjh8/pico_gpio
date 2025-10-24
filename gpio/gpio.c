@@ -1,6 +1,7 @@
 #include "gpio.h"
 #include "tcp/tcp_server.h"
 #include "uart/uart_rs232.h"
+#include "debug.h"
 #include <stdio.h>
 #include <string.h>
 #include <pico/stdio.h>
@@ -72,7 +73,7 @@ uint16_t hct165_read(void) {
     
     // 값이 변경되었고 자동 응답이 활성화된 경우 피드백 전송
     if (data != gpio_input_data && gpio_config.auto_response) {
-        printf("HCT165 value changed: 0x%04X -> 0x%04X\n", gpio_input_data, data);
+        DBG_GPIO_PRINT("HCT165 value changed: 0x%04X -> 0x%04X\n", gpio_input_data, data);
         gpio_input_data = data;
         
         // 피드백 메시지 생성
@@ -120,7 +121,7 @@ uint16_t hct165_read(void) {
         uart_rs232_write(RS232_PORT_1, (uint8_t*)feedback, strlen(feedback));
     } else if (data != gpio_input_data) {
         // 자동 응답이 비활성화되어 있어도 로그는 출력
-        printf("HCT165 value changed: 0x%04X -> 0x%04X (auto_response OFF)\n", gpio_input_data, data);
+        DBG_GPIO_PRINT("HCT165 value changed: 0x%04X -> 0x%04X (auto_response OFF)\n", gpio_input_data, data);
         gpio_input_data = data;
     }
     
@@ -135,10 +136,10 @@ void save_gpio_config_to_flash(void) {
     flash_range_program(GPIO_CONFIG_FLASH_OFFSET, (const uint8_t*)&gpio_config, sizeof(gpio_config));
     restore_interrupts(ints);
     
-    printf("[FLASH] GPIO 설정 저장: ID=0x%02X, Mode=%s, AutoResp=%s\n", 
-           gpio_config.device_id,
-           gpio_config.comm_mode == GPIO_MODE_JSON ? "JSON" : "TEXT",
-           gpio_config.auto_response ? "ON" : "OFF");
+    DBG_GPIO_PRINT("[FLASH] GPIO 설정 저장: ID=0x%02X, Mode=%s, AutoResp=%s\n", 
+        gpio_config.device_id,
+        gpio_config.comm_mode == GPIO_MODE_JSON ? "JSON" : "TEXT",
+        gpio_config.auto_response ? "ON" : "OFF");
 }
 
 // GPIO 설정을 플래시에서 로드
@@ -156,13 +157,13 @@ void load_gpio_config_from_flash(void) {
         gpio_config.comm_mode = GPIO_MODE_TEXT;
         gpio_config.auto_response = true;
         gpio_config.reserved = 0;
-        printf("[FLASH] GPIO 설정 초기화: 기본값 사용\n");
+    DBG_GPIO_PRINT("[FLASH] GPIO 설정 초기화: 기본값 사용\n");
     } else {
         gpio_config = stored_config;
-        printf("[FLASH] GPIO 설정 불러오기: ID=0x%02X, Mode=%s, AutoResp=%s\n", 
-               gpio_config.device_id,
-               gpio_config.comm_mode == GPIO_MODE_JSON ? "JSON" : "TEXT",
-               gpio_config.auto_response ? "ON" : "OFF");
+     DBG_GPIO_PRINT("[FLASH] GPIO 설정 불러오기: ID=0x%02X, Mode=%s, AutoResp=%s\n", 
+         gpio_config.device_id,
+         gpio_config.comm_mode == GPIO_MODE_JSON ? "JSON" : "TEXT",
+         gpio_config.auto_response ? "ON" : "OFF");
     }
 }
 
@@ -179,7 +180,7 @@ bool set_gpio_device_id(uint8_t new_id) {
 
 // GPIO 디바이스 ID 반환
 uint8_t get_gpio_device_id(void) {
-    printf("[GPIO] get_gpio_device_id: %d\n", gpio_config.device_id);
+    DBG_GPIO_PRINT("get_gpio_device_id: %d\n", gpio_config.device_id);
     return gpio_config.device_id;
 }
 
@@ -215,11 +216,11 @@ bool get_gpio_auto_response(void) {
 bool update_gpio_config(uint8_t device_id, gpio_comm_mode_t comm_mode, bool auto_response) {
     // 유효성 검사
     if (device_id < 1 || device_id > 254) {
-        printf("[GPIO] Invalid device_id: %d\n", device_id);
+        DBG_GPIO_PRINT("[GPIO] Invalid device_id: %d\n", device_id);
         return false;
     }
     if (comm_mode > GPIO_MODE_JSON) {
-        printf("[GPIO] Invalid comm_mode: %d\n", comm_mode);
+        DBG_GPIO_PRINT("[GPIO] Invalid comm_mode: %d\n", comm_mode);
         return false;
     }
     
@@ -228,8 +229,8 @@ bool update_gpio_config(uint8_t device_id, gpio_comm_mode_t comm_mode, bool auto
     gpio_config.comm_mode = comm_mode;
     gpio_config.auto_response = auto_response;
     
-    printf("[GPIO] Config updated: ID=%d, Mode=%d, AutoResp=%d\n", 
-           gpio_config.device_id, gpio_config.comm_mode, gpio_config.auto_response);
+    DBG_GPIO_PRINT("[GPIO] Config updated: ID=%d, Mode=%d, AutoResp=%d\n", 
+        gpio_config.device_id, gpio_config.comm_mode, gpio_config.auto_response);
     
     // 플래시에 저장
     save_gpio_config_to_flash();

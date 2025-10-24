@@ -1,4 +1,5 @@
 #include "http_handlers.h"
+#include "debug.h"
 // 기본 핸들러 구현
 void http_handler_network_info(const http_request_t *request, http_response_t *response)
 {
@@ -46,20 +47,20 @@ void http_handler_network_info(const http_request_t *request, http_response_t *r
         const char* stored_content_type = NULL;
         const char* file_data = get_embedded_file_with_content_type(request->uri, &file_size, &is_compressed, &original_size, &stored_content_type);
         
-    printf("[HTTP] Static file request: %s\n", request->uri);
+    DBG_HTTP_PRINT("Static file request: %s\n", request->uri);
         
         // 응답 구조체 초기화
         http_init_response(response);
         
         if (!file_data || file_size == 0) {
-                printf("[HTTP] File not found: %s\n", request->uri);
+                DBG_HTTP_PRINT("File not found: %s\n", request->uri);
             response->status = HTTP_NOT_FOUND;
             strcpy(response->content_type, "text/plain");
             response->content_length = 0;
             return;
         }
         
-     printf("[HTTP] File found: %s, size: %zu, original: %zu, compressed: %s, stored_type: %s\n",
+     DBG_HTTP_PRINT("File found: %s, size: %zu, original: %zu, compressed: %s, stored_type: %s\n",
          request->uri, file_size, original_size, is_compressed ? "yes" : "no", stored_content_type ? stored_content_type : "(null)");
         
         response->status = HTTP_OK;
@@ -83,7 +84,7 @@ void http_handler_network_info(const http_request_t *request, http_response_t *r
                 snprintf(content_type_with_encoding, sizeof(content_type_with_encoding), 
                 "%s|gzip", response->content_type);
                 strcpy(response->content_type, content_type_with_encoding);
-                printf("[HTTP] Inline response will include Content-Encoding: gzip for %s\n", request->uri);
+                DBG_HTTP_PRINT("Inline response will include Content-Encoding: gzip for %s\n", request->uri);
             }
             
             // printf("Sending file inline: %s, content_length: %d\n", request->uri, response->content_length);
@@ -104,8 +105,8 @@ void http_handler_network_info(const http_request_t *request, http_response_t *r
             }
             
             response->content_length = 0; // 스트리밍의 경우 content는 비움
-         printf("[HTTP] Stream setup: uri=%s, type=%s, compressed=%s, stream_size=%zu\n",
-             request->uri, response->content_type, is_compressed ? "yes" : "no", response->stream_size);
+         DBG_HTTP_PRINT("Stream setup: uri=%s, type=%s, compressed=%s, stream_size=%zu\n",
+         request->uri, response->content_type, is_compressed ? "yes" : "no", response->stream_size);
         }
     }
     
@@ -251,15 +252,15 @@ void http_handler_gpio_config_setup(const http_request_t *request, http_response
         return;
     }
 
-    printf("[HTTP] JSON parsed successfully\n");
-    printf("[HTTP] Raw JSON: %s\n", request->content);
+    DBG_HTTP_PRINT("JSON parsed successfully\n");
+    DBG_HTTP_PRINT("Raw JSON: %s\n", request->content);
 
     cJSON *device_id_item = cJSON_GetObjectItem(json, "device_id");
     cJSON *comm_mode_item = cJSON_GetObjectItem(json, "comm_mode");
     cJSON *auto_response_item = cJSON_GetObjectItem(json, "auto_response");
 
-    printf("[HTTP] device_id_item: %p, comm_mode_item: %p, auto_response_item: %p\n", 
-           device_id_item, comm_mode_item, auto_response_item);
+    DBG_HTTP_PRINT("device_id_item: %p, comm_mode_item: %p, auto_response_item: %p\n", 
+        device_id_item, comm_mode_item, auto_response_item);
 
     // 현재 설정값 가져오기
     uint8_t device_id = get_gpio_device_id();
@@ -271,16 +272,16 @@ void http_handler_gpio_config_setup(const http_request_t *request, http_response
     // 디바이스 ID 파싱
     if (device_id_item && cJSON_IsNumber(device_id_item)) {
         int new_id = (int)device_id_item->valuedouble;
-        printf("[HTTP] device_id_item found, valuedouble: %f, converted: %d\n", device_id_item->valuedouble, new_id);
+    DBG_HTTP_PRINT("device_id_item found, valuedouble: %f, converted: %d\n", device_id_item->valuedouble, new_id);
         if (new_id >= 1 && new_id <= 254) {
             device_id = (uint8_t)new_id;
-            printf("[HTTP] device_id updated to: %d\n", device_id);
+            DBG_HTTP_PRINT("device_id updated to: %d\n", device_id);
         } else {
-            printf("[HTTP] device_id out of range: %d\n", new_id);
+            DBG_HTTP_PRINT("device_id out of range: %d\n", new_id);
             valid = false;
         }
     } else {
-        printf("[HTTP] device_id_item not found or not a number\n");
+    DBG_HTTP_PRINT("device_id_item not found or not a number\n");
     }
 
     // 통신 모드 파싱

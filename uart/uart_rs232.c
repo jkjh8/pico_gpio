@@ -2,13 +2,14 @@
 #include "handlers/command_handler.h"
 #include "handlers/json_handler.h"
 #include "gpio/gpio.h"
+#include "debug.h"
 
 void save_uart_rs232_baud_to_flash(void) {
     uint32_t ints = save_and_disable_interrupts();
     flash_range_erase(UART_RS232_BAUD_FLASH_OFFSET, 4096);
     flash_range_program(UART_RS232_BAUD_FLASH_OFFSET, (const uint8_t*)&uart_rs232_1_baud, sizeof(uart_rs232_1_baud));
     restore_interrupts(ints);
-    printf("[FLASH] RS232 baud 저장: %u\n", uart_rs232_1_baud);
+    DBG_MAIN_PRINT("[FLASH] RS232 baud 저장: %u\n", uart_rs232_1_baud);
 }
 
 void load_uart_rs232_baud_from_flash(void) {
@@ -17,7 +18,7 @@ void load_uart_rs232_baud_from_flash(void) {
     memcpy(&baud_value, flash_ptr, sizeof(baud_value));
     // 유효성 검사: 0xFFFFFFFF면 기본값 사용
     uart_rs232_1_baud = (baud_value == 0xFFFFFFFF || baud_value == 0) ? 9600 : baud_value;
-    printf("[FLASH] RS232 baud 불러오기: %u\n", uart_rs232_1_baud);
+    DBG_MAIN_PRINT("[FLASH] RS232 baud 불러오기: %u\n", uart_rs232_1_baud);
 }
 
 
@@ -25,10 +26,10 @@ uint32_t uart_rs232_1_baud = UART_RS232_1_BAUD;
 
 bool uart_rs232_init(rs232_port_t port, uint32_t baudrate) {
     if (port == RS232_PORT_1) {
-        uart_init(uart0, baudrate);
+    uart_init(uart0, baudrate);
         gpio_set_function(RS232_1_TX_PIN, GPIO_FUNC_UART);
         gpio_set_function(RS232_1_RX_PIN, GPIO_FUNC_UART);
-        printf("UART RS232 Port 1 initialized at %u baud\n", baudrate);
+    DBG_UART_PRINT("UART RS232 Port 1 initialized at %u baud\n", baudrate);
         return true;
     }
     return false;
@@ -66,11 +67,7 @@ void uart_rs232_process(void) {
         // Null 종료 문자 추가
         uart_buf[len] = '\0';
         
-        printf("UART1 RX: ");
-        for (int i = 0; i < len; i++) {
-            printf("%c", uart_buf[i]);
-        }
-        printf("\n");
+        DBG_UART_PRINT("UART1 RX: %.*s\n", len, (char*)uart_buf);
 
         // JSON 모드 확인 후 적절한 명령어 처리 함수 호출
         char response[512];
@@ -85,12 +82,35 @@ void uart_rs232_process(void) {
             result = process_command((char*)uart_buf, response, sizeof(response));
         }
         
+        /* make response buffer larger and send in chunks to avoid truncation */
+        size_t resp_len = strlen(response);
+        const size_t CHUNK_SIZE = 256;
         if (result == CMD_SUCCESS || result == CMD_ERROR_INVALID) {
-            uart_rs232_write(RS232_PORT_1, (uint8_t*)response, strlen(response));
+            size_t sent = 0;
+            while (sent < resp_len) {
+                size_t remaining = resp_len - sent;
+                size_t this_len = remaining > CHUNK_SIZE ? CHUNK_SIZE : remaining;
+                uart_rs232_write(RS232_PORT_1, (uint8_t*)response + sent, (uint32_t)this_len);
+                sent += this_len;
+                sleep_ms(1);
+            }
+            // ensure trailing newline if not present
+            if (resp_len == 0 || response[resp_len - 1] != '\n') {
+                const char nl = '\n';
+                uart_rs232_write(RS232_PORT_1, (const uint8_t*)&nl, 1);
+            }
         } else {
             char error_msg[128];
             snprintf(error_msg, sizeof(error_msg), "Command error: %d\r\n", result);
-            uart_rs232_write(RS232_PORT_1, (uint8_t*)error_msg, strlen(error_msg));
+            size_t err_len = strlen(error_msg);
+            size_t sent = 0;
+            while (sent < err_len) {
+                size_t remaining = err_len - sent;
+                size_t this_len = remaining > CHUNK_SIZE ? CHUNK_SIZE : remaining;
+                uart_rs232_write(RS232_PORT_1, (uint8_t*)error_msg + sent, (uint32_t)this_len);
+                sent += this_len;
+                sleep_ms(1);
+            }
         }
     }
 }
