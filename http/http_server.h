@@ -141,12 +141,13 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
 // API 핸들러 함수
 // ========================
 void http_handler_root(const http_request_t *request, http_response_t *response);
-void http_handler_status(const http_request_t *request, http_response_t *response);
-void http_handler_api_info(const http_request_t *request, http_response_t *response);
-void http_handler_api_network(const http_request_t *request, http_response_t *response);
-void http_handler_api_gpio(const http_request_t *request, http_response_t *response);
-void http_handler_api_gpio_control(const http_request_t *request, http_response_t *response);
-void http_handler_api_files(const http_request_t *request, http_response_t *response);
+void http_handler_network_info(const http_request_t *request, http_response_t *response);
+void http_handler_network_setup(const http_request_t *request, http_response_t *response);
+void http_handler_control_info(const http_request_t *request, http_response_t *response);
+void http_handler_control_setup(const http_request_t *request, http_response_t *response);
+void http_handler_gpio_config_info(const http_request_t *request, http_response_t *response);
+void http_handler_gpio_config_setup(const http_request_t *request, http_response_t *response);
+void http_handler_restart(const http_request_t *request, http_response_t *response);
 
 // ========================
 // 정적 파일 처리 함수

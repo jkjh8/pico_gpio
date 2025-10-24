@@ -21,24 +21,24 @@
 #ifdef __cplusplus
 extern "C"
 {
-  #endif
-  
-  
-  typedef enum {
+#endif
+
+  typedef enum
+  {
     RS232_PORT_1 = 0
   } rs232_port_t;
-  
-  typedef struct {
+
+  typedef struct
+  {
     rs232_port_t port;
     uint8_t tx_pin;
     uint8_t rx_pin;
     uint32_t baudrate;
   } uart_rs232_config_t;
-  
-  
+
   // RS232 포트 기본 baudrate (전역 변수)
   extern uint32_t uart_rs232_1_baud;
-  
+
   void save_uart_rs232_baud_to_flash(void);
   void load_uart_rs232_baud_from_flash(void);
   bool uart_rs232_init(rs232_port_t port, uint32_t baudrate);

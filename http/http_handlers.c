@@ -1,17 +1,8 @@
 #include "http_handlers.h"
 // 기본 핸들러 구현
-void http_handler_root(const http_request_t *request, http_response_t *response)
-{
-    memset(response, 0, sizeof(http_response_t));
-    response->status = HTTP_OK;
-    strcpy(response->content_type, "text/html");
-    strncpy(response->content, HTML_ROOT_TEMPLATE, sizeof(response->content) - 1);
-    response->content_length = strlen(response->content);
-}
-
 void http_handler_network_info(const http_request_t *request, http_response_t *response)
 {
-    memset(response, 0, sizeof(http_response_t));
+    http_init_response(response);
     
     cJSON *network = cJSON_CreateObject();
     
@@ -41,16 +32,9 @@ void http_handler_network_info(const http_request_t *request, http_response_t *r
         cJSON_AddItemToObject(root, "network", network);
         cJSON_AddStringToObject(root, "status", "success");
         
-        char *json_string = cJSON_PrintUnformatted(root);
-        
-        response->status = HTTP_OK;
-        strcpy(response->content_type, "application/json");
-        strncpy(response->content, json_string, sizeof(response->content) - 1);
-        response->content[sizeof(response->content) - 1] = '\0';
-        response->content_length = strlen(response->content);
+        http_send_json_object(response, root);
         
         cJSON_Delete(root);
-        free(json_string);
     }
     
     // 정적 파일 핸들러 구현 (스트리밍 방식)
@@ -65,7 +49,7 @@ void http_handler_network_info(const http_request_t *request, http_response_t *r
     printf("[HTTP] Static file request: %s\n", request->uri);
         
         // 응답 구조체 초기화
-        memset(response, 0, sizeof(http_response_t));
+        http_init_response(response);
         
         if (!file_data || file_size == 0) {
                 printf("[HTTP] File not found: %s\n", request->uri);
@@ -125,18 +109,14 @@ void http_handler_network_info(const http_request_t *request, http_response_t *r
         }
     }
     
-    void http_handler_network_setup(const http_request_t *request, http_response_t *response)
-    {
-        memset(response, 0, sizeof(http_response_t));
-        cJSON *json = cJSON_Parse(request->content);
-        if (!json) {
-            const char *error_ptr = cJSON_GetErrorPtr();
-            response->status = HTTP_BAD_REQUEST;
-            strcpy(response->content_type, "application/json");
-        snprintf(response->content, sizeof(response->content),
-        "{\"status\":\"error\",\"message\":\"Invalid JSON: %s\"}",
-        error_ptr ? error_ptr : "Unknown error");
-        response->content_length = strlen(response->content);
+void http_handler_network_setup(const http_request_t *request, http_response_t *response)
+{
+    http_init_response(response);
+    cJSON *json = cJSON_Parse(request->content);
+    if (!json) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        http_send_error_response(response, HTTP_BAD_REQUEST, 
+            error_ptr ? error_ptr : "Invalid JSON");
         return;
     }
     
@@ -180,18 +160,14 @@ void http_handler_network_info(const http_request_t *request, http_response_t *r
     // 리부팅 플래그
     system_restart_request();
     // 단순화된 응답: {"result":true}
-    const char* simple_json = "{\"result\":true}";
-    response->status = HTTP_OK;
-    strcpy(response->content_type, "application/json");
-    strncpy(response->content, simple_json, sizeof(response->content) - 1);
-    response->content[sizeof(response->content) - 1] = '\0';
-    response->content_length = strlen(response->content);
+    cJSON *result = cJSON_CreateObject();
+    cJSON_AddBoolToObject(result, "result", true);
+    http_send_json_object(response, result);
+    cJSON_Delete(result);
     cJSON_Delete(json);
-}
-
-void http_handler_control_info(const http_request_t *request, http_response_t *response)
+}void http_handler_control_info(const http_request_t *request, http_response_t *response)
 {
-    memset(response, 0, sizeof(http_response_t));
+    http_init_response(response);
     extern uint16_t tcp_port;
     extern uint32_t uart_rs232_1_baud;
     
@@ -201,72 +177,56 @@ void http_handler_control_info(const http_request_t *request, http_response_t *r
     cJSON_AddStringToObject(root, "mode", get_gpio_comm_mode() == GPIO_MODE_JSON ? "json" : "text");
     cJSON_AddBoolToObject(root, "auto_response", get_gpio_auto_response());
     cJSON_AddNumberToObject(root, "device_id", get_gpio_device_id());
-    char *json_string = cJSON_PrintUnformatted(root);
     
-    response->status = HTTP_OK;
-    strcpy(response->content_type, "application/json");
-    strncpy(response->content, json_string, sizeof(response->content) - 1);
-    response->content[sizeof(response->content) - 1] = '\0';
-    response->content_length = strlen(response->content);
+    http_send_json_object(response, root);
     
     cJSON_Delete(root);
-    free(json_string);
 }
 
 // 빌드 에러 방지용 더미 핸들러 구현
 void http_handler_control_setup(const http_request_t *request, http_response_t *response) {
-memset(response, 0, sizeof(http_response_t));
-cJSON *json = cJSON_Parse(request->content);
-if (!json) {
-    response->status = HTTP_BAD_REQUEST;
-    strcpy(response->content_type, "application/json");
-    snprintf(response->content, sizeof(response->content),
-        "{\"result\":false,\"error\":\"Invalid JSON\"}");
-    response->content_length = strlen(response->content);
-    return;
-}
+    http_init_response(response);
+    cJSON *json = cJSON_Parse(request->content);
+    if (!json) {
+        http_send_error_response(response, HTTP_BAD_REQUEST, "Invalid JSON");
+        return;
+    }
 
-extern uint16_t tcp_port;
-extern uint32_t uart_rs232_1_baud;
+    extern uint16_t tcp_port;
+    extern uint32_t uart_rs232_1_baud;
 
-cJSON *tcp_port_item = cJSON_GetObjectItem(json, "tcp_port");
-cJSON *rs232_1_baud_item = cJSON_GetObjectItem(json, "rs232_1_baud");
+    cJSON *tcp_port_item = cJSON_GetObjectItem(json, "tcp_port");
+    cJSON *rs232_1_baud_item = cJSON_GetObjectItem(json, "rs232_1_baud");
 
-bool valid = true;
-if (tcp_port_item && cJSON_IsNumber(tcp_port_item)) {
-    tcp_port = (uint16_t)tcp_port_item->valueint;
-    save_tcp_port_to_flash(tcp_port);
-} else {
-    valid = false;
-}
-if (rs232_1_baud_item && cJSON_IsNumber(rs232_1_baud_item)) {
-    uart_rs232_1_baud = (uint32_t)rs232_1_baud_item->valuedouble;
-} else {
-    valid = false;
-}
-if (valid) {
-    save_uart_rs232_baud_to_flash();
-    system_restart_request();
-    response->status = HTTP_OK;
-    strcpy(response->content_type, "application/json");
-    const char* simple_json = "{\"result\":true}";
-    strncpy(response->content, simple_json, sizeof(response->content) - 1);
-    response->content[sizeof(response->content) - 1] = '\0';
-    response->content_length = strlen(response->content);
-} else {
-    response->status = HTTP_BAD_REQUEST;
-    strcpy(response->content_type, "application/json");
-    snprintf(response->content, sizeof(response->content),
-        "{\"result\":false,\"error\":\"Missing or invalid fields\"}");
-    response->content_length = strlen(response->content);
-}
-cJSON_Delete(json);
+    bool valid = true;
+    if (tcp_port_item && cJSON_IsNumber(tcp_port_item)) {
+        tcp_port = (uint16_t)tcp_port_item->valueint;
+        save_tcp_port_to_flash(tcp_port);
+    } else {
+        valid = false;
+    }
+    if (rs232_1_baud_item && cJSON_IsNumber(rs232_1_baud_item)) {
+        uart_rs232_1_baud = (uint32_t)rs232_1_baud_item->valuedouble;
+    } else {
+        valid = false;
+    }
+    if (valid) {
+        save_uart_rs232_baud_to_flash();
+        system_restart_request();
+        cJSON *result = cJSON_CreateObject();
+        cJSON_AddBoolToObject(result, "result", true);
+        http_send_json_object(response, result);
+        cJSON_Delete(result);
+    } else {
+        http_send_error_response(response, HTTP_BAD_REQUEST, "Missing or invalid fields");
+    }
+    cJSON_Delete(json);
 }
 
 // GPIO 설정 정보 조회 API
 void http_handler_gpio_config_info(const http_request_t *request, http_response_t *response)
 {
-    memset(response, 0, sizeof(http_response_t));
+    http_init_response(response);
     
     uint8_t device_id = get_gpio_device_id();
     gpio_comm_mode_t mode = get_gpio_comm_mode();
@@ -277,28 +237,17 @@ void http_handler_gpio_config_info(const http_request_t *request, http_response_
     cJSON_AddStringToObject(root, "comm_mode", mode == GPIO_MODE_JSON ? "json" : "text");
     cJSON_AddBoolToObject(root, "auto_response", auto_resp);
     
-    char *json_string = cJSON_PrintUnformatted(root);
-    
-    response->status = HTTP_OK;
-    strcpy(response->content_type, "application/json");
-    strncpy(response->content, json_string, sizeof(response->content) - 1);
-    response->content[sizeof(response->content) - 1] = '\0';
-    response->content_length = strlen(response->content);
+    http_send_json_object(response, root);
     
     cJSON_Delete(root);
-    free(json_string);
 }
 
 // GPIO 설정 변경 API
 void http_handler_gpio_config_setup(const http_request_t *request, http_response_t *response) {
-    memset(response, 0, sizeof(http_response_t));
+    http_init_response(response);
     cJSON *json = cJSON_Parse(request->content);
     if (!json) {
-        response->status = HTTP_BAD_REQUEST;
-        strcpy(response->content_type, "application/json");
-        snprintf(response->content, sizeof(response->content),
-            "{\"result\":false,\"error\":\"Invalid JSON\"}");
-        response->content_length = strlen(response->content);
+        http_send_error_response(response, HTTP_BAD_REQUEST, "Invalid JSON");
         return;
     }
 
@@ -354,40 +303,57 @@ void http_handler_gpio_config_setup(const http_request_t *request, http_response
     // 유효성 검사 통과 시 한번에 설정 갱신
     if (valid) {
         if (update_gpio_config(device_id, comm_mode, auto_response)) {
-            response->status = HTTP_OK;
-            strcpy(response->content_type, "application/json");
-            const char* success_json = "{\"result\":true}";
-            strncpy(response->content, success_json, sizeof(response->content) - 1);
-            response->content[sizeof(response->content) - 1] = '\0';
-            response->content_length = strlen(response->content);
+            cJSON *result = cJSON_CreateObject();
+            cJSON_AddBoolToObject(result, "result", true);
+            http_send_json_object(response, result);
+            cJSON_Delete(result);
         } else {
-            response->status = HTTP_INTERNAL_ERROR;
-            strcpy(response->content_type, "application/json");
-            const char* error_json = "{\"result\":false,\"error\":\"Failed to save configuration\"}";
-            strncpy(response->content, error_json, sizeof(response->content) - 1);
-            response->content[sizeof(response->content) - 1] = '\0';
-            response->content_length = strlen(response->content);
+            http_send_error_response(response, HTTP_INTERNAL_ERROR, "Failed to save configuration");
         }
     } else {
-        response->status = HTTP_BAD_REQUEST;
-        strcpy(response->content_type, "application/json");
-        const char* error_json = "{\"result\":false,\"error\":\"Invalid field values\"}";
-        strncpy(response->content, error_json, sizeof(response->content) - 1);
-        response->content[sizeof(response->content) - 1] = '\0';
-        response->content_length = strlen(response->content);
+        http_send_error_response(response, HTTP_BAD_REQUEST, "Invalid field values");
     }
     
     cJSON_Delete(json);
 }
 
 void http_handler_restart(const http_request_t *request, http_response_t *response) {
-    memset(response, 0, sizeof(http_response_t));
+    http_init_response(response);
     // printf("Restart request received, initiating system restart...\n");
     system_restart_request();
+    cJSON *result = cJSON_CreateObject();
+    cJSON_AddBoolToObject(result, "result", true);
+    http_send_json_object(response, result);
+    cJSON_Delete(result);
+}
+
+// 헬퍼 함수 구현
+void http_init_response(http_response_t *response) {
+    memset(response, 0, sizeof(http_response_t));
+}
+
+void http_send_json_object(http_response_t *response, cJSON *json) {
+    char *json_string = cJSON_PrintUnformatted(json);
     response->status = HTTP_OK;
     strcpy(response->content_type, "application/json");
-    const char* simple_json = "{\"result\":true}";
-    strncpy(response->content, simple_json, sizeof(response->content) - 1);
+    strncpy(response->content, json_string, sizeof(response->content) - 1);
     response->content[sizeof(response->content) - 1] = '\0';
     response->content_length = strlen(response->content);
+    free(json_string);
+}
+
+void http_send_error_response(http_response_t *response, http_status_t status, const char *message) {
+    cJSON *error_json = cJSON_CreateObject();
+    cJSON_AddStringToObject(error_json, "status", "error");
+    cJSON_AddStringToObject(error_json, "message", message);
+    response->status = status;
+    http_send_json_object(response, error_json);
+    cJSON_Delete(error_json);
+}
+
+void http_send_success_response(http_response_t *response) {
+    cJSON *success_json = cJSON_CreateObject();
+    cJSON_AddStringToObject(success_json, "status", "success");
+    http_send_json_object(response, success_json);
+    cJSON_Delete(success_json);
 }

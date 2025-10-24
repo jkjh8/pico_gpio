@@ -22,15 +22,14 @@ extern "C"
 #define TCP_SOCKET_START 2
 #define TCP_SOCKET_COUNT 2
 
-
-extern uint16_t tcp_port;
-void save_tcp_port_to_flash(uint16_t port);
-void load_tcp_port_from_flash(void);
-void tcp_servers_init(uint16_t port);
-void tcp_servers_process(void);
-void tcp_servers_restart(void);
-void tcp_servers_restart_with_port(uint16_t new_port);
-void tcp_servers_broadcast(const uint8_t* data, uint16_t len);
+  extern uint16_t tcp_port;
+  void save_tcp_port_to_flash(uint16_t port);
+  void load_tcp_port_from_flash(void);
+  void tcp_servers_init(uint16_t port);
+  void tcp_servers_process(void);
+  void tcp_servers_restart(void);
+  void tcp_servers_restart_with_port(uint16_t new_port);
+  void tcp_servers_broadcast(const uint8_t *data, uint16_t len);
 
 #ifdef __cplusplus
 }

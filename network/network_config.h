@@ -62,6 +62,20 @@ bool w5500_check_link_status(void);
 bool network_is_cable_connected(void);
 bool network_is_connected(void);
 
+// IP Address Utility Functions
+bool is_ip_zero(const uint8_t ip[4]);
+void print_ip_address(const char* label, const uint8_t ip[4]);
+void set_default_ip(uint8_t ip[4], uint8_t default_ip[4]);
+
+// Network Status Printing Functions
+void print_network_mac_address(const char* label, const uint8_t mac[6]);
+void print_dhcp_mode(void);
+void print_link_status(void);
+
+// Network Configuration Application Functions
+bool is_mac_invalid(const uint8_t mac[6]);
+void apply_network_config(const wiz_NetInfo* config);
+
 // Network initialization and processing functions
 void network_init(void);
 void network_process(void);

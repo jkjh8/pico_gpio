@@ -46,6 +46,9 @@ add_executable(main
     network/mac_utils.c
     network/network_config.c
     http/http_server.c
+    http/http_parser.c
+    http/http_router.c
+    http/http_response.c
     http/http_handlers.c
     static_files.c
     tcp/tcp_server.c
@@ -78,23 +81,21 @@ target_link_libraries(main
 # Add the standard include files to the build
 target_include_directories(main PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
-        ${CMAKE_SOURCE_DIR}/ioLibrary_Driver
-        ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Ethernet
-        ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Internet/DHCP
-        ${CMAKE_SOURCE_DIR}/cJSON
+        ${CMAKE_SOURCE_DIR}/lib/wiznet
+        ${CMAKE_SOURCE_DIR}/lib/cjson
 )
 
 # Add source files from the latest driver
 set(WIZNET_SOURCE
-    ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Ethernet/wizchip_conf.c
-    ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Ethernet/W5500/w5500.c
-    ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Ethernet/socket.c
-    ${CMAKE_SOURCE_DIR}/ioLibrary_Driver/Internet/DHCP/dhcp.c
+    ${CMAKE_SOURCE_DIR}/lib/wiznet/wizchip_conf.c
+    ${CMAKE_SOURCE_DIR}/lib/wiznet/w5500.c
+    ${CMAKE_SOURCE_DIR}/lib/wiznet/socket.c
+    ${CMAKE_SOURCE_DIR}/lib/wiznet/dhcp.c
 )
 
 # Add cJSON source
 set(CJSON_SOURCE
-    ${CMAKE_SOURCE_DIR}/cJSON/cJSON.c
+    ${CMAKE_SOURCE_DIR}/lib/cjson/cJSON.c
 )
 
 # Link WIZnet and cJSON source
