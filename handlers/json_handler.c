@@ -432,6 +432,7 @@ cmd_result_t process_json_command(const char* json_str, char* response, size_t r
         cJSON *ip_json = cJSON_GetObjectItem(json, "ip");
         cJSON *netmask_json = cJSON_GetObjectItem(json, "netmask");
         cJSON *gateway_json = cJSON_GetObjectItem(json, "gateway");
+        cJSON *dhcp_json = cJSON_GetObjectItem(json, "dhcp");
         
         extern wiz_NetInfo g_net_info;
         bool success = true;
@@ -467,22 +468,31 @@ cmd_result_t process_json_command(const char* json_str, char* response, size_t r
             }
         }
         
+        // DHCP 설정
         if (success) {
-            // DHCP 비활성화
-            g_net_info.dhcp = NETINFO_STATIC;
+            if (cJSON_IsBool(dhcp_json)) {
+                bool dhcp_enabled = cJSON_IsTrue(dhcp_json);
+                g_net_info.dhcp = dhcp_enabled ? NETINFO_DHCP : NETINFO_STATIC;
+            } else {
+                // DHCP 파라미터가 없으면 기존 설정 유지
+                // 기본값은 static
+                g_net_info.dhcp = NETINFO_STATIC;
+            }
             
             // 플래시에 저장
             network_config_save_to_flash(&g_net_info);
             
+            const char* dhcp_status = (g_net_info.dhcp == NETINFO_DHCP) ? "enabled" : "disabled";
             snprintf(response, response_size,
                     "{\"result\":\"success\",\"network\":{"
                     "\"ip\":\"%d.%d.%d.%d\","
                     "\"netmask\":\"%d.%d.%d.%d\","
                     "\"gateway\":\"%d.%d.%d.%d\","
-                    "\"dhcp\":\"disabled\"}}\r\n",
+                    "\"dhcp\":\"%s\"}}\r\n",
                     g_net_info.ip[0], g_net_info.ip[1], g_net_info.ip[2], g_net_info.ip[3],
                     g_net_info.sn[0], g_net_info.sn[1], g_net_info.sn[2], g_net_info.sn[3],
-                    g_net_info.gw[0], g_net_info.gw[1], g_net_info.gw[2], g_net_info.gw[3]);
+                    g_net_info.gw[0], g_net_info.gw[1], g_net_info.gw[2], g_net_info.gw[3],
+                    dhcp_status);
             result = CMD_SUCCESS;
         } else {
             snprintf(response, response_size,

@@ -34,7 +34,6 @@ int main()
     stdio_init_all();
     sleep_ms(2000);  // UART 안정화 대기
     config_storage_init();
-    debug_init();
     DBG_MAIN_PRINT("Starting Pico GPIO Server...\n");
     DBG_MAIN_PRINT("Board: %s\n", PICO_BOARD);
     

@@ -18,6 +18,7 @@ typedef struct {
     uint32_t uart_rs232_baud;
     wiz_NetInfo network;
     gpio_config_t gpio;
+    uint8_t debug_flags[DBG_CAT_COUNT];
 } config_storage_t;
 
 #define CONFIG_STORAGE_MAGIC 0x434F4E46u // 'CONF'

@@ -40,7 +40,6 @@ extern "C"
   extern uint32_t uart_rs232_1_baud;
 
   void save_uart_rs232_baud_to_flash(void);
-  void load_uart_rs232_baud_from_flash(void);
   bool uart_rs232_init(rs232_port_t port, uint32_t baudrate);
   // void uart_rs232_init_ex(const uart_rs232_config_t* config);
   bool uart_rs232_write(rs232_port_t port, const uint8_t *data, uint32_t len);

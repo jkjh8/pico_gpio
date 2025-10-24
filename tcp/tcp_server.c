@@ -11,38 +11,12 @@ void save_tcp_port_to_flash(uint16_t port) {
     config_storage_save();
 }
 
-void load_tcp_port_from_flash(void) {
-    // Now handled by config_storage_init()
-}
-
-
 // 모든 연결된 TCP 클라이언트에 메시지 전송
 void tcp_servers_broadcast(const uint8_t* data, uint16_t len) {
     for (uint8_t i = TCP_SOCKET_START; i < TCP_SOCKET_START + TCP_SOCKET_COUNT; i++) {
         if (getSn_SR(i) == SOCK_ESTABLISHED) {
             send(i, (uint8_t*)data, len);
         }
-    }
-}
-
-// 모든 TCP 서버 소켓을 닫고 다시 여는 함수 (기존 포트)
-void tcp_servers_restart(void) {
-    for (uint8_t i = TCP_SOCKET_START; i < TCP_SOCKET_START + TCP_SOCKET_COUNT; i++) {
-        close(i);
-        socket(i, Sn_MR_TCP, tcp_port, 0x00);
-        listen(i);
-    DBG_TCP_PRINT("TCP 서버 재시작 (소켓: %d, 포트: %d)\n", i, tcp_port);
-    }
-}
-
-// 새로운 포트 번호로 모든 TCP 서버 소켓을 닫고 다시 여는 함수
-void tcp_servers_restart_with_port(uint16_t new_port) {
-    tcp_port = new_port;
-    for (uint8_t i = TCP_SOCKET_START; i < TCP_SOCKET_START + TCP_SOCKET_COUNT; i++) {
-        close(i);
-        socket(i, Sn_MR_TCP, tcp_port, 0x00);
-        listen(i);
-    DBG_TCP_PRINT("TCP 서버 재시작 (소켓: %d, 포트: %d)\n", i, tcp_port);
     }
 }
 

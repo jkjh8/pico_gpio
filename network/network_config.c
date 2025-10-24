@@ -61,12 +61,6 @@ void apply_network_config(const wiz_NetInfo* config) {
     sleep_ms(10);  // Allow configuration to take effect
 }
 
-// Apply network configuration with status message
-void apply_network_config_with_status(const wiz_NetInfo* config, const char* status_message) {
-    apply_network_config(config);
-    DBG_NET_PRINT("%s\n", status_message);
-}
-
 // =============================================================================
 // Global Variables
 // =============================================================================

@@ -6,9 +6,6 @@
 #include <stdbool.h>
 #include "hardware/flash.h"
 
-// Store debug settings near end of flash (5th 4KB page from the end)
-#define DEBUG_SETTINGS_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - 20480)
-
 // Per-category compile-time enable flags (set to 1 to include code, 0 to remove entirely)
 #ifndef DBG_MAIN
 #define DBG_MAIN 0
@@ -66,13 +63,6 @@ bool debug_get_by_name(const char* name, bool* out_enabled);
 
 // Initialize runtime flags from compile-time defaults
 void debug_init_from_compile_time_defaults(void);
-
-// Initialize debug system (apply compile-time defaults, then override from flash)
-void debug_init(void);
-
-// Persist/restore runtime debug settings
-bool debug_save_to_flash(void);
-bool debug_load_from_flash(void);
 
 // Internal helper used by macros
 static inline bool debug_is_enabled(debug_category_t cat) {

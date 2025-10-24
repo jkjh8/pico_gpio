@@ -23,6 +23,11 @@ static void load_defaults(void) {
     g_config.gpio.comm_mode = GPIO_MODE_TEXT;
     g_config.gpio.auto_response = true;
     g_config.gpio.reserved = 0;
+    // Load debug defaults from compile-time settings
+    debug_init_from_compile_time_defaults();
+    for (size_t i = 0; i < DBG_CAT_COUNT; ++i) {
+        g_config.debug_flags[i] = debug_get((debug_category_t)i) ? 1 : 0;
+    }
 }
 
 // Validate loaded config
@@ -73,6 +78,10 @@ void config_storage_init(void) {
     uart_rs232_1_baud = g_config.uart_rs232_baud;
     memcpy(&g_net_info, &g_config.network, sizeof(wiz_NetInfo));
     memcpy(&gpio_config, &g_config.gpio, sizeof(gpio_config_t));
+    // Apply debug flags
+    for (size_t i = 0; i < DBG_CAT_COUNT; ++i) {
+        debug_set((debug_category_t)i, g_config.debug_flags[i] != 0);
+    }
 }
 
 void config_storage_save(void) {
@@ -86,6 +95,10 @@ void config_storage_save(void) {
     g_config.uart_rs232_baud = uart_rs232_1_baud;
     memcpy(&g_config.network, &g_net_info, sizeof(wiz_NetInfo));
     memcpy(&g_config.gpio, &gpio_config, sizeof(gpio_config_t));
+    // Update debug flags
+    for (size_t i = 0; i < DBG_CAT_COUNT; ++i) {
+        g_config.debug_flags[i] = debug_get((debug_category_t)i) ? 1 : 0;
+    }
 
     save_to_flash();
 }

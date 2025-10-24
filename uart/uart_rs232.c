@@ -9,11 +9,6 @@ void save_uart_rs232_baud_to_flash(void) {
     config_storage_save();
 }
 
-void load_uart_rs232_baud_from_flash(void) {
-    // Now handled by config_storage_init()
-}
-
-
 uint32_t uart_rs232_1_baud = UART_RS232_1_BAUD;
 
 bool uart_rs232_init(rs232_port_t port, uint32_t baudrate) {
