@@ -1,6 +1,7 @@
 #include "gpio.h"
 #include "tcp/tcp_server.h"
 #include "uart/uart_rs232.h"
+#include "config_storage.h"
 #include "debug/debug.h"
 #include <stdio.h>
 #include <string.h>
@@ -130,41 +131,12 @@ uint16_t hct165_read(void) {
 
 // GPIO 설정을 플래시에 저장
 void save_gpio_config_to_flash(void) {
-    uint32_t ints = save_and_disable_interrupts();
-    
-    flash_range_erase(GPIO_CONFIG_FLASH_OFFSET, 4096);
-    flash_range_program(GPIO_CONFIG_FLASH_OFFSET, (const uint8_t*)&gpio_config, sizeof(gpio_config));
-    restore_interrupts(ints);
-    
-    DBG_GPIO_PRINT("[FLASH] GPIO 설정 저장: ID=0x%02X, Mode=%s, AutoResp=%s\n", 
-        gpio_config.device_id,
-        gpio_config.comm_mode == GPIO_MODE_JSON ? "JSON" : "TEXT",
-        gpio_config.auto_response ? "ON" : "OFF");
+    config_storage_save();
 }
 
 // GPIO 설정을 플래시에서 로드
 void load_gpio_config_from_flash(void) {
-    const uint8_t* flash_ptr = (const uint8_t*)(XIP_BASE + GPIO_CONFIG_FLASH_OFFSET);
-    gpio_config_t stored_config;
-    
-    memcpy(&stored_config, flash_ptr, sizeof(stored_config));
-    
-    // 유효성 검사
-    if (stored_config.device_id == 0xFF || stored_config.device_id == 0x00 ||
-        stored_config.comm_mode > GPIO_MODE_JSON) {
-        // 기본값 사용
-        gpio_config.device_id = 0x01;
-        gpio_config.comm_mode = GPIO_MODE_TEXT;
-        gpio_config.auto_response = true;
-        gpio_config.reserved = 0;
-    DBG_GPIO_PRINT("[FLASH] GPIO 설정 초기화: 기본값 사용\n");
-    } else {
-        gpio_config = stored_config;
-     DBG_GPIO_PRINT("[FLASH] GPIO 설정 불러오기: ID=0x%02X, Mode=%s, AutoResp=%s\n", 
-         gpio_config.device_id,
-         gpio_config.comm_mode == GPIO_MODE_JSON ? "JSON" : "TEXT",
-         gpio_config.auto_response ? "ON" : "OFF");
-    }
+    // Now handled by config_storage_init()
 }
 
 // GPIO 디바이스 ID 설정

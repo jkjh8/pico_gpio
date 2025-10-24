@@ -1,9 +1,10 @@
 #include "network_config.h"
-#include "debug/debug.h"
 
-// =============================================================================
-// IP Address Utility Functions
-// =============================================================================
+void network_config_save_to_flash(const wiz_NetInfo* config) {
+    memcpy(&g_net_info, config, sizeof(wiz_NetInfo));
+    config_storage_save();
+    DBG_NET_PRINT("Network configuration saved to flash.\n");
+}
 
 // Check if IP address is all zeros (0.0.0.0)
 bool is_ip_zero(const uint8_t ip[4]) {
@@ -105,60 +106,6 @@ void wizchip_write(uint8_t wb) {
     spi_write_blocking(SPI_PORT, &wb, 1);
 }
 
-void network_config_save_to_flash(const wiz_NetInfo* config) {
-    uint32_t ints = save_and_disable_interrupts();
-    flash_range_erase(NETWORK_CONFIG_FLASH_OFFSET, 4096);
-    flash_range_program(NETWORK_CONFIG_FLASH_OFFSET, (const uint8_t*)config, sizeof(wiz_NetInfo));
-    restore_interrupts(ints);
-    DBG_NET_PRINT("Network configuration saved to flash.\n");
-}
-
-void network_config_load_from_flash(wiz_NetInfo* config) {
-wiz_NetInfo tmp;
-    uint8_t mac[6];
-    const uint8_t* flash_ptr = (const uint8_t*)(XIP_BASE + NETWORK_CONFIG_FLASH_OFFSET);
-    memcpy(config, flash_ptr, sizeof(wiz_NetInfo));
-
-    // 유효성 검사: MAC이 모두 0xFF면 기본값으로 초기화
-    if (is_mac_invalid(config->mac)) {
-        DBG_NET_PRINT("Flash config invalid, using default config\n");
-        memset(config, 0, sizeof(wiz_NetInfo));
-        config->mac[0] = 0x00; config->mac[1] = 0x08; config->mac[2] = 0xDC;
-        config->ip[0] = 192; config->ip[1] = 168; config->ip[2] = 1; config->ip[3] = 100;
-        config->sn[0] = 255; config->sn[1] = 255; config->sn[2] = 255; config->sn[3] = 0;
-        config->gw[0] = 192; config->gw[1] = 168; config->gw[2] = 1; config->gw[3] = 1;
-        config->dns[0] = 8; config->dns[1] = 8; config->dns[2] = 8; config->dns[3] = 8;
-        config->dhcp = NETINFO_STATIC;
-    }
-    // 보드 고유 ID로 MAC 생성 및 설정
-    generate_mac_from_board_id(mac);
-    memcpy(config->mac, mac, 6);
-    // 고정 IP 모드일 때, IP/GW/SN/DNS가 0.0.0.0 이면 기본값으로 보정
-    if (config->dhcp == NETINFO_STATIC) {
-        if (is_ip_zero(config->ip)) {
-            uint8_t default_ip[4] = {192, 168, 1, 100};
-            set_default_ip(config->ip, default_ip);
-            DBG_NET_PRINT("Static IP was 0.0.0.0, set to default 192.168.1.100\n");
-        }
-        if (is_ip_zero(config->gw)) {
-            uint8_t default_gw[4] = {192, 168, 1, 1};
-            set_default_ip(config->gw, default_gw);
-            DBG_NET_PRINT("Gateway was 0.0.0.0, set to default 192.168.1.1\n");
-        }
-        if (is_ip_zero(config->sn)) {
-            uint8_t default_sn[4] = {255, 255, 255, 0};
-            set_default_ip(config->sn, default_sn);
-            DBG_NET_PRINT("Subnet Mask was 0.0.0.0, set to default 255.255.255.0\n");
-        }
-        if (is_ip_zero(config->dns)) {
-            uint8_t default_dns[4] = {8, 8, 8, 8};
-            set_default_ip(config->dns, default_dns);
-            DBG_NET_PRINT("DNS was 0.0.0.0, set to default 8.8.8.8\n");
-        }
-    }
-    (void)tmp; // silence unused var if any
-    DBG_NET_PRINT("Network configuration loaded from flash\n");
-}
 
 w5500_init_result_t w5500_initialize(void) {
     // 하드웨어 초기화 (직접 인라인)
@@ -298,7 +245,12 @@ bool network_is_connected(void) {
 void network_init(void) {
     // 저장된 네트워크 설정 로드 및 MAC 주소 설정
     DBG_NET_PRINT("Loading network configuration from flash...\n");
-    network_config_load_from_flash(&g_net_info);
+    memcpy(&g_net_info, &g_net_info, sizeof(wiz_NetInfo));
+    // 보드 고유 ID로 MAC 생성 및 설정
+    uint8_t mac[6];
+    generate_mac_from_board_id(mac);
+    memcpy(&g_net_info.mac, mac, 6);
+    DBG_NET_PRINT("Network configuration loaded from flash\n");
     
     // W5500 및 네트워크 초기화
     if (w5500_initialize() == W5500_INIT_SUCCESS) {

@@ -46,6 +46,7 @@ add_executable(main
     network/mac_utils.c
     network/network_config.c
     debug/debug.c
+    config_storage.c
     http/http_server.c
     http/http_parser.c
     http/http_router.c

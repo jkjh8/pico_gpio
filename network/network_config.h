@@ -16,6 +16,9 @@
 #include "pico/stdlib.h"
 #include "main.h"
 #include "network/mac_utils.h"
+#include "debug/debug.h"
+#include "config_storage.h"
+
 
 #define NETWORK_CONFIG_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - 4096)
 
@@ -50,7 +53,6 @@ typedef enum {
 } network_mode_t;
 // 플래시 저장 함수
 void network_config_save_to_flash(const wiz_NetInfo* config);
-void network_config_load_from_flash(wiz_NetInfo* config);
 // Function declarations
 w5500_init_result_t w5500_initialize(void);
 bool w5500_set_static_ip(wiz_NetInfo *net_info);

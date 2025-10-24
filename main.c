@@ -1,6 +1,8 @@
 
 #include "main.h"
 #include "handlers/command_handler.h"
+#include "config_storage.h"
+#include "debug/debug.h"
 #include <stdio.h>
 #include "pico/stdio.h"
 #include <string.h>
@@ -29,10 +31,9 @@ void system_restart(void) {
 
 int main()
 {
-    // RP2350 호환 초기화
     stdio_init_all();
     sleep_ms(2000);  // UART 안정화 대기
-    // initialize debug runtime flags from compile-time defaults and then load saved runtime settings
+    config_storage_init();
     debug_init();
     DBG_MAIN_PRINT("Starting Pico GPIO Server...\n");
     DBG_MAIN_PRINT("Board: %s\n", PICO_BOARD);
@@ -46,11 +47,9 @@ int main()
     } else {
         DBG_MAIN_PRINT("ERROR: HTTP server failed to start\n");
     }
-    // TCP 포트 로드
-    load_tcp_port_from_flash();
+    // TCP 포트 로드 (already loaded by config_storage_init)
     DBG_MAIN_PRINT("TCP port loaded: %u\n", tcp_port);
-    // UART RS232 설정 로드
-    load_uart_rs232_baud_from_flash();
+    // UART RS232 설정 로드 (already loaded by config_storage_init)
     DBG_MAIN_PRINT("UART RS232 baud rate loaded: Port 1 - %u\n", uart_rs232_1_baud);
     // 네트워크 상태 모니터링 및 자동 복구 설정
 
@@ -59,10 +58,10 @@ int main()
     DBG_MAIN_PRINT("UART RS232 initialized: Port 1 at %u baud\n", uart_rs232_1_baud);
     // GPIO 초기화
     gpio_spi_init();
-    load_gpio_config_from_flash();
+    // GPIO config already loaded by config_storage_init
     DBG_MAIN_PRINT("GPIO SPI initialized, Device ID: 0x%02X, Mode: %s\n", 
-        get_gpio_device_id(),
-        get_gpio_comm_mode() == GPIO_MODE_JSON ? "JSON" : "TEXT");
+    get_gpio_device_id(),
+    get_gpio_comm_mode() == GPIO_MODE_JSON ? "JSON" : "TEXT");
 
     while (true) {
         // 시스템 재시작 요청 확인 및 처리
