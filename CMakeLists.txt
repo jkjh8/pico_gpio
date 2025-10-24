@@ -41,8 +41,8 @@ pico_sdk_init()
 
 add_executable(main 
     main.c 
-    command_handler.c
-    json_handler.c
+    handlers/command_handler.c
+    handlers/json_handler.c
     network/mac_utils.c
     network/network_config.c
     http/http_server.c

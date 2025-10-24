@@ -1,6 +1,6 @@
 #include "tcp_server.h"
-#include "command_handler.h"
-#include "json_handler.h"
+#include "handlers/command_handler.h"
+#include "handlers/json_handler.h"
 #include "gpio/gpio.h"
 // 필요 라이브러리 include는 헤더에서 처리됨
 uint16_t tcp_port = 5050;

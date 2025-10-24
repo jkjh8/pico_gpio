@@ -11,9 +11,14 @@
 // 전역 변수
 static uint8_t http_buf[HTTP_BUF_SIZE];
 static uint16_t http_port = HTTP_SERVER_PORT;
-static http_server_state_t server_state = HTTP_SERVER_IDLE;
-static uint32_t last_activity_time = 0;
-static bool keep_alive_enabled = true;
+static http_process_state_t http_process_state = STATE_HTTP_IDLE;  // HTTP 처리 상태 추가
+
+// 타임아웃 관리 (ioLibrary 스타일)
+volatile uint32_t http_server_tick_1s = 0;
+
+// 콜백 함수 포인터 (ioLibrary 스타일)
+static http_server_mcu_reset_callback http_server_mcu_reset_cb = NULL;
+static http_server_wdt_reset_callback http_server_wdt_reset_cb = NULL;
 
 #define KEEP_ALIVE_TIMEOUT_MS 5000  // 5초 Keep-Alive 타임아웃
 
@@ -40,7 +45,6 @@ bool http_server_init(uint16_t port)
     // printf("HTTP 서버 시작 (포트: %d)\n", port);
     
     http_port = port;
-    server_state = HTTP_SERVER_IDLE;
     route_count = 0;
     
     // 소켓 상태 확인 및 초기화
@@ -65,7 +69,7 @@ bool http_server_init(uint16_t port)
     http_register_handler("/api/gpio", HTTP_GET, http_handler_gpio_config_info);
     http_register_handler("/api/gpio", HTTP_POST, http_handler_gpio_config_setup);
 
-    http_register_handler("/api/restart", HTTP_GET, http_handler_restart);
+    http_register_handler("/api/reboot", HTTP_GET, http_handler_restart);
 
     // printf("HTTP 서버 초기화 완료 (포트: %d)\n", port);
     return true;
@@ -76,7 +80,6 @@ void http_server_process(void)
     uint8_t sock = HTTP_SOCKET_NUM;
     uint16_t size = 0;
     uint8_t current_status = getSn_SR(sock);
-    static bool server_ready_logged = false;
     
     // 네트워크 연결 상태 확인 - 재시작 로직 제거
     bool network_connected = network_is_connected();
@@ -90,106 +93,109 @@ void http_server_process(void)
     {
         case SOCK_CLOSED:
             if(socket(sock, Sn_MR_TCP, http_port, 0x00) == sock) {
-                server_state = HTTP_SERVER_IDLE;
+                http_process_state = STATE_HTTP_IDLE;
             }
             break;
             
         case SOCK_INIT:
             if(listen(sock) == SOCK_OK) {
-                server_state = HTTP_SERVER_LISTENING;
-                if (!server_ready_logged) {
-                    // printf("HTTP 서버 준비 완료 (포트: %d)\n", http_port);
-                    server_ready_logged = true;
-                }
+                http_process_state = STATE_HTTP_IDLE;
             }
             break;
             
         case SOCK_LISTEN:
-            server_state = HTTP_SERVER_LISTENING;
+            // server_state = HTTP_SERVER_LISTENING;
             break;
             
         case SOCK_ESTABLISHED:
-            if(getSn_IR(sock) & Sn_IR_CON) {
-                setSn_IR(sock, Sn_IR_CON);
-                server_state = HTTP_SERVER_CONNECTED;
-                last_activity_time = to_ms_since_boot(get_absolute_time());
-            }
-            
-            // 수신된 데이터 처리
-            if((size = getSn_RX_RSR(sock)) > 0) {
-                if(size > HTTP_BUF_SIZE) size = HTTP_BUF_SIZE - 1;
-                
-                size = recv(sock, http_buf, size);
-                http_buf[size] = '\0';
-                
-                // printf("Received %d bytes\n", size);
-                
-                // POST 요청인지 확인하고 Content-Length 헤더가 있는지 체크
-                char* method_check = strstr((char*)http_buf, "POST");
-                char* content_length_check = strstr((char*)http_buf, "Content-Length:");
-                if (!content_length_check) {
-                    content_length_check = strstr((char*)http_buf, "content-length:");
-                }
-                
-                // POST 요청이고 Content-Length가 있지만 완전한 요청이 아닐 수 있음
-                if (method_check && content_length_check) {
-                    // Content-Length 값 추출
-                    uint16_t expected_length = 0;
-                    sscanf(content_length_check, "%*[^:]: %hu", &expected_length);
-                    
-                    // 헤더 끝 위치 찾기
-                    char* header_end = strstr((char*)http_buf, "\r\n\r\n");
-                    if (!header_end) {
-                        header_end = strstr((char*)http_buf, "\n\n");
-                    }
-                    
-                    if (header_end) {
-                        int header_length = header_end - (char*)http_buf + (strstr((char*)http_buf, "\r\n\r\n") ? 4 : 2);
-                        int received_body_length = size - header_length;
+            // HTTP Process states (ioLibrary 스타일)
+            switch(http_process_state)
+            {
+                case STATE_HTTP_IDLE:
+                    if ((size = getSn_RX_RSR(sock)) > 0) {
+                        if(size > HTTP_BUF_SIZE) size = HTTP_BUF_SIZE - 1;
                         
-                        // printf("Expected body: %d bytes, Received body: %d bytes\n", expected_length, received_body_length);
+                        size = recv(sock, http_buf, size);
+                        http_buf[size] = '\0';
                         
-                        // 본문이 부족하면 추가로 읽기
-                        if (received_body_length < expected_length) {
-                            int remaining = expected_length - received_body_length;
-                            // printf("Waiting for %d more bytes...\n", remaining);
+                        // POST 요청 처리 로직 (기존 코드 유지)
+                        char* method_check = strstr((char*)http_buf, "POST");
+                        char* content_length_check = strstr((char*)http_buf, "Content-Length:");
+                        if (!content_length_check) {
+                            content_length_check = strstr((char*)http_buf, "content-length:");
+                        }
+                        
+                        if (method_check && content_length_check) {
+                            uint16_t expected_length = 0;
+                            sscanf(content_length_check, "%*[^:]: %hu", &expected_length);
                             
-                            // 잠시 대기 후 추가 데이터 확인
-                            sleep_ms(10);
-                            int additional_size = getSn_RX_RSR(sock);
-                            if (additional_size > 0) {
-                                if (size + additional_size > HTTP_BUF_SIZE - 1) {
-                                    additional_size = HTTP_BUF_SIZE - 1 - size;
+                            char* header_end = strstr((char*)http_buf, "\r\n\r\n");
+                            if (!header_end) {
+                                header_end = strstr((char*)http_buf, "\n\n");
+                            }
+                            
+                            if (header_end) {
+                                int header_length = header_end - (char*)http_buf + (strstr((char*)http_buf, "\r\n\r\n") ? 4 : 2);
+                                int received_body_length = size - header_length;
+                                
+                                if (received_body_length < expected_length) {
+                                    int remaining = expected_length - received_body_length;
+                                    sleep_ms(10);
+                                    int additional_size = getSn_RX_RSR(sock);
+                                    if (additional_size > 0) {
+                                        if (size + additional_size > HTTP_BUF_SIZE - 1) {
+                                            additional_size = HTTP_BUF_SIZE - 1 - size;
+                                        }
+                                        int extra = recv(sock, http_buf + size, additional_size);
+                                        size += extra;
+                                        http_buf[size] = '\0';
+                                    }
                                 }
-                                int extra = recv(sock, http_buf + size, additional_size);
-                                size += extra;
-                                http_buf[size] = '\0';
-                                // printf("Received additional %d bytes, total: %d\n", extra, size);
                             }
                         }
+                        
+                        // HTTP 요청 파싱 및 처리
+                        http_request_t request;
+                        http_response_t response;
+                        
+                        parse_http_request((char*)http_buf, &request);
+                        
+                        // 핸들러 실행 또는 기본 처리
+                        http_handler_t handler = find_handler(request.uri, request.method);
+                        if(handler) {
+                            handler(&request, &response);
+                        }
+                        else {
+                            handle_default_routes(&request, &response);
+                        }
+                        
+                        // 응답 전송
+                        http_send_response(sock, &response);
+                        
+                        // 파일 스트리밍이 필요한 경우 상태 변경
+                        if (response.stream_required && response.stream_size > 0) {
+                            http_process_state = STATE_HTTP_RES_INPROC;
+                        } else {
+                            http_process_state = STATE_HTTP_RES_DONE;
+                        }
                     }
-                }
-                
-                // HTTP 요청 파싱 및 처리
-                http_request_t request;
-                http_response_t response;
-                
-                parse_http_request((char*)http_buf, &request);
-                
-                // 핸들러 실행 또는 기본 처리
-                http_handler_t handler = find_handler(request.uri, request.method);
-                if(handler) {
-                    handler(&request, &response);
-                }
-                else {
-                    handle_default_routes(&request, &response);
-                }
-                
-                // 응답 전송
-                http_send_response(sock, &response);
-                
-                // 연결 종료 (간단한 HTTP/1.0 방식)
-                disconnect(sock);
+                    break;
+                    
+                case STATE_HTTP_RES_INPROC:
+                    // 스트리밍이 완료되었는지 확인하고 처리
+                    // 현재는 간단하게 바로 완료로 처리 (추후 개선)
+                    http_process_state = STATE_HTTP_RES_DONE;
+                    break;
+                    
+                case STATE_HTTP_RES_DONE:
+                    // 연결 종료 (간단한 HTTP/1.0 방식)
+                    disconnect(sock);
+                    http_process_state = STATE_HTTP_IDLE;
+                    break;
+                    
+                default:
+                    http_process_state = STATE_HTTP_IDLE;
+                    break;
             }
             break;
             
@@ -200,6 +206,7 @@ void http_server_process(void)
                 recv(sock, http_buf, size);
             }
             disconnect(sock);
+            http_process_state = STATE_HTTP_IDLE;
             break;
             
         default:
@@ -207,33 +214,11 @@ void http_server_process(void)
     }
 }
 
-void http_server_stop(void)
-{
-    close(HTTP_SOCKET_NUM);
-    server_state = HTTP_SERVER_IDLE;
-            // printf("HTTP 서버 중지\n");
-}
 
-void http_server_cleanup(void)
-{
-    // printf("HTTP 서버 정리 중...\n");
-    
-    // 소켓 정리
-    if (getSn_SR(HTTP_SOCKET_NUM) != SOCK_CLOSED) {
-        disconnect(HTTP_SOCKET_NUM);
-        close(HTTP_SOCKET_NUM);
-    }
-    
-    // 서버 상태 리셋
-    server_state = HTTP_SERVER_IDLE;
-    
-    // printf("HTTP 서버 정리 완료\n");
-}
 
-http_server_state_t http_server_get_state(void)
-{
-    return server_state;
-}
+
+
+
 
 void http_register_handler(const char* uri, http_method_t method, http_handler_t handler)
 {
@@ -244,6 +229,14 @@ void http_register_handler(const char* uri, http_method_t method, http_handler_t
         routes[route_count].handler = handler;
         route_count++;
     }
+}
+
+// 콜백 함수 등록 (ioLibrary 스타일)
+void http_server_register_callbacks(http_server_mcu_reset_callback mcu_reset_cb, 
+                                   http_server_wdt_reset_callback wdt_reset_cb)
+{
+    http_server_mcu_reset_cb = mcu_reset_cb;
+    http_server_wdt_reset_cb = wdt_reset_cb;
 }
 
 void http_send_response(uint8_t sock, const http_response_t *response)
@@ -286,7 +279,7 @@ void http_send_response(uint8_t sock, const http_response_t *response)
         response->content_length
     );
 
-    printf("[HTTP] Sending response: status=%d, type=%s, gzipped=%s, content_length=%d\n",
+    HTTP_LOG("Sending response: status=%d, type=%s, gzipped=%s, content_length=%d",
            response->status, actual_content_type, is_gzipped ? "yes" : "no", response->content_length);
     
     // 헤더 및 콘텐츠 전송
@@ -296,30 +289,12 @@ void http_send_response(uint8_t sock, const http_response_t *response)
     }
     
     // 활동 시간 업데이트
-    last_activity_time = to_ms_since_boot(get_absolute_time());
+    // last_activity_time = to_ms_since_boot(get_absolute_time());
 }
 
-void http_send_json_response(uint8_t sock, http_status_t status, const char* json_data)
-{
-    http_response_t response;
-    response.status = status;
-    strcpy(response.content_type, "application/json");
-    strncpy(response.content, json_data, sizeof(response.content) - 1);
-    response.content_length = strlen(response.content);
-    
-    http_send_response(sock, &response);
-}
 
-void http_send_html_response(uint8_t sock, http_status_t status, const char* html_data)
-{
-    http_response_t response;
-    response.status = status;
-    strcpy(response.content_type, "text/html");
-    strncpy(response.content, html_data, sizeof(response.content) - 1);
-    response.content_length = strlen(response.content);
-    
-    http_send_response(sock, &response);
-}
+
+
 
 void http_send_404(uint8_t sock)
 {
@@ -343,7 +318,7 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
     // 소켓 상태 확인
     uint8_t socket_status = getSn_SR(sock);
     if (socket_status != SOCK_ESTABLISHED) {
-        printf("Socket not in ESTABLISHED state, aborting\n");
+        HTTP_LOG("Socket not in ESTABLISHED state, aborting");
         return;
     }
     
@@ -368,17 +343,31 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
         return;
     }
     
-    // 파일 데이터를 안전한 청크 단위로 전송
+    // 파일 데이터를 안전한 청크 단위로 전송 (ioLibrary 스타일로 개선)
     size_t last_log_bytes = 0;
+    uint32_t start_time = http_server_get_timecount();
+    
     while (bytes_sent < file_size && retry_count < max_retries) {
         // 소켓 상태 확인
         uint8_t socket_status = getSn_SR(sock);
         if (socket_status != SOCK_ESTABLISHED) {
-            printf("[HTTP] Socket disconnected during transfer: %d\n", socket_status);
+            HTTP_LOG("Socket disconnected during transfer: %d", socket_status);
             break;
         }
         
-        // TX 버퍼 여유 공간 확인
+        // 타임아웃 체크 (ioLibrary 스타일)
+        if ((http_server_get_timecount() - start_time) > HTTP_MAX_TIMEOUT_SEC) {
+            HTTP_LOG("Transfer timeout after %d seconds", HTTP_MAX_TIMEOUT_SEC);
+            break;
+        }
+        
+        // 타임아웃 체크 (ioLibrary 스타일)
+        if ((http_server_get_timecount() - start_time) > HTTP_MAX_TIMEOUT_SEC) {
+            printf("[HTTP] Transfer timeout after %d seconds\n", HTTP_MAX_TIMEOUT_SEC);
+            break;
+        }
+        
+        // TX 버퍼 여유 공간 확인 (ioLibrary처럼 개선)
         uint16_t free_size = getSn_TX_FSR(sock);
         if (free_size < 1024) {  // 최소 1KB 여유 공간 필요
             sleep_ms(5);
@@ -386,11 +375,11 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
             continue;
         }
         
-        // 전송할 청크 크기 결정
+        // 전송할 청크 크기 결정 (ioLibrary 스타일)
         size_t remaining = file_size - bytes_sent;
         size_t chunk_size = (remaining > STREAM_CHUNK_SIZE) ? STREAM_CHUNK_SIZE : remaining;
         
-        // TX 버퍼 크기에 맞춰 조정
+        // TX 버퍼 크기에 맞춰 조정 (ioLibrary처럼)
         if (chunk_size > free_size - 256) {  // 256바이트 여유 공간 확보
             chunk_size = free_size - 256;
         }
@@ -404,35 +393,35 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
         // 데이터 전송
         int32_t ret = send(sock, (uint8_t*)(file_data + bytes_sent), chunk_size);
         if (ret <= 0) {
-            printf("[HTTP] Send failed: %d during transfer at bytes_sent=%zu\n", ret, bytes_sent);
+            HTTP_LOG("Send failed: %d during transfer at bytes_sent=%zu", ret, bytes_sent);
             break;
         }
 
         bytes_sent += ret;
         retry_count = 0;  // 성공적으로 전송되면 재시도 카운터 리셋
 
-        // 전송 속도 조절
+        // 전송 속도 조절 (ioLibrary처럼)
         sleep_ms(2);
 
         // 진행상황 로그 (약 4KB 단위로 출력)
         if (bytes_sent - last_log_bytes >= 4096 || bytes_sent == file_size) {
-            printf("[HTTP] Streaming progress: sent %zu / %zu bytes\n", bytes_sent, file_size);
+            HTTP_DEBUG("Streaming progress: sent %zu / %zu bytes", bytes_sent, file_size);
             last_log_bytes = bytes_sent;
         }
-
     }
 
-    last_activity_time = to_ms_since_boot(get_absolute_time());
+    // last_activity_time = to_ms_since_boot(get_absolute_time());
 
     // 전송이 끝난 후 TX 버퍼가 비워질 때까지 잠시 대기하여
     // W5500가 모든 데이터를 물리적으로 전송할 시간을 줍니다.
     // 이로써 브라우저 쪽에서의 connection reset 가능성을 줄입니다.
+    uint32_t gettime = http_server_get_timecount();
     int flush_wait_ms = 0;
     int max_flush_wait_ms = 200; // 최대 200ms 대기
     while (flush_wait_ms < max_flush_wait_ms) {
         uint16_t free_tx = getSn_TX_FSR(sock);
-        // TX 버퍼가 충분히 비워졌다면 루프 종료
-        if (free_tx >= STREAM_CHUNK_SIZE) {
+        // TX 버퍼가 충분히 비워졌거나 타임아웃 발생시 루프 종료
+        if (free_tx >= STREAM_CHUNK_SIZE || (http_server_get_timecount() - gettime) > HTTP_MAX_TIMEOUT_SEC) {
             break;
         }
         sleep_ms(5);
@@ -440,17 +429,13 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
     }
 
     if (bytes_sent < file_size) {
-        printf("[HTTP] Streaming incomplete: sent %zu of %zu bytes\n", bytes_sent, file_size);
+        HTTP_LOG("Streaming incomplete: sent %zu of %zu bytes", bytes_sent, file_size);
     } else {
-        printf("[HTTP] Streaming complete: sent %zu bytes, waited %d ms for TX flush\n", bytes_sent, flush_wait_ms);
+        HTTP_LOG("Streaming complete: sent %zu bytes, waited %d ms for TX flush", bytes_sent, flush_wait_ms);
     }
 }
 
-const char* get_embedded_file(const char* path, size_t* file_size, bool* is_compressed, size_t* original_size)
-{
-    const char* content_type = NULL;
-    return get_embedded_file_with_content_type(path, file_size, is_compressed, original_size, &content_type);
-}
+
 
 // 내부 함수 구현
 static http_method_t parse_http_method(const char* method_str)
@@ -565,4 +550,14 @@ static void handle_default_routes(const http_request_t* request, http_response_t
             }
         }
     }
+}
+
+
+// HTTP 서버 타임아웃 관련 함수 (ioLibrary 스타일)
+void http_server_time_handler(void) {
+    http_server_tick_1s++;
+}
+
+uint32_t http_server_get_timecount(void) {
+    return http_server_tick_1s;
 }

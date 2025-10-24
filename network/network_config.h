@@ -18,24 +18,21 @@
 #include "network/mac_utils.h"
 
 #define NETWORK_CONFIG_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - 4096)
-// 네트워크 상태 모니터링 및 자동 복구
-typedef enum {
-    NETWORK_STATE_DISCONNECTED,
-    NETWORK_STATE_CONNECTING,
-    NETWORK_STATE_CONNECTED,
-    NETWORK_STATE_RECONNECTING
-} network_monitor_state_t;
 
-extern network_monitor_state_t network_state;
-extern uint32_t last_connection_check;
-extern uint32_t reconnect_attempts;
-extern bool cable_was_connected;
-
-// SPI 콜백 함수들
+// SPI callback functions
 void wizchip_select(void);
 void wizchip_deselect(void);
 uint8_t wizchip_read(void);
 void wizchip_write(uint8_t wb);
+
+// Global network information
+extern wiz_NetInfo g_net_info;
+
+// DHCP configuration flag
+extern bool dhcp_configured;
+
+// Ethernet buffer
+extern uint8_t g_ethernet_buf[2048];
 
 
 // W5500 초기화 결과
@@ -54,18 +51,19 @@ typedef enum {
 // 플래시 저장 함수
 void network_config_save_to_flash(const wiz_NetInfo* config);
 void network_config_load_from_flash(wiz_NetInfo* config);
-// 함수 선언
+// Function declarations
 w5500_init_result_t w5500_initialize(void);
 bool w5500_set_static_ip(wiz_NetInfo *net_info);
 bool w5500_set_dhcp_mode(wiz_NetInfo *net_info);
-bool w5500_apply_network_config(wiz_NetInfo *net_info, network_mode_t mode);
 void w5500_print_network_status(void);
 bool w5500_check_link_status(void);
-void w5500_reset_network(void);
 
-// 네트워크 모니터링 및 재연결 함수
+// Network monitoring functions
 bool network_is_cable_connected(void);
 bool network_is_connected(void);
-bool network_reinitialize(void);
+
+// Network initialization and processing functions
+void network_init(void);
+void network_process(void);
 
 #endif // NETWORK_CONFIG_H

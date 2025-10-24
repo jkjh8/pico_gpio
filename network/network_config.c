@@ -1,12 +1,24 @@
 #include "network_config.h"
 
-// 네트워크 상태 관련 전역 변수 구현
-network_monitor_state_t network_state = NETWORK_STATE_DISCONNECTED;
-uint32_t last_connection_check = 0;
-uint32_t reconnect_attempts = 0;
-bool cable_was_connected = false;
+// =============================================================================
+// Global Variables
+// =============================================================================
 
-extern wiz_NetInfo g_net_info;
+// Network configuration (loaded from/saved to flash)
+wiz_NetInfo g_net_info = {
+    .mac = { 0x00, 0x08, 0xDC, 0x00, 0x00, 0x00 },
+    .ip = { 192, 168, 1, 100 },
+    .sn = { 255, 255, 255, 0 },
+    .gw = { 0, 0, 0, 0 },
+    .dns = { 0, 0, 0, 0 },
+    .dhcp = NETINFO_STATIC
+};
+
+// DHCP configuration flag
+bool dhcp_configured = false;
+
+// Ethernet buffer for network operations
+uint8_t g_ethernet_buf[2048];
 
 // SPI 콜백 함수 구현
 void wizchip_select(void) {
@@ -105,8 +117,8 @@ w5500_init_result_t w5500_initialize(void) {
     reg_wizchip_spi_cbfunc(wizchip_read, wizchip_write);
     
     // W5500 소켓 버퍼 초기화 및 설정 (최적화 - HTTP 서버에 더 많은 버퍼 할당)
-    uint8_t tx_sizes[8] = {2, 8, 2, 2, 2, 0, 0, 0};
-    uint8_t rx_sizes[8] = {2, 8, 2, 2, 2, 0, 0, 0};
+    uint8_t tx_sizes[8] = {2, 2, 2, 2, 2, 2, 2, 2};
+    uint8_t rx_sizes[8] = {2, 2, 2, 2, 2, 2, 2, 2};
     if (wizchip_init(tx_sizes, rx_sizes) == -1) {
         return W5500_INIT_ERROR_CHIP;
     }
@@ -185,15 +197,6 @@ bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
     return false;
 }
 
-// 네트워크 설정 적용
-bool w5500_apply_network_config(wiz_NetInfo *net_info, network_mode_t mode) {
-    if (mode == NETWORK_MODE_STATIC) {
-        return w5500_set_static_ip(net_info);
-    } else {
-        return w5500_set_dhcp_mode(net_info);
-    }
-}
-
 // 네트워크 상태 출력
 void w5500_print_network_status(void) {
     wiz_NetInfo current_info;
@@ -240,47 +243,119 @@ bool network_is_connected(void) {
     return !(ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0);
 }
 
-// 네트워크 재초기화 함수
-bool network_reinitialize(void) {
-    // W5500 소프트 리셋
-    setMR(MR_RST);
-    sleep_ms(100);
+// 네트워크 초기화 함수
+void network_init(void) {
+    // 저장된 네트워크 설정 로드 및 MAC 주소 설정
+    printf("Loading network configuration from flash...\n");
+    network_config_load_from_flash(&g_net_info);
     
-    // 다시 초기화
-    w5500_init_result_t result = w5500_initialize();
-    if (result != W5500_INIT_SUCCESS) {
-        return false;
-    }
-    
-    // 네트워크 설정 재적용 (전역 변수 g_net_info와 DHCP 모드 사용)
-    if (g_net_info.dhcp == NETINFO_STATIC) {
-        if (!w5500_set_static_ip(&g_net_info)) {
-            return false;
+    // W5500 및 네트워크 초기화
+    if (w5500_initialize() == W5500_INIT_SUCCESS) {
+        printf("W5500 initialization successful\n");
+        
+        // W5500에 네트워크 설정 적용
+        wizchip_setnetinfo(&g_net_info);
+        sleep_ms(10);  // 설정 적용을 위한 지연
+        wizchip_setnetinfo(&g_net_info);  // 다시 설정하여 확실히 적용
+        
+        // 적용 후 값들을 확인하여 출력
+        wiz_NetInfo applied_config;
+        wizchip_getnetinfo(&applied_config);
+        
+        // 직접 레지스터에서 값 확인
+        uint8_t ip_reg[4], gw_reg[4], sn_reg[4];
+        getSIPR(ip_reg);
+        getGAR(gw_reg);
+        getSUBR(sn_reg);
+        
+        printf("Applied network config to W5500:\n");
+        printf("  DHCP Mode: %s\n", applied_config.dhcp == NETINFO_DHCP ? "DHCP" : "Static");
+        printf("  IP Address: %d.%d.%d.%d (reg: %d.%d.%d.%d)\n", applied_config.ip[0], applied_config.ip[1], applied_config.ip[2], applied_config.ip[3], ip_reg[0], ip_reg[1], ip_reg[2], ip_reg[3]);
+        printf("  Subnet Mask: %d.%d.%d.%d (reg: %d.%d.%d.%d)\n", applied_config.sn[0], applied_config.sn[1], applied_config.sn[2], applied_config.sn[3], sn_reg[0], sn_reg[1], sn_reg[2], sn_reg[3]);
+        printf("  Gateway: %d.%d.%d.%d (reg: %d.%d.%d.%d)\n", applied_config.gw[0], applied_config.gw[1], applied_config.gw[2], applied_config.gw[3], gw_reg[0], gw_reg[1], gw_reg[2], gw_reg[3]);
+        printf("  DNS: %d.%d.%d.%d\n", applied_config.dns[0], applied_config.dns[1], applied_config.dns[2], applied_config.dns[3]);
+        
+        // 값이 제대로 설정되지 않았으면 다시 시도
+        if (applied_config.ip[0] == 0 && applied_config.ip[1] == 0 && applied_config.ip[2] == 0 && applied_config.ip[3] == 0) {
+            printf("Network config not applied correctly, retrying...\n");
+            wizchip_setnetinfo(&g_net_info);
+            sleep_ms(10);
+            wizchip_getnetinfo(&applied_config);
+            printf("Retried network config to W5500:\n");
+            printf("  DHCP Mode: %s\n", applied_config.dhcp == NETINFO_DHCP ? "DHCP" : "Static");
+            printf("  IP Address: %d.%d.%d.%d\n", applied_config.ip[0], applied_config.ip[1], applied_config.ip[2], applied_config.ip[3]);
+            printf("  Subnet Mask: %d.%d.%d.%d\n", applied_config.sn[0], applied_config.sn[1], applied_config.sn[2], applied_config.sn[3]);
+            printf("  Gateway: %d.%d.%d.%d\n", applied_config.gw[0], applied_config.gw[1], applied_config.gw[2], applied_config.gw[3]);
+            printf("  DNS: %d.%d.%d.%d\n", applied_config.dns[0], applied_config.dns[1], applied_config.dns[2], applied_config.dns[3]);
         }
     } else {
-        if (!w5500_set_dhcp_mode(&g_net_info)) {
-            return false;
-        }
+        printf("ERROR: W5500 initialization failed\n");
     }
     
-    return true;
+    // 케이블 연결 상태 확인
+    bool cable_connected = network_is_cable_connected();
+
+    if (cable_connected) {
+        if (g_net_info.dhcp != NETINFO_DHCP) {
+            // 플래시 설정이 DHCP가 아닌데 케이블이 연결되어 있으면 DHCP로 변경
+            w5500_set_static_ip(&g_net_info);
+            dhcp_configured = true;
+        } else if (w5500_set_dhcp_mode(&g_net_info)) {
+            dhcp_configured = true;  // DHCP 성공 시 플래그 설정
+        } else {
+            // DHCP 실패 시 설정만 해두고 재시도 대기
+            printf("DHCP failed, will retry when cable is connected\n");
+        }
+    } else {
+        printf("Ethernet cable not connected, DHCP will be attempted when cable is connected\n");
+        // DHCP 모드로 설정만 해두고 실제 DHCP는 케이블 연결 시 수행
+        // wizchip_setnetinfo(&g_net_info);
+    }
+    // 네트워크 상태 출력
+    w5500_print_network_status();
 }
 
-// W5500 네트워크 리셋 함수 구현
-void w5500_reset_network(void) {
-    // 모든 소켓 닫기
-    for (int i = 0; i < 8; i++) {
-        close(i);
+// 네트워크 처리 함수 (메인 루프에서 호출)
+void network_process(void) {
+    // 케이블 연결 상태 모니터링
+    bool cable_connected = network_is_cable_connected();
+    static bool last_cable_state = false;
+    
+    if (cable_connected != last_cable_state) {
+        if (cable_connected) {
+            if (g_net_info.dhcp == NETINFO_DHCP && !dhcp_configured) {
+                // DHCP 모드: 기존 설정 정리 후 시간 차를 두고 DHCP 시도
+                printf("Ethernet cable connected, cleaning up previous config and attempting DHCP...\n");
+                
+                // 기존 네트워크 설정 정리
+                wiz_NetInfo zero_config = {0};
+                memcpy(&zero_config.mac, g_net_info.mac, 6);  // MAC은 유지
+                zero_config.dhcp = NETINFO_DHCP;
+                wizchip_setnetinfo(&zero_config);
+                
+                // 정리 후 대기
+                sleep_ms(1000);
+                
+                // DHCP 시도
+                if (w5500_set_dhcp_mode(&g_net_info)) {
+                    printf("DHCP successful, network connected\n");
+                    dhcp_configured = true;
+                    w5500_print_network_status();
+                } else {
+                    printf("DHCP failed, keeping current IP\n");
+                }
+            } else if (g_net_info.dhcp == NETINFO_STATIC) {
+                // Static 모드: IP 그대로 유지
+                printf("Ethernet cable reconnected, keeping static IP\n");
+                w5500_print_network_status();
+            } else {
+                printf("Ethernet cable reconnected, network already configured\n");
+            }
+        } else {
+            printf("Ethernet cable disconnected\n");
+            // DHCP 재설정 가능하도록 플래그 리셋
+            dhcp_configured = false;
+        }
+        last_cable_state = cable_connected;
     }
-    // 하드웨어 리셋
-    gpio_put(SPI_RST, 0);
-    sleep_ms(100);
-    gpio_put(SPI_RST, 1);
-    sleep_ms(100);
-    // WIZchip 재초기화
-    reg_wizchip_cs_cbfunc(wizchip_select, wizchip_deselect);
-    reg_wizchip_spi_cbfunc(wizchip_read, wizchip_write);
-    uint8_t tx_sizes[8] = {2, 8, 2, 2, 2, 0, 0, 0};
-    uint8_t rx_sizes[8] = {2, 8, 2, 2, 2, 0, 0, 0};
-    wizchip_init(tx_sizes, rx_sizes);
 }

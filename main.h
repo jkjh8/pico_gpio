@@ -38,8 +38,6 @@
 
 // tcp port
 extern uint16_t tcp_port;
-// Ethernet buffer (외부 선언)
-extern uint8_t g_ethernet_buf[2048];
 
 // ipaddress (외부 선언)
 extern wiz_NetInfo g_net_info;

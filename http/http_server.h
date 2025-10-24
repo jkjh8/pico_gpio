@@ -25,8 +25,17 @@
 #define MAX_CONTENT_SIZE        4096    // 안전한 크기로 설정 (W5500 버퍼의 절반)
 #define STREAM_CHUNK_SIZE       2048    // 스트리밍 전송 시 청크 크기 (안전한 크기)
 
-// 디버그 모드 (0: 비활성화, 1: 기본, 2: 상세)
-#define HTTP_DEBUG_LEVEL        0
+// 디버그 모드 (ioLibrary 스타일로 개선)
+#define _HTTP_SERVER_DEBUG_
+
+// 디버그 매크로
+#ifdef _HTTP_SERVER_DEBUG_
+#define HTTP_DEBUG(fmt, ...) printf("[HTTP] " fmt "\r\n", ##__VA_ARGS__)
+#define HTTP_LOG(fmt, ...) printf("[HTTP] " fmt "\r\n", ##__VA_ARGS__)
+#else
+#define HTTP_DEBUG(fmt, ...)
+#define HTTP_LOG(fmt, ...)
+#endif
 
 // ========================
 // HTTP 열거형 타입
@@ -53,6 +62,15 @@ typedef enum {
     HTTP_SERVER_CONNECTED,
     HTTP_SERVER_ERROR
 } http_server_state_t;
+
+// HTTP 처리 상태 (ioLibrary 스타일)
+typedef enum {
+    STATE_HTTP_IDLE = 0,           /* IDLE, Waiting for data received (TCP established) */
+    STATE_HTTP_REQ_INPROC,         /* Received HTTP request from HTTP client */
+    STATE_HTTP_REQ_DONE,           /* The end of HTTP request parse */
+    STATE_HTTP_RES_INPROC,         /* Sending the HTTP response to HTTP client (in progress) */
+    STATE_HTTP_RES_DONE            /* The end of HTTP response send (HTTP transaction ended) */
+} http_process_state_t;
 
 // ========================
 // HTTP 구조체
@@ -82,6 +100,15 @@ typedef struct {
 // ========================
 typedef void (*http_handler_t)(const http_request_t *request, http_response_t *response);
 
+// 콜백 함수 타입 (ioLibrary 스타일)
+typedef void (*http_server_mcu_reset_callback)(void);
+typedef void (*http_server_wdt_reset_callback)(void);
+
+// ========================
+// HTTP 타임아웃 설정 (ioLibrary 스타일)
+// ========================
+#define HTTP_MAX_TIMEOUT_SEC		3			// Sec.
+
 // ========================
 // 서버 제어 함수
 // ========================
@@ -91,6 +118,14 @@ void http_server_stop(void);
 void http_server_cleanup(void);
 http_server_state_t http_server_get_state(void);
 void http_register_handler(const char* uri, http_method_t method, http_handler_t handler);
+
+// 콜백 함수 등록 (ioLibrary 스타일)
+void http_server_register_callbacks(http_server_mcu_reset_callback mcu_reset_cb, 
+                                   http_server_wdt_reset_callback wdt_reset_cb);
+
+// HTTP 서버 타임아웃 관련 함수
+void http_server_time_handler(void);
+uint32_t http_server_get_timecount(void);
 
 // ========================
 // HTTP 응답 전송 함수
