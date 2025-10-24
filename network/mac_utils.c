@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include "mac_utils.h"
 #include "pico/unique_id.h"
-#include "debug.h"
+#include "debug/debug.h"
 
 // MAC 주소 출력 함수
 void print_mac_address(uint8_t *mac, const char *description) {

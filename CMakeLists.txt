@@ -45,7 +45,7 @@ add_executable(main
     handlers/json_handler.c
     network/mac_utils.c
     network/network_config.c
-    debug.c
+    debug/debug.c
     http/http_server.c
     http/http_parser.c
     http/http_router.c

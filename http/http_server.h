@@ -14,7 +14,7 @@
 #include "pico/stdlib.h"
 #include "main.h"
 #include "static_files.h"
-#include "debug.h"
+#include "debug/debug.h"
 
 // ========================
 // HTTP 서버 설정

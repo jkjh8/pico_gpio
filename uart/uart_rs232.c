@@ -2,7 +2,7 @@
 #include "handlers/command_handler.h"
 #include "handlers/json_handler.h"
 #include "gpio/gpio.h"
-#include "debug.h"
+#include "debug/debug.h"
 
 void save_uart_rs232_baud_to_flash(void) {
     uint32_t ints = save_and_disable_interrupts();

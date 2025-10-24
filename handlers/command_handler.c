@@ -5,7 +5,7 @@
 #include "uart/uart_rs232.h"
 #include "tcp/tcp_server.h"
 #include "main.h"
-#include "debug.h"
+#include "debug/debug.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -900,12 +900,16 @@ cmd_result_t cmd_set_debug(const char* param, char* response, size_t response_si
         for (size_t i = 0; i < sizeof(names)/sizeof(names[0]); ++i) {
             debug_set_by_name(names[i], enabled);
         }
+        // Persist runtime debug settings
+        debug_save_to_flash();
         snprintf(response, response_size, "OK: set all -> %s\r\n", enabled ? "ON" : "OFF");
         return CMD_SUCCESS;
     }
 
     // single category
     if (debug_set_by_name(cat, enabled)) {
+        // Persist change
+        debug_save_to_flash();
         snprintf(response, response_size, "OK: %s -> %s\r\n", cat, enabled ? "ON" : "OFF");
         return CMD_SUCCESS;
     } else {

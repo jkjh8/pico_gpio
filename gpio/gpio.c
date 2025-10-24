@@ -1,7 +1,7 @@
 #include "gpio.h"
 #include "tcp/tcp_server.h"
 #include "uart/uart_rs232.h"
-#include "debug.h"
+#include "debug/debug.h"
 #include <stdio.h>
 #include <string.h>
 #include <pico/stdio.h>

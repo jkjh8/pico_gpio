@@ -1,5 +1,5 @@
 #include "http_handlers.h"
-#include "debug.h"
+#include "debug/debug.h"
 // 기본 핸들러 구현
 void http_handler_network_info(const http_request_t *request, http_response_t *response)
 {

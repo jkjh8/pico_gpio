@@ -1,5 +1,5 @@
 #include "network_config.h"
-#include "debug.h"
+#include "debug/debug.h"
 
 // =============================================================================
 // IP Address Utility Functions

@@ -32,8 +32,8 @@ int main()
     // RP2350 호환 초기화
     stdio_init_all();
     sleep_ms(2000);  // UART 안정화 대기
-    // initialize debug runtime flags from compile-time defaults
-    debug_init_from_compile_time_defaults();
+    // initialize debug runtime flags from compile-time defaults and then load saved runtime settings
+    debug_init();
     DBG_MAIN_PRINT("Starting Pico GPIO Server...\n");
     DBG_MAIN_PRINT("Board: %s\n", PICO_BOARD);
     

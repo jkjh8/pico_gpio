@@ -1,7 +1,7 @@
 #include "http_response.h"
 #include <string.h>
 #include <stdio.h>
-#include "debug.h"
+#include "debug/debug.h"
 
 // HTTP 상태 코드 텍스트 변환 함수
 const char* http_get_status_text(http_status_t status)
