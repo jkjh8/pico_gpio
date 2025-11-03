@@ -1,5 +1,7 @@
 #include "network_config.h"
 #include "debug/debug.h"
+#include "../uart/uart_rs232.h"
+#include "../tcp/tcp_server.h"
 
 // =============================================================================
 // IP Address Utility Functions
@@ -323,11 +325,19 @@ void network_process(void) {
     // 케이블 연결 상태 변경 감지
     if (cable_connected != last_cable_state) {
         if (cable_connected) {
-            printf("Ethernet cable connected\n");
+            const char *conn_msg = "Ethernet cable connected\r\n";
+            printf("%s", conn_msg);
+            DBG_WIZNET_PRINT("%s", conn_msg);
+            uart_rs232_write(RS232_PORT_1, (const uint8_t*)conn_msg, (uint32_t)strlen(conn_msg));
+            tcp_servers_broadcast((const uint8_t*)conn_msg, (uint16_t)strlen(conn_msg));
             // 케이블이 연결되면 DHCP 플래그 리셋하여 IP 배분 재시도 가능하도록 함
             dhcp_configured = false;
         } else {
-            printf("Ethernet cable disconnected\n");
+            const char *disc_msg = "Ethernet cable disconnected\r\n";
+            printf("%s", disc_msg);
+            DBG_WIZNET_PRINT("%s", disc_msg);
+            uart_rs232_write(RS232_PORT_1, (const uint8_t*)disc_msg, (uint32_t)strlen(disc_msg));
+            tcp_servers_broadcast((const uint8_t*)disc_msg, (uint16_t)strlen(disc_msg));
             // 케이블이 연결 해제되면 DHCP 플래그 리셋
             dhcp_configured = false;
         }
