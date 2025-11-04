@@ -1,25 +1,19 @@
 #include "tcp_server.h"
+#include "system/system_config.h"
 #include "handlers/command_handler.h"
 #include "gpio/gpio.h"
 // 필요 라이브러리 include는 헤더에서 처리됨
 uint16_t tcp_port = 5050;
 
 void save_tcp_port_to_flash(uint16_t port) {
-    uint32_t ints = save_and_disable_interrupts();
-    flash_range_erase(TCP_PORT_FLASH_OFFSET, 4096);
-    flash_range_program(TCP_PORT_FLASH_OFFSET, (const uint8_t*)&port, sizeof(port));
-    restore_interrupts(ints);
-    DBG_MAIN_PRINT("[FLASH] TCP 포트 저장: %u\n", port);
+    system_config_set_tcp_port(port);
+    system_config_save_to_flash();
+    DBG_MAIN_PRINT("[FLASH] TCP 포트 저장 (시스템 설정): %u\n", port);
 }
 
 void load_tcp_port_from_flash(void) {
-    const uint8_t* flash_ptr = (const uint8_t*)(XIP_BASE + TCP_PORT_FLASH_OFFSET);
-    uint16_t port;
-    memcpy(&port, flash_ptr, sizeof(port));
-    // 유효성 검사: 0, 0xFFFF, 또는 범위(1024~65535) 외 값이면 기본값 사용
-    if (port == 0xFFFF || port == 0 || port < 1024 || port > 65535) port = 5050;
-    tcp_port = port;
-    DBG_MAIN_PRINT("[FLASH] TCP 포트 불러오기: %u\n", tcp_port);
+    tcp_port = system_config_get_tcp_port();
+    DBG_MAIN_PRINT("[FLASH] TCP 포트 로드 (시스템 설정): %u\n", tcp_port);
 }
 
 

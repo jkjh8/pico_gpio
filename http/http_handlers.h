@@ -38,6 +38,9 @@ void http_handler_control_setup(const http_request_t *request, http_response_t *
 void http_handler_gpio_config_info(const http_request_t *request, http_response_t *response);
 void http_handler_gpio_config_setup(const http_request_t *request, http_response_t *response);
 
+// 전체 시스템 상태 API 핸들러
+void http_handler_get_status(const http_request_t *request, http_response_t *response);
+
 void http_handler_restart(const http_request_t *request, http_response_t *response);
 
 // 헬퍼 함수들

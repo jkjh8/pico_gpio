@@ -1,4 +1,5 @@
 #include "debug/debug.h"
+#include "system/system_config.h"
 #include <string.h>
 #include "pico/bootrom.h" // for XIP_BASE
 #include "hardware/flash.h"
@@ -115,33 +116,32 @@ struct debug_flash_t {
 #define DEBUG_FLASH_VERSION 1
 
 bool debug_save_to_flash(void) {
-    struct debug_flash_t f;
-    f.magic = DEBUG_FLASH_MAGIC;
-    f.version = DEBUG_FLASH_VERSION;
-    for (size_t i = 0; i < DBG_CAT_COUNT; ++i) f.flags[i] = debug_flags[i] ? 1 : 0;
-
-    uint32_t ints = save_and_disable_interrupts();
-    flash_range_erase(DEBUG_SETTINGS_FLASH_OFFSET, 4096);
-    flash_range_program(DEBUG_SETTINGS_FLASH_OFFSET, (const uint8_t*)&f, sizeof(f));
-    restore_interrupts(ints);
-    DBG_MAIN_PRINT("[FLASH] Debug settings saved\n");
+    uint32_t flags_value = 0;
+    for (size_t i = 0; i < DBG_CAT_COUNT && i < 32; ++i) {
+        if (debug_flags[i]) {
+            flags_value |= (1u << i);
+        }
+    }
+    
+    system_config_set_debug_flags(flags_value);
+    system_config_save_to_flash();
+    DBG_MAIN_PRINT("[FLASH] Debug settings saved (system config)\n");
     return true;
 }
 
 bool debug_load_from_flash(void) {
-    const uint8_t* flash_ptr = (const uint8_t*)(XIP_BASE + DEBUG_SETTINGS_FLASH_OFFSET);
-    struct debug_flash_t f;
-    memcpy(&f, flash_ptr, sizeof(f));
-    if (f.magic != DEBUG_FLASH_MAGIC) {
-        DBG_MAIN_PRINT("[FLASH] No valid debug settings found (magic mismatch)\n");
+    uint32_t flags_value = system_config_get_debug_flags();
+    
+    // 모든 비트가 1이면 기본값 (최초 실행)
+    if (flags_value == 0xFFFFFFFF) {
+        DBG_MAIN_PRINT("[FLASH] Using compile-time debug defaults\n");
         return false;
     }
-    if (f.version != DEBUG_FLASH_VERSION) {
-        DBG_MAIN_PRINT("[FLASH] Debug settings version mismatch\n");
-        return false;
+    
+    for (size_t i = 0; i < DBG_CAT_COUNT && i < 32; ++i) {
+        debug_flags[i] = (flags_value & (1u << i)) != 0;
     }
-    for (size_t i = 0; i < DBG_CAT_COUNT; ++i) debug_flags[i] = (f.flags[i] != 0);
-    DBG_MAIN_PRINT("[FLASH] Debug settings loaded\n");
+    DBG_MAIN_PRINT("[FLASH] Debug settings loaded (system config)\n");
     return true;
 }
 

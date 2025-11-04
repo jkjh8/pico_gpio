@@ -1,4 +1,6 @@
 #include "http_handlers.h"
+#include "system/system_config.h"
+#include "gpio/gpio.h"
 #include "debug/debug.h"
 // 기본 핸들러 구현
 void http_handler_network_info(const http_request_t *request, http_response_t *response)
@@ -330,6 +332,79 @@ void http_handler_gpio_config_setup(const http_request_t *request, http_response
     }
     
     cJSON_Delete(json);
+}
+
+// 전체 시스템 상태 반환 API
+void http_handler_get_status(const http_request_t *request, http_response_t *response) {
+    http_init_response(response);
+    
+    cJSON *root = cJSON_CreateObject();
+    
+    // 1. 네트워크 정보
+    cJSON *network = cJSON_CreateObject();
+    char mac_str[18], ip_str[16], subnet_str[16], gateway_str[16], dns_str[16];
+    
+    snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+        g_net_info.mac[0], g_net_info.mac[1], g_net_info.mac[2],
+        g_net_info.mac[3], g_net_info.mac[4], g_net_info.mac[5]);
+    snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d",
+        g_net_info.ip[0], g_net_info.ip[1], g_net_info.ip[2], g_net_info.ip[3]);
+    snprintf(subnet_str, sizeof(subnet_str), "%d.%d.%d.%d",
+        g_net_info.sn[0], g_net_info.sn[1], g_net_info.sn[2], g_net_info.sn[3]);
+    snprintf(gateway_str, sizeof(gateway_str), "%d.%d.%d.%d",
+        g_net_info.gw[0], g_net_info.gw[1], g_net_info.gw[2], g_net_info.gw[3]);
+    snprintf(dns_str, sizeof(dns_str), "%d.%d.%d.%d",
+        g_net_info.dns[0], g_net_info.dns[1], g_net_info.dns[2], g_net_info.dns[3]);
+    
+    cJSON_AddStringToObject(network, "mac", mac_str);
+    cJSON_AddStringToObject(network, "ip", ip_str);
+    cJSON_AddStringToObject(network, "subnet", subnet_str);
+    cJSON_AddStringToObject(network, "gateway", gateway_str);
+    cJSON_AddStringToObject(network, "dns", dns_str);
+    cJSON_AddBoolToObject(network, "dhcp_enabled", g_net_info.dhcp == NETINFO_DHCP);
+    cJSON_AddBoolToObject(network, "connected", network_is_connected());
+    cJSON_AddItemToObject(root, "network", network);
+    
+    // 2. GPIO 설정 정보
+    cJSON *gpio = cJSON_CreateObject();
+    gpio_config_t* gpio_cfg = system_config_get_gpio();
+    cJSON_AddNumberToObject(gpio, "device_id", gpio_cfg->device_id);
+    cJSON_AddBoolToObject(gpio, "auto_response", gpio_cfg->auto_response);
+    cJSON_AddStringToObject(gpio, "rt_mode", 
+        gpio_cfg->rt_mode == GPIO_RT_MODE_CHANNEL ? "channel" : "bytes");
+    cJSON_AddStringToObject(gpio, "trigger_mode",
+        gpio_cfg->trigger_mode == GPIO_MODE_TRIGGER ? "trigger" : "toggle");
+    
+    // GPIO 입출력 상태
+    cJSON_AddNumberToObject(gpio, "input", gpio_input_data);
+    cJSON_AddNumberToObject(gpio, "output", gpio_output_data);
+    cJSON_AddItemToObject(root, "gpio", gpio);
+    
+    // 3. TCP 서버 정보
+    cJSON *tcp = cJSON_CreateObject();
+    cJSON_AddNumberToObject(tcp, "port", tcp_port);
+    cJSON_AddItemToObject(root, "tcp", tcp);
+    
+    // 4. UART 정보
+    cJSON *uart = cJSON_CreateObject();
+    cJSON_AddNumberToObject(uart, "baud_rate", uart_rs232_1_baud);
+    cJSON_AddItemToObject(root, "uart", uart);
+    
+    // 5. 멀티캐스트 정보
+    cJSON *multicast = cJSON_CreateObject();
+    cJSON_AddBoolToObject(multicast, "enabled", system_config_get_multicast_enabled());
+    cJSON_AddItemToObject(root, "multicast", multicast);
+    
+    // 6. 시스템 정보
+    cJSON *system = cJSON_CreateObject();
+    cJSON_AddStringToObject(system, "board", PICO_BOARD);
+    cJSON_AddStringToObject(system, "version", PICO_PROGRAM_VERSION_STRING);
+    cJSON_AddItemToObject(root, "system", system);
+    
+    cJSON_AddStringToObject(root, "status", "success");
+    
+    http_send_json_object(response, root);
+    cJSON_Delete(root);
 }
 
 void http_handler_restart(const http_request_t *request, http_response_t *response) {

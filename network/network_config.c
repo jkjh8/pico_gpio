@@ -1,4 +1,5 @@
 #include "network_config.h"
+#include "system/system_config.h"
 #include "debug/debug.h"
 #include "../uart/uart_rs232.h"
 #include "../tcp/tcp_server.h"
@@ -108,20 +109,20 @@ void wizchip_write(uint8_t wb) {
 }
 
 void network_config_save_to_flash(const wiz_NetInfo* config) {
-    uint32_t ints = save_and_disable_interrupts();
-    flash_range_erase(NETWORK_CONFIG_FLASH_OFFSET, 4096);
-    flash_range_program(NETWORK_CONFIG_FLASH_OFFSET, (const uint8_t*)config, sizeof(wiz_NetInfo));
-    restore_interrupts(ints);
-    DBG_NET_PRINT("Network configuration saved to flash.\n");
+    wiz_NetInfo* sys_net = system_config_get_network();
+    memcpy(sys_net, config, sizeof(wiz_NetInfo));
+    system_config_save_to_flash();
+    DBG_NET_PRINT("Network configuration saved to flash (system config).\n");
 }
 
 void network_config_load_from_flash(wiz_NetInfo* config) {
-wiz_NetInfo tmp;
+    wiz_NetInfo* sys_net = system_config_get_network();
     uint8_t mac[6];
-    const uint8_t* flash_ptr = (const uint8_t*)(XIP_BASE + NETWORK_CONFIG_FLASH_OFFSET);
-    memcpy(config, flash_ptr, sizeof(wiz_NetInfo));
+    
+    // 시스템 설정에서 복사
+    memcpy(config, sys_net, sizeof(wiz_NetInfo));
 
-    // 유효성 검사: MAC이 모두 0xFF면 기본값으로 초기화
+    // 유효성 검사: MAC이 모두 0xFF 또는 0x00이면 기본값으로 초기화
     if (is_mac_invalid(config->mac)) {
         DBG_NET_PRINT("Flash config invalid, using default config\n");
         memset(config, 0, sizeof(wiz_NetInfo));
@@ -158,8 +159,7 @@ wiz_NetInfo tmp;
             DBG_NET_PRINT("DNS was 0.0.0.0, set to default 8.8.8.8\n");
         }
     }
-    (void)tmp; // silence unused var if any
-    DBG_NET_PRINT("Network configuration loaded from flash\n");
+    DBG_NET_PRINT("Network configuration loaded from flash (system config)\n");
 }
 
 w5500_init_result_t w5500_initialize(void) {

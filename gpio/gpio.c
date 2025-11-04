@@ -1,4 +1,5 @@
 #include "gpio.h"
+#include "system/system_config.h"
 #include "tcp/tcp_server.h"
 #include "uart/uart_rs232.h"
 #include "debug/debug.h"
@@ -17,14 +18,8 @@ static uint16_t gpio_channel_stable_data = 0xFFFF;    // 채널별 안정화된 
 static uint32_t gpio_channel_last_change_time[16];    // 각 채널의 마지막 변경 시간 (ms)
 #define GPIO_DEBOUNCE_TIME_MS 50                      // 디바운스 시간 (밀리초)
 
-// GPIO 설정 (기본값)
-gpio_config_t gpio_config = {
-    .device_id = 0x01,
-    .auto_response = true,
-    .rt_mode = GPIO_RT_MODE_BYTES,
-    .trigger_mode = GPIO_MODE_TOGGLE,
-    .reserved = 0
-};
+// GPIO 설정에 대한 매크로 (시스템 설정 참조)
+#define gpio_config (*system_config_get_gpio())
 
 bool gpio_spi_init(void) {
     // SPI0 초기화 (Mode 0: CPOL=0, CPHA=0)
@@ -193,45 +188,20 @@ uint16_t hct165_read(void) {
     return debounced_data;
 }
 
-// GPIO 설정을 플래시에 저장
+// GPIO 설정을 플래시에 저장 (시스템 설정으로 통합)
 void save_gpio_config_to_flash(void) {
-    uint32_t ints = save_and_disable_interrupts();
-    
-    flash_range_erase(GPIO_CONFIG_FLASH_OFFSET, 4096);
-    flash_range_program(GPIO_CONFIG_FLASH_OFFSET, (const uint8_t*)&gpio_config, sizeof(gpio_config));
-    restore_interrupts(ints);
-    
-    DBG_GPIO_PRINT("[FLASH] GPIO 설정 저장: ID=0x%02X, AutoResp=%s\n", 
-        gpio_config.device_id,
-        gpio_config.auto_response ? "ON" : "OFF");
+    system_config_save_to_flash();
+    DBG_GPIO_PRINT("[FLASH] GPIO 설정 저장 (시스템 설정): ID=0x%02X\n", 
+        gpio_config.device_id);
 }
 
-// GPIO 설정을 플래시에서 로드
+// GPIO 설정을 플래시에서 로드 (시스템 설정에서 자동 로드됨)
 void load_gpio_config_from_flash(void) {
-    const uint8_t* flash_ptr = (const uint8_t*)(XIP_BASE + GPIO_CONFIG_FLASH_OFFSET);
-    gpio_config_t stored_config;
-    
-    memcpy(&stored_config, flash_ptr, sizeof(stored_config));
-    
-    // 유효성 검사
-    if (stored_config.device_id == 0xFF || stored_config.device_id == 0x00 ||
-        stored_config.rt_mode > GPIO_RT_MODE_CHANNEL ||
-        stored_config.trigger_mode > GPIO_MODE_TRIGGER) {
-        // 기본값 사용
-        gpio_config.device_id = 0x01;
-        gpio_config.auto_response = true;
-        gpio_config.rt_mode = GPIO_RT_MODE_BYTES;
-        gpio_config.trigger_mode = GPIO_MODE_TOGGLE;
-        gpio_config.reserved = 0;
-        DBG_GPIO_PRINT("[FLASH] GPIO 설정 초기화: 기본값 사용\n");
-    } else {
-        gpio_config = stored_config;
-        DBG_GPIO_PRINT("[FLASH] GPIO 설정 불러오기: ID=0x%02X, AutoResp=%s, RT=%s, Trigger=%s\n", 
-            gpio_config.device_id,
-            gpio_config.auto_response ? "ON" : "OFF",
-            gpio_config.rt_mode == GPIO_RT_MODE_CHANNEL ? "CHANNEL" : "BYTES",
-            gpio_config.trigger_mode == GPIO_MODE_TRIGGER ? "TRIGGER" : "TOGGLE");
-    }
+    // 시스템 설정 초기화 시 자동으로 로드됨
+    DBG_GPIO_PRINT("[FLASH] GPIO 설정 로드 (시스템 설정): ID=0x%02X, RT=%s, Trigger=%s\n", 
+        gpio_config.device_id,
+        gpio_config.rt_mode == GPIO_RT_MODE_CHANNEL ? "CHANNEL" : "BYTES",
+        gpio_config.trigger_mode == GPIO_MODE_TRIGGER ? "TRIGGER" : "TOGGLE");
 }
 
 // GPIO 디바이스 ID 설정

@@ -1,23 +1,18 @@
 #include "uart_rs232.h"
+#include "system/system_config.h"
 #include "handlers/command_handler.h"
 #include "gpio/gpio.h"
 #include "debug/debug.h"
 
 void save_uart_rs232_baud_to_flash(void) {
-    uint32_t ints = save_and_disable_interrupts();
-    flash_range_erase(UART_RS232_BAUD_FLASH_OFFSET, 4096);
-    flash_range_program(UART_RS232_BAUD_FLASH_OFFSET, (const uint8_t*)&uart_rs232_1_baud, sizeof(uart_rs232_1_baud));
-    restore_interrupts(ints);
-    DBG_MAIN_PRINT("[FLASH] RS232 baud 저장: %u\n", uart_rs232_1_baud);
+    system_config_set_uart_baud(uart_rs232_1_baud);
+    system_config_save_to_flash();
+    DBG_MAIN_PRINT("[FLASH] RS232 baud 저장 (시스템 설정): %u\n", uart_rs232_1_baud);
 }
 
 void load_uart_rs232_baud_from_flash(void) {
-    const uint8_t* flash_ptr = (const uint8_t*)(XIP_BASE + UART_RS232_BAUD_FLASH_OFFSET);
-    uint32_t baud_value;
-    memcpy(&baud_value, flash_ptr, sizeof(baud_value));
-    // 유효성 검사: 0xFFFFFFFF면 기본값 사용
-    uart_rs232_1_baud = (baud_value == 0xFFFFFFFF || baud_value == 0) ? 9600 : baud_value;
-    DBG_MAIN_PRINT("[FLASH] RS232 baud 불러오기: %u\n", uart_rs232_1_baud);
+    uart_rs232_1_baud = system_config_get_uart_baud();
+    DBG_MAIN_PRINT("[FLASH] RS232 baud 로드 (시스템 설정): %u\n", uart_rs232_1_baud);
 }
 
 

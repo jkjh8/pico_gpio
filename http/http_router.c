@@ -18,16 +18,23 @@ void http_router_init(void)
 {
     route_count = 0;
 
-    // 기본 라우트 등록 (루트 경로는 정적 파일로 처리하므로 제외)
-    // 백업용 시스템 라우트들 (SPA가 없을 경우를 위한)
+    // API 라우트 등록
+    // 네트워크 설정
     http_router_register("/api/network", HTTP_GET, http_handler_network_info);
     http_router_register("/api/network", HTTP_POST, http_handler_network_setup);
+    
+    // 제어 설정 (TCP/UART)
     http_router_register("/api/control", HTTP_GET, http_handler_control_info);
     http_router_register("/api/control", HTTP_POST, http_handler_control_setup);
-    // GPIO 설정 API
+    
+    // GPIO 설정
     http_router_register("/api/gpio", HTTP_GET, http_handler_gpio_config_info);
     http_router_register("/api/gpio", HTTP_POST, http_handler_gpio_config_setup);
-    // 시스템 재시작 API
+    
+    // 전체 시스템 상태
+    http_router_register("/api/status", HTTP_GET, http_handler_get_status);
+    
+    // 시스템 재시작
     http_router_register("/api/restart", HTTP_GET, http_handler_restart);
 }
 

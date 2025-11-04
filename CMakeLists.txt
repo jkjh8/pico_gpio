@@ -44,6 +44,7 @@ add_executable(main
     handlers/command_handler.c
     network/mac_utils.c
     network/network_config.c
+    network/multicast.c
     debug/debug.c
     http/http_server.c
     http/http_parser.c
@@ -54,6 +55,7 @@ add_executable(main
     tcp/tcp_server.c
     uart/uart_rs232.c
     gpio/gpio.c
+    system/system_config.c
 )
 
 # define W5500 chip for all source files
