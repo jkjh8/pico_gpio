@@ -57,7 +57,7 @@ void http_send_response(uint8_t sock, const http_response_t *response)
         response->content_length
     );
 
-    DBG_HTTP_PRINT("Sending response: status=%d, type=%s, gzipped=%s, content_length=%d",
+    DBG_HTTP_PRINT("Sending response: status=%d, type=%s, gzipped=%s, content_length=%d \n",
            response->status, actual_content_type, is_gzipped ? "yes" : "no", response->content_length);
 
     // 헤더 및 콘텐츠 전송
@@ -94,7 +94,7 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
     // 소켓 상태 확인
     uint8_t socket_status = getSn_SR(sock);
     if (socket_status != SOCK_ESTABLISHED) {
-        DBG_HTTP_PRINT("Socket not in ESTABLISHED state, aborting");
+        DBG_HTTP_PRINT("Socket not in ESTABLISHED state, aborting\n");
         return;
     }
 
@@ -127,13 +127,13 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
         // 소켓 상태 확인
         uint8_t socket_status = getSn_SR(sock);
         if (socket_status != SOCK_ESTABLISHED) {
-            DBG_HTTP_PRINT("Socket disconnected during transfer: %d", socket_status);
+            DBG_HTTP_PRINT("Socket disconnected during transfer: %d\n", socket_status);
             break;
         }
 
         // 타임아웃 체크 (ioLibrary 스타일)
         if ((http_server_get_timecount() - start_time) > HTTP_MAX_TIMEOUT_SEC) {
-            DBG_HTTP_PRINT("Transfer timeout after %d seconds", HTTP_MAX_TIMEOUT_SEC);
+            DBG_HTTP_PRINT("Transfer timeout after %d seconds\n", HTTP_MAX_TIMEOUT_SEC);
             break;
         }
 
@@ -169,7 +169,7 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
         // 데이터 전송
         int32_t ret = send(sock, (uint8_t*)(file_data + bytes_sent), chunk_size);
         if (ret <= 0) {
-            DBG_HTTP_PRINT("Send failed: %d during transfer at bytes_sent=%zu", ret, bytes_sent);
+            DBG_HTTP_PRINT("Send failed: %d during transfer at bytes_sent=%zu\n", ret, bytes_sent);
             break;
         }
 
@@ -181,7 +181,7 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
 
         // 진행상황 로그 (약 4KB 단위로 출력)
         if (bytes_sent - last_log_bytes >= 4096 || bytes_sent == file_size) {
-            DBG_HTTP_PRINT("Streaming progress: sent %zu / %zu bytes", bytes_sent, file_size);
+            DBG_HTTP_PRINT("Streaming progress: sent %zu / %zu bytes\n", bytes_sent, file_size);
             last_log_bytes = bytes_sent;
         }
     }
@@ -205,8 +205,8 @@ void http_send_large_file_stream(uint8_t sock, const char* file_data, size_t fil
     }
 
     if (bytes_sent < file_size) {
-        DBG_HTTP_PRINT("Streaming incomplete: sent %zu of %zu bytes", bytes_sent, file_size);
+        DBG_HTTP_PRINT("Streaming incomplete: sent %zu of %zu bytes\n", bytes_sent, file_size);
     } else {
-        DBG_HTTP_PRINT("Streaming complete: sent %zu bytes, waited %d ms for TX flush", bytes_sent, flush_wait_ms);
+        DBG_HTTP_PRINT("Streaming complete: sent %zu bytes, waited %d ms for TX flush\n", bytes_sent, flush_wait_ms);
     }
 }

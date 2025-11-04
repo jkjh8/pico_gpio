@@ -217,7 +217,6 @@ bool set_gpio_device_id(uint8_t new_id) {
 
 // GPIO 디바이스 ID 반환
 uint8_t get_gpio_device_id(void) {
-    DBG_GPIO_PRINT("get_gpio_device_id: %d\n", gpio_config.device_id);
     return gpio_config.device_id;
 }
 
