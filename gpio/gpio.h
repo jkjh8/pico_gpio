@@ -22,18 +22,25 @@
 #define GPIO_MIN_PIN 1
 #define GPIO_MAX_PIN 8
 
-// GPIO 통신 모드
+// GPIO 리턴 모드 (입력 변경 시 응답 포맷)
 typedef enum {
-    GPIO_MODE_TEXT = 0,     // 텍스트 기반 명령 (기본값)
-    GPIO_MODE_JSON = 1      // JSON 기반 명령
-} gpio_comm_mode_t;
+    GPIO_RT_MODE_BYTES = 0,   // 2바이트로 리턴 (deviceid, low_byte, high_byte)
+    GPIO_RT_MODE_CHANNEL = 1  // 채널별 리턴 (deviceid, channel, value)
+} gpio_rt_mode_t;
+
+// GPIO 동작 모드 (입력 변경 감지 방식)
+typedef enum {
+    GPIO_MODE_TOGGLE = 0,     // 입력 신호 변경 시마다 리턴
+    GPIO_MODE_TRIGGER = 1     // ON->OFF 한 사이클 완료 시 리턴
+} gpio_trigger_mode_t;
 
 // GPIO 설정 구조체
 typedef struct {
-    uint8_t device_id;          // 디바이스 ID (1-254)
-    gpio_comm_mode_t comm_mode; // 통신 모드
-    bool auto_response;         // 자동 응답 여부
-    uint32_t reserved;          // 향후 확장용
+    uint8_t device_id;                // 디바이스 ID (1-254)
+    bool auto_response;               // 자동 응답 여부
+    gpio_rt_mode_t rt_mode;           // 리턴 모드 (BYTES/CHANNEL)
+    gpio_trigger_mode_t trigger_mode; // 동작 모드 (TOGGLE/TRIGGER)
+    uint32_t reserved;                // 향후 확장용
 } gpio_config_t;
 
 // GPIO 디바이스 ID (여러 디바이스 구분용)
@@ -50,13 +57,16 @@ void save_gpio_config_to_flash(void);
 void load_gpio_config_from_flash(void);
 bool set_gpio_device_id(uint8_t new_id);
 uint8_t get_gpio_device_id(void);
-bool set_gpio_comm_mode(gpio_comm_mode_t mode);
-gpio_comm_mode_t get_gpio_comm_mode(void);
 bool set_gpio_auto_response(bool enabled);
 bool get_gpio_auto_response(void);
+bool set_gpio_rt_mode(gpio_rt_mode_t mode);
+gpio_rt_mode_t get_gpio_rt_mode(void);
+bool set_gpio_trigger_mode(gpio_trigger_mode_t mode);
+gpio_trigger_mode_t get_gpio_trigger_mode(void);
 
 // GPIO 설정 한번에 갱신 및 저장
-bool update_gpio_config(uint8_t device_id, gpio_comm_mode_t comm_mode, bool auto_response);
+bool update_gpio_config(uint8_t device_id, bool auto_response, 
+                        gpio_rt_mode_t rt_mode, gpio_trigger_mode_t trigger_mode);
 
 // Global variables
 extern uint16_t gpio_input_data;

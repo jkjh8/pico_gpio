@@ -42,7 +42,6 @@ pico_sdk_init()
 add_executable(main 
     main.c 
     handlers/command_handler.c
-    handlers/json_handler.c
     network/mac_utils.c
     network/network_config.c
     debug/debug.c
@@ -59,6 +58,20 @@ add_executable(main
 
 # define W5500 chip for all source files
 target_compile_definitions(main PRIVATE _WIZCHIP_=W5500)
+
+# Enable debug flags (set to 1 to enable, 0 to disable)
+target_compile_definitions(main PRIVATE 
+    DBG_MAIN=1
+    DBG_NET=1
+    DBG_TCP=1
+    DBG_HTTP=1
+    DBG_UART=1
+    DBG_JSON=1
+    DBG_GPIO=1
+    DBG_DHCP=1
+    DBG_WIZNET=1
+    DBG_RUNTIME=1
+)
 
 pico_set_program_name(main "main")
 pico_set_program_version(main "0.1")

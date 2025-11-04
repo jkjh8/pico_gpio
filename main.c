@@ -60,9 +60,8 @@ int main()
     // GPIO 초기화
     gpio_spi_init();
     load_gpio_config_from_flash();
-    DBG_MAIN_PRINT("GPIO SPI initialized, Device ID: 0x%02X, Mode: %s\n", 
-        get_gpio_device_id(),
-        get_gpio_comm_mode() == GPIO_MODE_JSON ? "JSON" : "TEXT");
+    DBG_MAIN_PRINT("GPIO SPI initialized, Device ID: 0x%02X\n", 
+        get_gpio_device_id());
 
     while (true) {
         // 시스템 재시작 요청 확인 및 처리

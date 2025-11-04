@@ -1,6 +1,5 @@
 #include "uart_rs232.h"
 #include "handlers/command_handler.h"
-#include "handlers/json_handler.h"
 #include "gpio/gpio.h"
 #include "debug/debug.h"
 
@@ -69,18 +68,11 @@ void uart_rs232_process(void) {
         
         DBG_UART_PRINT("UART1 RX: %.*s\n", len, (char*)uart_buf);
 
-        // JSON 모드 확인 후 적절한 명령어 처리 함수 호출
+        // 텍스트 명령어 처리
         char response[512];
         cmd_result_t result;
         
-        // JSON 모드인지 확인 (첫 문자가 '{' 인지 또는 모드 설정 확인)
-        if (get_gpio_comm_mode() == GPIO_MODE_JSON && uart_buf[0] == '{') {
-            // JSON 명령어 처리
-            result = process_json_command((char*)uart_buf, response, sizeof(response));
-        } else {
-            // 일반 텍스트 명령어 처리
-            result = process_command((char*)uart_buf, response, sizeof(response));
-        }
+        result = process_command((char*)uart_buf, response, sizeof(response));
         
         /* make response buffer larger and send in chunks to avoid truncation */
         size_t resp_len = strlen(response);

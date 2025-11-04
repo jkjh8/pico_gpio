@@ -1,5 +1,4 @@
 #include "command_handler.h"
-#include "json_handler.h"
 #include "network/network_config.h"
 #include "gpio/gpio.h"
 #include "uart/uart_rs232.h"
@@ -23,18 +22,6 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
     // factoryreset 명령어는 모드와 관계없이 먼저 확인 (JSON 파싱 전)
     if (strncmp(command, "factoryreset", 12) == 0) {
         return cmd_factory_reset(response, response_size);
-    }
-
-    // JSON 모드인지 확인
-    if (get_gpio_comm_mode() == GPIO_MODE_JSON) {
-        // JSON 모드에서는 JSON 형태의 입력을 기대
-        if (command[0] == '{') {
-            return process_json_command(command, response, response_size);
-        } else {
-            snprintf(response, response_size, 
-                    "{\"error\":\"JSON mode requires JSON input format\"}\r\n");
-            return CMD_ERROR_INVALID;
-        }
     }
 
     // 텍스트 모드 - 기존 방식
@@ -75,6 +62,8 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
         return cmd_get_input(param_part, response, response_size);
     } else if (strcmp(cmd_part, "getinputs") == 0) {
         return cmd_get_inputs(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "getinputchannel") == 0) {
+        return cmd_get_input_channel(param_part, response, response_size);
     } else if (strcmp(cmd_part, "getoutput") == 0) {
         return cmd_get_output(param_part, response, response_size);
     } else if (strcmp(cmd_part, "getoutputs") == 0) {
@@ -103,12 +92,16 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
         return cmd_set_gpio_id(param_part, response, response_size);
     } else if (strcmp(cmd_part, "getgpioid") == 0) {
         return cmd_get_gpio_id(response, response_size);
-    } else if (strcmp(cmd_part, "setgpiomode") == 0) {
-        return cmd_set_gpio_mode(param_part, response, response_size);
-    } else if (strcmp(cmd_part, "getgpiomode") == 0) {
-        return cmd_get_gpio_mode(response, response_size);
     } else if (strcmp(cmd_part, "getgpioconfig") == 0) {
         return cmd_get_gpio_config(response, response_size);
+    } else if (strcmp(cmd_part, "setrtmode") == 0) {
+        return cmd_set_rt_mode(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "getrtmode") == 0) {
+        return cmd_get_rt_mode(response, response_size);
+    } else if (strcmp(cmd_part, "settriggermode") == 0) {
+        return cmd_set_trigger_mode(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "gettriggermode") == 0) {
+        return cmd_get_trigger_mode(response, response_size);
     } else if (strcmp(cmd_part, "getdebug") == 0) {
         return cmd_get_debug(param_part, response, response_size);
     } else if (strcmp(cmd_part, "setdebug") == 0) {
@@ -215,6 +208,61 @@ cmd_result_t cmd_get_inputs(const char* param, char* response, size_t response_s
     uint8_t high_byte = (uint8_t)((gpio_state >> 8) & 0xFF);
 
     snprintf(response, response_size, "%d,%d\r\n", low_byte, high_byte);
+    return CMD_SUCCESS;
+}
+
+// GPIO 입력 채널별 바이너리 텍스트 형태로 반환 (getinputchannel,id or getinputchannel,id,channel)
+cmd_result_t cmd_get_input_channel(const char* param, char* response, size_t response_size) {
+    if (param == NULL) {
+        snprintf(response, response_size, "Error: Parameter required. Use: getinputchannel,id or getinputchannel,id,channel\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    // 매개변수를 ID와 채널로 분리
+    char param_copy[64];
+    strncpy(param_copy, param, sizeof(param_copy) - 1);
+    param_copy[sizeof(param_copy) - 1] = '\0';
+
+    char* id_str = strtok(param_copy, ",");
+    char* channel_str = strtok(NULL, ",");
+
+    if (id_str == NULL) {
+        snprintf(response, response_size, "Error: Device ID required\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    uint8_t target_id = (uint8_t)atoi(id_str);
+    
+    // 디바이스 ID 체크
+    if (target_id != 0 && target_id != get_gpio_device_id()) {
+        // ID가 맞지 않으면 응답하지 않음
+        response[0] = '\0';
+        return CMD_SUCCESS;
+    }
+
+    uint16_t input_data = hct165_read();
+    uint8_t device_id = get_gpio_device_id();
+
+    // 채널 파라미터가 있으면 해당 채널만 반환
+    if (channel_str != NULL) {
+        int channel = atoi(channel_str);
+        if (channel < 1 || channel > 16) {
+            snprintf(response, response_size, "Error: Invalid channel. Use 1-16\r\n");
+            return CMD_ERROR_INVALID;
+        }
+        int channel_index = channel - 1;
+        bool value = (input_data & (1 << channel_index)) != 0;
+        snprintf(response, response_size, "input_ch,%d,%d,%d\r\n", device_id, channel, value ? 1 : 0);
+    } else {
+        // 전체 채널을 16자리 바이너리 텍스트로 반환 (채널 1부터 16까지)
+        char binary_str[17];
+        for (int i = 0; i < 16; i++) {
+            binary_str[i] = (input_data & (1 << i)) ? '1' : '0';
+        }
+        binary_str[16] = '\0';
+        snprintf(response, response_size, "inputs_ch,%d,%s\r\n", device_id, binary_str);
+    }
+    
     return CMD_SUCCESS;
 }
 
@@ -616,80 +664,99 @@ cmd_result_t cmd_set_gpio_id(const char* param, char* response, size_t response_
 cmd_result_t cmd_get_gpio_id(char* response, size_t response_size) {
     uint8_t id = get_gpio_device_id();
     
-    if (get_gpio_comm_mode() == GPIO_MODE_JSON) {
-        snprintf(response, response_size, "{\"device_id\":%d}\r\n", id);
-    } else {
-        snprintf(response, response_size, "GPIO device ID: %d (0x%02X)\r\n", id, id);
-    }
-    return CMD_SUCCESS;
-}
-
-// GPIO 통신 모드 설정
-cmd_result_t cmd_set_gpio_mode(const char* param, char* response, size_t response_size) {
-    if (param == NULL) {
-        snprintf(response, response_size, "Error: Mode parameter required (text/json)\r\n");
-        return CMD_ERROR_INVALID;
-    }
-
-    gpio_comm_mode_t mode;
-    if (strcmp(param, "text") == 0 || strcmp(param, "0") == 0) {
-        mode = GPIO_MODE_TEXT;
-    } else if (strcmp(param, "json") == 0 || strcmp(param, "1") == 0) {
-        mode = GPIO_MODE_JSON;
-    } else {
-        snprintf(response, response_size, "Error: Invalid mode. Use 'text' or 'json'\r\n");
-        return CMD_ERROR_INVALID;
-    }
-
-    if (set_gpio_comm_mode(mode)) {
-        if (get_gpio_comm_mode() == GPIO_MODE_JSON) {
-            snprintf(response, response_size, "{\"mode\":\"%s\",\"result\":\"success\"}\r\n", 
-                     mode == GPIO_MODE_JSON ? "json" : "text");
-        } else {
-            snprintf(response, response_size, "GPIO mode set to %s\r\n", 
-                     mode == GPIO_MODE_JSON ? "JSON" : "TEXT");
-        }
-        return CMD_SUCCESS;
-    } else {
-        snprintf(response, response_size, "Error: Failed to set mode\r\n");
-        return CMD_ERROR_EXECUTION;
-    }
-}
-
-// GPIO 통신 모드 조회
-cmd_result_t cmd_get_gpio_mode(char* response, size_t response_size) {
-    gpio_comm_mode_t mode = get_gpio_comm_mode();
-    
-    if (mode == GPIO_MODE_JSON) {
-        snprintf(response, response_size, "{\"mode\":\"json\"}\r\n");
-    } else {
-        snprintf(response, response_size, "GPIO mode: TEXT\r\n");
-    }
+    snprintf(response, response_size, "GPIO device ID: %d (0x%02X)\r\n", id, id);
     return CMD_SUCCESS;
 }
 
 // GPIO 전체 설정 조회
 cmd_result_t cmd_get_gpio_config(char* response, size_t response_size) {
     uint8_t id = get_gpio_device_id();
-    gpio_comm_mode_t mode = get_gpio_comm_mode();
     bool auto_resp = get_gpio_auto_response();
+    gpio_rt_mode_t rt_mode = get_gpio_rt_mode();
+    gpio_trigger_mode_t trigger_mode = get_gpio_trigger_mode();
     
-    if (mode == GPIO_MODE_JSON) {
-        snprintf(response, response_size, 
-                "{\"device_id\":%d,\"mode\":\"%s\",\"auto_response\":%s}\r\n",
-                id, 
-                mode == GPIO_MODE_JSON ? "json" : "text",
-                auto_resp ? "true" : "false");
-    } else {
-        snprintf(response, response_size,
-                "GPIO Configuration:\r\n"
-                "Device ID: %d (0x%02X)\r\n"
-                "Mode: %s\r\n"
-                "Auto Response: %s\r\n",
-                id, id,
-                mode == GPIO_MODE_JSON ? "JSON" : "TEXT",
-                auto_resp ? "ON" : "OFF");
+    snprintf(response, response_size,
+            "GPIO Configuration:\r\n"
+            "Device ID: %d (0x%02X)\r\n"
+            "Auto Response: %s\r\n"
+            "RT Mode: %s\r\n"
+            "Trigger Mode: %s (only for channel mode)\r\n",
+            id, id,
+            auto_resp ? "ON" : "OFF",
+            rt_mode == GPIO_RT_MODE_CHANNEL ? "CHANNEL" : "BYTES",
+            trigger_mode == GPIO_MODE_TRIGGER ? "TRIGGER" : "TOGGLE");
+    return CMD_SUCCESS;
+}
+
+// RT Mode 설정 명령어
+cmd_result_t cmd_set_rt_mode(const char* param, char* response, size_t response_size) {
+    if (param == NULL) {
+        snprintf(response, response_size, "Error: Mode parameter required (bytes/channel)\r\n");
+        return CMD_ERROR_INVALID;
     }
+
+    gpio_rt_mode_t mode;
+    if (strcmp(param, "bytes") == 0 || strcmp(param, "0") == 0) {
+        mode = GPIO_RT_MODE_BYTES;
+    } else if (strcmp(param, "channel") == 0 || strcmp(param, "1") == 0) {
+        mode = GPIO_RT_MODE_CHANNEL;
+    } else {
+        snprintf(response, response_size, "Error: Invalid mode. Use 'bytes' or 'channel'\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    if (set_gpio_rt_mode(mode)) {
+        snprintf(response, response_size, "RT mode set to %s\r\n", 
+                 mode == GPIO_RT_MODE_CHANNEL ? "channel" : "bytes");
+        return CMD_SUCCESS;
+    } else {
+        snprintf(response, response_size, "Error: Failed to set RT mode\r\n");
+        return CMD_ERROR_EXECUTION;
+    }
+}
+
+// RT Mode 조회 명령어
+cmd_result_t cmd_get_rt_mode(char* response, size_t response_size) {
+    gpio_rt_mode_t mode = get_gpio_rt_mode();
+    
+    snprintf(response, response_size, "RT mode: %s\r\n",
+             mode == GPIO_RT_MODE_CHANNEL ? "channel" : "bytes");
+    return CMD_SUCCESS;
+}
+
+// Trigger Mode 설정 명령어
+cmd_result_t cmd_set_trigger_mode(const char* param, char* response, size_t response_size) {
+    if (param == NULL) {
+        snprintf(response, response_size, "Error: Mode parameter required (toggle/trigger)\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    gpio_trigger_mode_t mode;
+    if (strcmp(param, "toggle") == 0 || strcmp(param, "0") == 0) {
+        mode = GPIO_MODE_TOGGLE;
+    } else if (strcmp(param, "trigger") == 0 || strcmp(param, "1") == 0) {
+        mode = GPIO_MODE_TRIGGER;
+    } else {
+        snprintf(response, response_size, "Error: Invalid mode. Use 'toggle' or 'trigger'\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    if (set_gpio_trigger_mode(mode)) {
+        snprintf(response, response_size, "Trigger mode set to %s\r\n", 
+                 mode == GPIO_MODE_TRIGGER ? "trigger" : "toggle");
+        return CMD_SUCCESS;
+    } else {
+        snprintf(response, response_size, "Error: Failed to set trigger mode\r\n");
+        return CMD_ERROR_EXECUTION;
+    }
+}
+
+// Trigger Mode 조회 명령어
+cmd_result_t cmd_get_trigger_mode(char* response, size_t response_size) {
+    gpio_trigger_mode_t mode = get_gpio_trigger_mode();
+    
+    snprintf(response, response_size, "Trigger mode: %s\r\n",
+             mode == GPIO_MODE_TRIGGER ? "trigger" : "toggle");
     return CMD_SUCCESS;
 }
 
@@ -710,18 +777,22 @@ cmd_result_t cmd_help(char* response, size_t response_size) {
         "  setuartbaud,rate          - Set UART baud rate\r\n"
         "GPIO Control (All Channels):\r\n"
         "  getinputs,id              - Get all 16 inputs (format: low,high)\r\n"
+        "  getinputchannel,id        - Get all 16 inputs as binary text (format: inputs_ch,id,0101010101010101)\r\n"
         "  getoutputs,id             - Get all 16 outputs (format: low,high)\r\n"
         "  setoutputs,id,low,high    - Set all 16 outputs (0-255,0-255)\r\n"
         "GPIO Control (Single Channel):\r\n"
         "  getinput,id,ch            - Get single input (returns: true/false)\r\n"
+        "  getinputchannel,id,ch     - Get single input channel (format: input_ch,id,ch,value)\r\n"
         "  setoutput,id,ch,val       - Set single output (id:0=all/1-254, ch:1-16, val:0/1)\r\n"
         "  getoutput,id,ch           - Get single output (returns: true/false)\r\n"
         "Device Configuration:\r\n"
         "  getgpioid                 - Get device ID\r\n"
         "  setgpioid,id              - Set device ID (1-254)\r\n"
-        "  setgpiomode,text/json     - Set communication mode\r\n"
-        "  getgpiomode               - Get communication mode\r\n"
         "  getgpioconfig             - Get all GPIO configuration\r\n"
+        "  setrtmode,bytes/channel   - Set return mode (bytes=2bytes, channel=per-channel)\r\n"
+        "  getrtmode                 - Get return mode\r\n"
+        "  settriggermode,toggle/trigger - Set trigger mode (channel mode only: toggle=on-change, trigger=cycle)\r\n"
+        "  gettriggermode            - Get trigger mode\r\n"
         "System:\r\n"
         "  setautoresponse,0/1       - Enable/Disable auto response on input change\r\n"
         "  getautoresponse           - Get auto response status\r\n"
@@ -751,12 +822,7 @@ cmd_result_t cmd_set_auto_response(const char* param, char* response, size_t res
 cmd_result_t cmd_get_auto_response(char* response, size_t response_size) {
     bool enabled = get_gpio_auto_response();
     
-    if (get_gpio_comm_mode() == GPIO_MODE_JSON) {
-        snprintf(response, response_size, 
-                "{\"auto_response\":%s}\r\n", enabled ? "true" : "false");
-    } else {
-        snprintf(response, response_size, "Auto response: %s\r\n", enabled ? "enabled" : "disabled");
-    }
+    snprintf(response, response_size, "Auto response: %s\r\n", enabled ? "enabled" : "disabled");
     return CMD_SUCCESS;
 }
 
@@ -795,22 +861,15 @@ cmd_result_t cmd_factory_reset(char* response, size_t response_size) {
     
     // GPIO 설정 초기화
     set_gpio_device_id(1);
-    set_gpio_comm_mode(GPIO_MODE_TEXT);
     set_gpio_auto_response(true);
     
-    if (get_gpio_comm_mode() == GPIO_MODE_JSON) {
-        snprintf(response, response_size, 
-                "{\"result\":\"success\",\"message\":\"Factory reset completed. System will restart.\"}\r\n");
-    } else {
-        snprintf(response, response_size, 
-                "Factory reset completed. System will restart.\r\n"
-                "IP: 192.168.1.100\r\n"
-                "Subnet: 255.255.255.0\r\n"
-                "Gateway: 192.168.1.1\r\n"
-                "TCP Port: 5050\r\n"
-                "UART Baud: 9600\r\n"
-                "Mode: TEXT\r\n");
-    }
+    snprintf(response, response_size, 
+            "Factory reset completed. System will restart.\r\n"
+            "IP: 192.168.1.100\r\n"
+            "Subnet: 255.255.255.0\r\n"
+            "Gateway: 192.168.1.1\r\n"
+            "TCP Port: 5050\r\n"
+            "UART Baud: 9600\r\n");
     
     // 시스템 재시작 예약
     extern void system_restart_request(void);

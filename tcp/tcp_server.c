@@ -1,6 +1,5 @@
 #include "tcp_server.h"
 #include "handlers/command_handler.h"
-#include "handlers/json_handler.h"
 #include "gpio/gpio.h"
 // 필요 라이브러리 include는 헤더에서 처리됨
 uint16_t tcp_port = 5050;
@@ -26,10 +25,21 @@ void load_tcp_port_from_flash(void) {
 
 // 모든 연결된 TCP 클라이언트에 메시지 전송
 void tcp_servers_broadcast(const uint8_t* data, uint16_t len) {
+    int sent_count = 0;
     for (uint8_t i = TCP_SOCKET_START; i < TCP_SOCKET_START + TCP_SOCKET_COUNT; i++) {
-        if (getSn_SR(i) == SOCK_ESTABLISHED) {
-            send(i, (uint8_t*)data, len);
+        uint8_t status = getSn_SR(i);
+        if (status == SOCK_ESTABLISHED) {
+            int32_t result = send(i, (uint8_t*)data, len);
+            DBG_TCP_PRINT("Broadcast to socket %d: sent %d bytes (status=ESTABLISHED)\n", i, result);
+            sent_count++;
+        } else {
+            DBG_TCP_PRINT("Socket %d not available (status=0x%02X)\n", i, status);
         }
+    }
+    if (sent_count == 0) {
+        DBG_TCP_PRINT("Warning: No active TCP connections to broadcast to!\n");
+    } else {
+        DBG_TCP_PRINT("Broadcast completed to %d connection(s)\n", sent_count);
     }
 }
 
@@ -67,22 +77,12 @@ void tcp_servers_process(void) {
     for (uint8_t i = TCP_SOCKET_START; i < TCP_SOCKET_START + TCP_SOCKET_COUNT; i++) {
         switch (getSn_SR(i)) {
             case SOCK_ESTABLISHED: {
-                // 최초 연결 시에만 환영 메시지 전송 (통신 모드에 따라 다르게)
+                // 최초 연결 시에만 환영 메시지 전송 (텍스트 모드)
                 if (getSn_IR(i) & Sn_IR_CON) {
-                    if (get_gpio_comm_mode() == GPIO_MODE_JSON) {
-                        // JSON 모드 웰컴 메시지
-                        char welcome_json[128];
-                        snprintf(welcome_json, sizeof(welcome_json), 
-                                "{\"device_id\":%d,\"event\":\"connected\",\"mode\":\"json\"}\r\n", 
-                                get_gpio_device_id());
-                        send(i, (uint8_t*)welcome_json, strlen(welcome_json));
-                    } else {
-                        // TEXT 모드 웰컴 메시지
-                        char welcome_text[64];
-                        snprintf(welcome_text, sizeof(welcome_text), 
-                                "Connected,%d,text\r\n", get_gpio_device_id());
-                        send(i, (uint8_t*)welcome_text, strlen(welcome_text));
-                    }
+                    char welcome_text[64];
+                    snprintf(welcome_text, sizeof(welcome_text), 
+                            "Connected,%d,text\r\n", get_gpio_device_id());
+                    send(i, (uint8_t*)welcome_text, strlen(welcome_text));
                     setSn_IR(i, Sn_IR_CON);
                 }
                 uint16_t rx_size = getSn_RX_RSR(i);
@@ -93,19 +93,11 @@ void tcp_servers_process(void) {
                     buf[len] = 0;
                     DBG_TCP_PRINT("TCP[%d] 수신: %s\n", i, buf);
                     
-                    // JSON 모드 확인 후 적절한 명령어 처리 함수 호출
-                    /* Make response buffer larger to avoid truncation for long outputs */
+                    // 텍스트 명령어 처리
                     char response[2048];
                     cmd_result_t result;
                     
-                    // JSON 모드인지 확인 (첫 문자가 '{' 인지 또는 모드 설정 확인)
-                    if (get_gpio_comm_mode() == GPIO_MODE_JSON && buf[0] == '{') {
-                        // JSON 명령어 처리
-                        result = process_json_command((char*)buf, response, sizeof(response));
-                    } else {
-                        // 일반 텍스트 명령어 처리
-                        result = process_command((char*)buf, response, sizeof(response));
-                    }
+                    result = process_command((char*)buf, response, sizeof(response));
                     
                     if (result == CMD_SUCCESS || result == CMD_ERROR_INVALID) {
                         size_t resp_len = strlen(response);

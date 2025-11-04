@@ -36,6 +36,7 @@ cmd_result_t cmd_get_output(const char* param, char* response, size_t response_s
 
 // GPIO 전체 채널 명령어들
 cmd_result_t cmd_get_inputs(const char* param, char* response, size_t response_size);
+cmd_result_t cmd_get_input_channel(const char* param, char* response, size_t response_size);
 cmd_result_t cmd_set_outputs(const char* param, char* response, size_t response_size);
 cmd_result_t cmd_get_outputs(const char* param, char* response, size_t response_size);
 
@@ -57,6 +58,10 @@ cmd_result_t cmd_get_gpio_id(char* response, size_t response_size);
 cmd_result_t cmd_set_gpio_mode(const char* param, char* response, size_t response_size);
 cmd_result_t cmd_get_gpio_mode(char* response, size_t response_size);
 cmd_result_t cmd_get_gpio_config(char* response, size_t response_size);
+cmd_result_t cmd_set_rt_mode(const char* param, char* response, size_t response_size);
+cmd_result_t cmd_get_rt_mode(char* response, size_t response_size);
+cmd_result_t cmd_set_trigger_mode(const char* param, char* response, size_t response_size);
+cmd_result_t cmd_get_trigger_mode(char* response, size_t response_size);
 
 // ID 확인 유틸리티 함수
 bool check_device_id_match(uint8_t target_id);
