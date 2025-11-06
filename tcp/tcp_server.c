@@ -104,6 +104,9 @@ void tcp_servers_process(void) {
                             if (s <= 0) break;
                             sent += (size_t)s;
                         }
+                        // 줄바꿈 추가
+                        const char* newline = "\r\n";
+                        send(i, (uint8_t*)newline, 2);
                     } else {
                         char error_msg[128];
                         snprintf(error_msg, sizeof(error_msg), "Command error: %d\r\n", result);

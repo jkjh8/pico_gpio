@@ -183,7 +183,7 @@ cmd_result_t cmd_get_input(const char* param, char* response, size_t response_si
     uint16_t input_data = hct165_read();
     bool value = (input_data & (1 << channel_index)) != 0;
     
-    snprintf(response, response_size, "%s\r\n", value ? "true" : "false");
+    snprintf(response, response_size, "input_ch,%d,%d,%s", get_gpio_device_id(), channel, value ? "1" : "0");
     return CMD_SUCCESS;
 }
 
@@ -207,7 +207,7 @@ cmd_result_t cmd_get_inputs(const char* param, char* response, size_t response_s
     uint8_t low_byte = (uint8_t)(gpio_state & 0xFF);
     uint8_t high_byte = (uint8_t)((gpio_state >> 8) & 0xFF);
 
-    snprintf(response, response_size, "%d,%d\r\n", low_byte, high_byte);
+    snprintf(response, response_size, "input_bytes,%d,%d,%d", get_gpio_device_id(), low_byte, high_byte);
     return CMD_SUCCESS;
 }
 
@@ -306,7 +306,7 @@ cmd_result_t cmd_get_output(const char* param, char* response, size_t response_s
     extern uint16_t gpio_output_data;
     bool value = (gpio_output_data & (1 << channel_index)) != 0;
     
-    snprintf(response, response_size, "%s\r\n", value ? "true" : "false");
+    snprintf(response, response_size, "output_ch,%d,%d,%s", get_gpio_device_id(), channel, value ? "1" : "0");
     return CMD_SUCCESS;
 }
 
@@ -330,7 +330,7 @@ cmd_result_t cmd_get_outputs(const char* param, char* response, size_t response_
     uint8_t low_byte = (uint8_t)(gpio_state & 0xFF);
     uint8_t high_byte = (uint8_t)((gpio_state >> 8) & 0xFF);
 
-    snprintf(response, response_size, "%d,%d\r\n", low_byte, high_byte);
+    snprintf(response, response_size, "output_bytes,%d,%d,%d", get_gpio_device_id(), low_byte, high_byte);
     return CMD_SUCCESS;
 }
 
@@ -389,7 +389,7 @@ cmd_result_t cmd_set_output(const char* param, char* response, size_t response_s
     
     hct595_write(gpio_output_data);
     
-    snprintf(response, response_size, "OK\r\n");
+    snprintf(response, response_size, "output_set,OK");
     return CMD_SUCCESS;
 }
 
@@ -436,7 +436,7 @@ cmd_result_t cmd_set_outputs(const char* param, char* response, size_t response_
     // GPIO 출력에 적용
     hct595_write(gpio_value);
     
-    snprintf(response, response_size, "OK\r\n");
+    snprintf(response, response_size, "output_set,OK");
     return CMD_SUCCESS;
 }
 

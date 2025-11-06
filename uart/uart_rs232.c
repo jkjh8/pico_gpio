@@ -54,50 +54,59 @@ bool uart_rs232_available(rs232_port_t port) {
 
 // UART RS232 명령어 처리 함수
 void uart_rs232_process(void) {
-    uint8_t uart_buf[256];
-    int len;
+    static uint8_t uart_line_buf[512];
+    static size_t uart_line_pos = 0;
     
-    if ((len = uart_rs232_read(RS232_PORT_1, uart_buf, sizeof(uart_buf))) > 0) {
-        // Null 종료 문자 추가
-        uart_buf[len] = '\0';
+    // 한 번에 하나의 문자씩 읽기
+    uint8_t ch_buf[1];
+    while (uart_rs232_read(RS232_PORT_1, ch_buf, 1) > 0) {
+        uint8_t ch = ch_buf[0];
         
-        DBG_UART_PRINT("UART1 RX: %.*s\n", len, (char*)uart_buf);
-
-        // 텍스트 명령어 처리
-        char response[512];
-        cmd_result_t result;
-        
-        result = process_command((char*)uart_buf, response, sizeof(response));
-        
-        /* make response buffer larger and send in chunks to avoid truncation */
-        size_t resp_len = strlen(response);
-        const size_t CHUNK_SIZE = 256;
-        if (result == CMD_SUCCESS || result == CMD_ERROR_INVALID) {
-            size_t sent = 0;
-            while (sent < resp_len) {
-                size_t remaining = resp_len - sent;
-                size_t this_len = remaining > CHUNK_SIZE ? CHUNK_SIZE : remaining;
-                uart_rs232_write(RS232_PORT_1, (uint8_t*)response + sent, (uint32_t)this_len);
-                sent += this_len;
-                sleep_ms(1);
+        // 명령 종결 문자 처리 (\r, \n, 또는 0x00)
+        if (ch == '\r' || ch == '\n' || ch == 0x00) {
+            if (uart_line_pos > 0) {
+                // 완전한 명령 수신
+                uart_line_buf[uart_line_pos] = '\0';
+                
+                DBG_UART_PRINT("UART1 RX: %s\n", (char*)uart_line_buf);
+                
+                // 명령어 처리
+                char response[512];
+                cmd_result_t result = process_command((char*)uart_line_buf, response, sizeof(response));
+                
+                // 응답 전송 (TCP와 동일한 형식 - 청크 단위, 줄바꿈 없음)
+                size_t resp_len = strlen(response);
+                const size_t CHUNK_SIZE = 256;
+                if (result == CMD_SUCCESS || result == CMD_ERROR_INVALID) {
+                    size_t sent = 0;
+                    while (sent < resp_len) {
+                        size_t remaining = resp_len - sent;
+                        size_t this_len = remaining > CHUNK_SIZE ? CHUNK_SIZE : remaining;
+                        uart_rs232_write(RS232_PORT_1, (uint8_t*)response + sent, (uint32_t)this_len);
+                        sent += this_len;
+                    }
+                    // 줄바꿈 추가
+                    const char* newline = "\r\n";
+                    uart_rs232_write(RS232_PORT_1, (uint8_t*)newline, 2);
+                } else {
+                    char error_msg[128];
+                    snprintf(error_msg, sizeof(error_msg), "Command error: %d\r\n", result);
+                    size_t err_len = strlen(error_msg);
+                    size_t sent = 0;
+                    while (sent < err_len) {
+                        size_t remaining = err_len - sent;
+                        size_t this_len = remaining > CHUNK_SIZE ? CHUNK_SIZE : remaining;
+                        uart_rs232_write(RS232_PORT_1, (uint8_t*)error_msg + sent, (uint32_t)this_len);
+                        sent += this_len;
+                    }
+                }
+                
+                // 버퍼 초기화
+                uart_line_pos = 0;
             }
-            // ensure trailing newline if not present
-            if (resp_len == 0 || response[resp_len - 1] != '\n') {
-                const char nl = '\n';
-                uart_rs232_write(RS232_PORT_1, (const uint8_t*)&nl, 1);
-            }
-        } else {
-            char error_msg[128];
-            snprintf(error_msg, sizeof(error_msg), "Command error: %d\r\n", result);
-            size_t err_len = strlen(error_msg);
-            size_t sent = 0;
-            while (sent < err_len) {
-                size_t remaining = err_len - sent;
-                size_t this_len = remaining > CHUNK_SIZE ? CHUNK_SIZE : remaining;
-                uart_rs232_write(RS232_PORT_1, (uint8_t*)error_msg + sent, (uint32_t)this_len);
-                sent += this_len;
-                sleep_ms(1);
-            }
+        } else if (uart_line_pos + 1 < sizeof(uart_line_buf)) {
+            // 문자 추가
+            uart_line_buf[uart_line_pos++] = ch;
         }
     }
 }
