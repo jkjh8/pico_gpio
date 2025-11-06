@@ -124,6 +124,10 @@ int main()
     // 7. GPIO 초기화
     gpio_spi_init();
     DBG_MAIN_PRINT("GPIO SPI initialized\n");
+    
+    // GPIO 출력 모두 끄기 (초기 상태)
+    hct595_write(0x0000);
+    DBG_MAIN_PRINT("GPIO outputs initialized (all OFF)\n");
 
     // =============================================================================
     // 메인 루프
