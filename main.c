@@ -1,6 +1,7 @@
 #include "main.h"
 #include "handlers/command_handler.h"
 #include "system/system_config.h"
+#include "led/status_led.h"
 #include <stdio.h>
 #include "pico/stdio.h"
 #include <string.h>
@@ -96,10 +97,14 @@ int main()
     system_config_init();
     debug_init();
     
+    // 3. 상태 표시 LED 초기화 (부팅중 상태: 녹색+빨강색)
+    status_led_init();
+    status_led_set_state(STATUS_LED_GREEN_RED_ON);
+    
     DBG_MAIN_PRINT("=== Pico GPIO Server v%s ===\n", PICO_PROGRAM_VERSION_STRING);
     DBG_MAIN_PRINT("Board: %s\n", PICO_BOARD);
     
-    // 3. 설정 적용
+    // 4. 설정 적용
     tcp_port = system_config_get_tcp_port();
     uart_rs232_1_baud = system_config_get_uart_baud();
     
@@ -107,27 +112,31 @@ int main()
     DBG_MAIN_PRINT("UART baud: %u\n", uart_rs232_1_baud);
     DBG_MAIN_PRINT("GPIO Device ID: 0x%02X\n", get_gpio_device_id());
     
-    // 4. 네트워크 초기화
+    // 5. 네트워크 초기화
     network_init();
     
-    // 5. HTTP 서버 시작
+    // 6. HTTP 서버 시작
     if (http_server_init(80)) {
         DBG_MAIN_PRINT("HTTP server started on port 80\n");
     } else {
         DBG_MAIN_PRINT("ERROR: HTTP server failed to start\n");
     }
     
-    // 6. UART 초기화
+    // 7. UART 초기화
     uart_rs232_init(RS232_PORT_1, uart_rs232_1_baud);
     DBG_MAIN_PRINT("UART RS232 initialized at %u baud\n", uart_rs232_1_baud);
     
-    // 7. GPIO 초기화
+    // 8. GPIO 초기화
     gpio_spi_init();
     DBG_MAIN_PRINT("GPIO SPI initialized\n");
     
     // GPIO 출력 모두 끄기 (초기 상태)
     hct595_write(0x0000);
     DBG_MAIN_PRINT("GPIO outputs initialized (all OFF)\n");
+    
+    // 시스템 준비 완료: 녹색 LED만 켜짐
+    status_led_set_state(STATUS_LED_GREEN_ON);
+    DBG_MAIN_PRINT("System ready - Status LED green\n");
 
     // =============================================================================
     // 메인 루프
@@ -142,8 +151,22 @@ int main()
         // 네트워크 처리
         network_process();
         
+        // 네트워크 연결 상태에 따라 LED 제어
+        static bool prev_connected = false;
+        bool current_connected = network_is_connected();
+        
+        if (current_connected != prev_connected) {
+            if (current_connected) {
+                status_led_set_state(STATUS_LED_GREEN_ON);  // 연결됨: 녹색
+                DBG_MAIN_PRINT("Network connected - Status LED green\n");
+            } else {
+                status_led_set_state(STATUS_LED_RED_ON);   // 연결 끊김: 빨강색
+                DBG_MAIN_PRINT("Network disconnected - Status LED red\n");
+            }
+            prev_connected = current_connected;
+        }
+        
         // TCP 서버 초기화 (네트워크 연결 후)
-
         if (!tcp_servers_initialized && network_is_connected()) {
             tcp_servers_init(tcp_port);
             tcp_servers_initialized = true;

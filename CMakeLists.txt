@@ -55,6 +55,7 @@ add_executable(main
     tcp/tcp_server.c
     uart/uart_rs232.c
     gpio/gpio.c
+    led/status_led.c
     system/system_config.c
 )
 
