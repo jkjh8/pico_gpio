@@ -119,6 +119,8 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
         return cmd_factory_reset(response, response_size);
     } else if (strcmp(cmd_part, "help") == 0) {
         return cmd_help(response, response_size);
+    } else if (strcmp(cmd_part, "?") == 0) {
+        return cmd_help(response, response_size);
     } else if (strcmp(cmd_part, "restart") == 0) {
         return cmd_restart(response, response_size);
     } else {
