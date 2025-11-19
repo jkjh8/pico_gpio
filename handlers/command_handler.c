@@ -1,5 +1,6 @@
 #include "command_handler.h"
 #include "network/network_config.h"
+#include "network/multicast.h"
 #include "gpio/gpio.h"
 #include "uart/uart_rs232.h"
 #include "tcp/tcp_server.h"
@@ -110,6 +111,10 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
         return cmd_set_auto_response(param_part, response, response_size);
     } else if (strcmp(cmd_part, "getautoresponse") == 0) {
         return cmd_get_auto_response(response, response_size);
+    } else if (strcmp(cmd_part, "setbroadcastmode") == 0) {
+        return cmd_set_broadcast_mode(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "getbroadcastmode") == 0) {
+        return cmd_get_broadcast_mode(response, response_size);
     } else if (strcmp(cmd_part, "factoryreset") == 0) {
         return cmd_factory_reset(response, response_size);
     } else if (strcmp(cmd_part, "help") == 0) {
@@ -975,4 +980,33 @@ cmd_result_t cmd_set_debug(const char* param, char* response, size_t response_si
         snprintf(response, response_size, "Error: Unknown debug category '%s'\r\n", cat);
         return CMD_ERROR_INVALID;
     }
+}
+
+// 브로드캐스트 모드 설정: setbroadcastmode,multicast|broadcast
+cmd_result_t cmd_set_broadcast_mode(const char* param, char* response, size_t response_size) {
+    if (param == NULL || strlen(param) == 0) {
+        snprintf(response, response_size, "Error: Parameter required. Use: setbroadcastmode,multicast|broadcast\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    broadcast_mode_t mode;
+    if (strcasecmp(param, "multicast") == 0) {
+        mode = BROADCAST_MODE_MULTICAST;
+    } else if (strcasecmp(param, "broadcast") == 0) {
+        mode = BROADCAST_MODE_BROADCAST;
+    } else {
+        snprintf(response, response_size, "Error: Invalid mode '%s'. Use: multicast or broadcast\r\n", param);
+        return CMD_ERROR_INVALID;
+    }
+
+    multicast_set_broadcast_mode(mode);
+    snprintf(response, response_size, "broadcast_mode,%s\r\n", mode == BROADCAST_MODE_MULTICAST ? "multicast" : "broadcast");
+    return CMD_SUCCESS;
+}
+
+// 브로드캐스트 모드 조회: getbroadcastmode
+cmd_result_t cmd_get_broadcast_mode(char* response, size_t response_size) {
+    broadcast_mode_t mode = multicast_get_broadcast_mode();
+    snprintf(response, response_size, "broadcast_mode,%s\r\n", mode == BROADCAST_MODE_MULTICAST ? "multicast" : "broadcast");
+    return CMD_SUCCESS;
 }

@@ -64,15 +64,15 @@ target_compile_definitions(main PRIVATE _WIZCHIP_=W5500)
 
 # Enable debug flags (set to 1 to enable, 0 to disable)
 target_compile_definitions(main PRIVATE 
-    DBG_MAIN=1
-    DBG_NET=1
-    DBG_TCP=1
-    DBG_HTTP=1
-    DBG_UART=1
-    DBG_JSON=1
-    DBG_GPIO=1
-    DBG_DHCP=1
-    DBG_WIZNET=1
+    DBG_MAIN=0
+    DBG_NET=0
+    DBG_TCP=0
+    DBG_HTTP=0
+    DBG_UART=0
+    DBG_JSON=0
+    DBG_GPIO=0
+    DBG_DHCP=0
+    DBG_WIZNET=0
     DBG_RUNTIME=1
 )
 
