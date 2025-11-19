@@ -93,13 +93,21 @@ int main()
     stdio_init_all();
     sleep_ms(2000);
     
-    // 2. 시스템 설정 로드 (통합 Flash 설정)
+    // 2. 상태 표시 LED 초기화 (부팅중: 녹색 LED 깜박임)
+    status_led_init();
+    
+    // 부팅 시퀀스: 녹색 LED 3회 깜박임
+    for (int i = 0; i < 3; i++) {
+        status_led_green_on();
+        sleep_ms(200);
+        status_led_green_off();
+        sleep_ms(200);
+    }
+    status_led_green_on();  // 깜박임 완료 후 켜둠
+    
+    // 3. 시스템 설정 로드 (통합 Flash 설정)
     system_config_init();
     debug_init();
-    
-    // 3. 상태 표시 LED 초기화 (부팅중 상태: 녹색+빨강색)
-    status_led_init();
-    status_led_set_state(STATUS_LED_GREEN_RED_ON);
     
     DBG_MAIN_PRINT("=== Pico GPIO Server v%s ===\n", PICO_PROGRAM_VERSION_STRING);
     DBG_MAIN_PRINT("Board: %s\n", PICO_BOARD);
@@ -134,7 +142,7 @@ int main()
     hct595_write(0x0000);
     DBG_MAIN_PRINT("GPIO outputs initialized (all OFF)\n");
     
-    // 시스템 준비 완료: 녹색 LED만 켜짐
+    // 시스템 준비 완료: 녹색 LED 계속 켜짐
     status_led_set_state(STATUS_LED_GREEN_ON);
     DBG_MAIN_PRINT("System ready - Status LED green\n");
 
