@@ -25,5 +25,8 @@ void status_led_red_on(void);
 void status_led_red_off(void);
 void status_led_toggle_green(void);
 void status_led_toggle_red(void);
+void status_led_activity_blink(void);
+void status_led_set_network_connected(bool connected);
+void status_led_process(void);
 
 #endif // STATUS_LED_H

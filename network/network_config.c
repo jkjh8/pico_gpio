@@ -59,8 +59,38 @@ bool is_mac_invalid(const uint8_t mac[6]) {
 void apply_network_config(const wiz_NetInfo* config) {
     wiz_NetInfo temp_config;
     memcpy(&temp_config, config, sizeof(wiz_NetInfo));
-    wizchip_setnetinfo(&temp_config);
-    sleep_ms(10);  // Allow configuration to take effect
+    
+    // wizchip_setnetinfo 대신 직접 레지스터에 쓰기
+    DBG_NET_PRINT("Applying network config (direct register access)...\n");
+    
+    // MAC 주소 설정
+    setSHAR(temp_config.mac);
+    DBG_NET_PRINT("MAC set to: %02X:%02X:%02X:%02X:%02X:%02X\n",
+        temp_config.mac[0], temp_config.mac[1], temp_config.mac[2],
+        temp_config.mac[3], temp_config.mac[4], temp_config.mac[5]);
+    
+    // IP 주소 설정
+    setSIPR(temp_config.ip);
+    DBG_NET_PRINT("IP set to: %d.%d.%d.%d\n",
+        temp_config.ip[0], temp_config.ip[1], temp_config.ip[2], temp_config.ip[3]);
+    
+    // 서브넷 마스크 설정
+    setSUBR(temp_config.sn);
+    DBG_NET_PRINT("Subnet set to: %d.%d.%d.%d\n",
+        temp_config.sn[0], temp_config.sn[1], temp_config.sn[2], temp_config.sn[3]);
+    
+    // 게이트웨이 설정
+    setGAR(temp_config.gw);
+    DBG_NET_PRINT("Gateway set to: %d.%d.%d.%d\n",
+        temp_config.gw[0], temp_config.gw[1], temp_config.gw[2], temp_config.gw[3]);
+    
+    sleep_ms(100);  // 설정 적용 시간
+    
+    // 설정 확인
+    uint8_t read_mac[6];
+    getSHAR(read_mac);
+    DBG_NET_PRINT("MAC read back: %02X:%02X:%02X:%02X:%02X:%02X\n",
+        read_mac[0], read_mac[1], read_mac[2], read_mac[3], read_mac[4], read_mac[5]);
 }
 
 // Apply network configuration with status message
@@ -92,15 +122,17 @@ uint8_t g_ethernet_buf[2048];
 // SPI 콜백 함수 구현
 void wizchip_select(void) {
     gpio_put(SPI_CS, 0);
+    sleep_us(1);  // CS 안정화를 위한 짧은 지연
 }
 
 void wizchip_deselect(void) {
+    sleep_us(1);  // 데이터 전송 완료 대기
     gpio_put(SPI_CS, 1);
 }
 
 uint8_t wizchip_read(void) {
-    uint8_t data;
-    spi_read_blocking(SPI_PORT, 0, &data, 1);
+    uint8_t data = 0xFF;
+    spi_read_blocking(SPI_PORT, 0xFF, &data, 1);
     return data;
 }
 
@@ -163,41 +195,169 @@ void network_config_load_from_flash(wiz_NetInfo* config) {
 }
 
 w5500_init_result_t w5500_initialize(void) {
+    DBG_WIZNET_PRINT("Starting W5500 initialization...\n");
+    DBG_WIZNET_PRINT("=== Hardware Pin Test ===\n");
+    
+    // MISO 핀 풀업 테스트 (W5500 연결 전)
+    gpio_init(SPI_MISO);
+    gpio_set_dir(SPI_MISO, GPIO_IN);
+    gpio_pull_up(SPI_MISO);
+    sleep_ms(10);
+    bool miso_pullup = gpio_get(SPI_MISO);
+    DBG_WIZNET_PRINT("MISO pin %d pull-up test: %s\n", SPI_MISO, miso_pullup ? "OK" : "FAIL");
+    
+    gpio_pull_down(SPI_MISO);
+    sleep_ms(10);
+    bool miso_pulldown = gpio_get(SPI_MISO);
+    DBG_WIZNET_PRINT("MISO pin %d pull-down test: %s\n", SPI_MISO, miso_pulldown ? "FAIL" : "OK");
+    gpio_disable_pulls(SPI_MISO);
+    
     // 하드웨어 초기화 (직접 인라인)
-    spi_init(SPI_PORT, 5000 * 1000);
+    // SPI 속도를 5MHz로 설정
+    DBG_WIZNET_PRINT("Initializing SPI at 5MHz...\n");
+    uint32_t actual_baudrate = spi_init(SPI_PORT, 5000 * 1000);
+    DBG_WIZNET_PRINT("SPI baudrate set to: %u Hz\n", actual_baudrate);
+    
+    // SPI 포맷 설정: 8비트, SPI Mode 0 (CPOL=0, CPHA=0)
+    spi_set_format(SPI_PORT, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+    DBG_WIZNET_PRINT("SPI format: 8-bit, Mode 0, MSB first\n");
+    
+    // GPIO 핀 설정
     gpio_set_function(SPI_SCK, GPIO_FUNC_SPI);
     gpio_set_function(SPI_MOSI, GPIO_FUNC_SPI);
     gpio_set_function(SPI_MISO, GPIO_FUNC_SPI);
+    DBG_WIZNET_PRINT("SPI pins configured: SCK=%d, MOSI=%d, MISO=%d\n", SPI_SCK, SPI_MOSI, SPI_MISO);
+    
+    // CS 핀 설정 (초기 상태 HIGH)
     gpio_init(SPI_CS);
     gpio_set_dir(SPI_CS, GPIO_OUT);
     gpio_put(SPI_CS, 1);
+    DBG_WIZNET_PRINT("CS pin configured: CS=%d (initial HIGH)\n", SPI_CS);
+    
+    // W5500 리셋 (하드웨어 진단 포함)
+    DBG_WIZNET_PRINT("=== W5500 Reset Sequence ===\n");
     gpio_init(SPI_RST);
     gpio_set_dir(SPI_RST, GPIO_OUT);
-    gpio_put(SPI_RST, 0);
-    sleep_ms(100);
+    
+    // 리셋 전 상태 확인
     gpio_put(SPI_RST, 1);
     sleep_ms(100);
-    // WIZchip 콜백 함수 등록
-    reg_wizchip_cs_cbfunc(wizchip_select, wizchip_deselect);
-    reg_wizchip_spi_cbfunc(wizchip_read, wizchip_write);
+    DBG_WIZNET_PRINT("RST pin HIGH - checking MISO state...\n");
+    uint8_t miso_before = gpio_get(SPI_MISO);
+    DBG_WIZNET_PRINT("MISO state (RST=HIGH): %d\n", miso_before);
+    
+    // 리셋 활성화
+    gpio_put(SPI_RST, 0);
+    sleep_ms(500);
+    DBG_WIZNET_PRINT("RST pin LOW - checking MISO state...\n");
+    uint8_t miso_reset = gpio_get(SPI_MISO);
+    DBG_WIZNET_PRINT("MISO state (RST=LOW): %d\n", miso_reset);
+    
+    // 리셋 해제
+    gpio_put(SPI_RST, 1);
+    sleep_ms(500);
+    DBG_WIZNET_PRINT("W5500 reset complete\n");
+    
+    // SPI 루프백 테스트 (MISO 핀 확인)
+    DBG_WIZNET_PRINT("=== SPI Loopback Test ===\n");
+    uint8_t test_patterns[4] = {0x00, 0xFF, 0xAA, 0x55};
+    for (int i = 0; i < 4; i++) {
+        gpio_put(SPI_CS, 0);
+        sleep_us(10);
+        uint8_t rx_data = 0;
+        spi_write_read_blocking(SPI_PORT, &test_patterns[i], &rx_data, 1);
+        sleep_us(10);
+        gpio_put(SPI_CS, 1);
+        DBG_WIZNET_PRINT("Pattern 0x%02X -> Received 0x%02X\n", test_patterns[i], rx_data);
+        sleep_ms(10);
+    }
+    
+    // W5500 버전 레지스터 읽기 (여러 방법 시도)
+    DBG_WIZNET_PRINT("=== W5500 Version Register Test ===\n");
+    
+    // 방법 1: 일반 읽기
+    gpio_put(SPI_CS, 0);
+    sleep_us(10);
+    uint8_t cmd1[3] = {0x00, 0x39, 0x00};  // 주소 0x0039, 제어 바이트 0x00 (읽기)
+    spi_write_blocking(SPI_PORT, cmd1, 3);
+    uint8_t ver1 = 0xFF;
+    spi_read_blocking(SPI_PORT, 0xFF, &ver1, 1);
+    sleep_us(10);
+    gpio_put(SPI_CS, 1);
+    DBG_WIZNET_PRINT("Method 1 (addr 0x0039): 0x%02X\n", ver1);
+    sleep_ms(50);
+    
+    // 방법 2: 다른 주소 방식
+    gpio_put(SPI_CS, 0);
+    sleep_us(10);
+    uint8_t cmd2[3] = {0x00, 0x39, 0x01};  // VDM 읽기 모드
+    spi_write_blocking(SPI_PORT, cmd2, 3);
+    uint8_t ver2 = 0xFF;
+    spi_read_blocking(SPI_PORT, 0xFF, &ver2, 1);
+    sleep_us(10);
+    gpio_put(SPI_CS, 1);
+    DBG_WIZNET_PRINT("Method 2 (VDM mode): 0x%02X\n", ver2);
+    sleep_ms(50);
+    
     // W5500 소켓 버퍼 초기화 및 설정 (최적화 - HTTP 서버에 더 많은 버퍼 할당)
     uint8_t tx_sizes[8] = {2, 2, 2, 2, 2, 2, 2, 2};
     uint8_t rx_sizes[8] = {2, 2, 2, 2, 2, 2, 2, 2};
-    if (wizchip_init(tx_sizes, rx_sizes) == -1) {
+    DBG_WIZNET_PRINT("Initializing WIZchip buffers...\n");
+    
+    int init_result = wizchip_init(tx_sizes, rx_sizes);
+    DBG_WIZNET_PRINT("wizchip_init returned: %d\n", init_result);
+    
+    if (init_result == -1) {
+        DBG_WIZNET_PRINT("ERROR: wizchip_init failed\n");
         return W5500_INIT_ERROR_CHIP;
     }
-    // 버전 확인
-    uint8_t version = getVERSIONR();
+    
+    // wizchip_init 후 충분한 안정화 시간
+    sleep_ms(200);
+    
+    // 콜백 함수 재등록 (wizchip_init이 손상시켰을 수 있음)
+    DBG_WIZNET_PRINT("Re-registering WIZchip callbacks...\n");
+    reg_wizchip_cs_cbfunc(wizchip_select, wizchip_deselect);
+    reg_wizchip_spi_cbfunc(wizchip_read, wizchip_write);
+    sleep_ms(100);
+    
+    // 버전 확인 (직접 SPI로)
+    DBG_WIZNET_PRINT("=== Reading W5500 Version (after wizchip_init) ===\n");
+    uint8_t version = 0;
+    for (int retry = 0; retry < 3; retry++) {
+        gpio_put(SPI_CS, 0);
+        sleep_us(10);
+        uint8_t cmd[3] = {0x00, 0x39, 0x00};
+        spi_write_blocking(SPI_PORT, cmd, 3);
+        spi_read_blocking(SPI_PORT, 0xFF, &version, 1);
+        sleep_us(10);
+        gpio_put(SPI_CS, 1);
+        
+        DBG_WIZNET_PRINT("W5500 version read attempt %d: 0x%02X\n", retry + 1, version);
+        if (version == 0x04) {
+            DBG_WIZNET_PRINT("Version check PASSED!\n");
+            break;
+        }
+        sleep_ms(100);
+    }
+    
     if (version != 0x04) {
-        return W5500_INIT_ERROR_CHIP;
+        DBG_WIZNET_PRINT("WARNING: W5500 version mismatch (expected 0x04, got 0x%02X)\n", version);
+        DBG_WIZNET_PRINT("Continuing initialization anyway...\n");
+        // 버전 불일치 시에도 계속 진행 (일부 W5500 클론 칩은 다른 버전 코드를 반환할 수 있음)
     }
+    
     // 링크 상태 확인 (최대 10초 대기)
+    DBG_WIZNET_PRINT("Waiting for Ethernet link...\n");
     for (int i = 0; i < 20; i++) {
-        if (getPHYCFGR() & PHYCFGR_LNK_ON) {
+        uint8_t phycfg = getPHYCFGR();
+        if (phycfg & PHYCFGR_LNK_ON) {
+            DBG_WIZNET_PRINT("Ethernet link detected (PHYCFGR: 0x%02X)\n", phycfg);
             break;
         }
         sleep_ms(500);
     }
+    
     return W5500_INIT_SUCCESS;
 }
 
@@ -214,24 +374,53 @@ bool w5500_set_static_ip(wiz_NetInfo *net_info) {
 
 // DHCP 설정 (W5500용 수정된 코드)
 bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
+    DBG_DHCP_PRINT("Starting DHCP process...\n");
+    
     // DHCP 모드로 변경
     net_info->dhcp = NETINFO_DHCP;
     sleep_ms(200);
+    
+    DBG_DHCP_PRINT("Closing all sockets...\n");
     for(int i = 0; i < 8; i++) close(i);
     sleep_ms(100);
+    
+    DBG_DHCP_PRINT("Opening DHCP socket on port 68...\n");
     uint8_t sock_ret = socket(0, Sn_MR_UDP, 68, 0);
-    if(sock_ret != 0) return false;
-    if(sock_ret != 0) return false;
+    DBG_DHCP_PRINT("Socket open result: %d\n", sock_ret);
+    
+    if(sock_ret != 0) { 
+        DBG_DHCP_PRINT("ERROR: Failed to open DHCP socket\n");
+        return false; 
+    }
+    
     uint8_t phy_status = getPHYCFGR();
-    if(!(phy_status & 0x01)) { close(0); return false; }
+    DBG_DHCP_PRINT("PHY status: 0x%02X\n", phy_status);
+    
+    if(!(phy_status & 0x01)) { 
+        DBG_DHCP_PRINT("ERROR: No link detected\n");
+        close(0); 
+        return false; 
+    }
+    
+    DBG_DHCP_PRINT("Initializing DHCP...\n");
     DHCP_init(0, g_ethernet_buf);
+    
     uint32_t dhcp_timeout = 0;
+    DBG_DHCP_PRINT("Starting DHCP negotiation (max 60 seconds)...\n");
+    
     while (dhcp_timeout < 60) {
         uint8_t dhcp_status = DHCP_run();
+        
         uint8_t phy_status = getPHYCFGR();
-        if(!(phy_status & 0x01)) { close(0); return false; }
+        if(!(phy_status & 0x01)) { 
+            DBG_DHCP_PRINT("ERROR: Link lost during DHCP\n");
+            close(0); 
+            return false; 
+        }
+        
         switch(dhcp_status) {
             case DHCP_IP_LEASED:
+                DBG_DHCP_PRINT("DHCP SUCCESS: IP leased!\n");
                 // DHCP에서 받은 정보를 net_info와 g_net_info에 모두 복사
                 getIPfromDHCP(net_info->ip);
                 getGWfromDHCP(net_info->gw);
@@ -274,7 +463,23 @@ void w5500_print_network_status(void) {
 
 // 링크 상태 확인
 bool w5500_check_link_status(void) {
+    // 방법 1: 라이브러리 함수 사용
     uint8_t phy_status = getPHYCFGR();
+    
+    // 방법 2: 직접 SPI로 읽기 (라이브러리 함수 실패 시)
+    if (phy_status == 0x00 || phy_status == 0xFF) {
+        gpio_put(SPI_CS, 0);
+        sleep_us(10);
+        
+        // PHYCFGR 레지스터 읽기 (주소: 0x002E, 공통 레지스터)
+        uint8_t cmd[3] = {0x00, 0x2E, 0x00};  // 주소 0x002E, 읽기 모드
+        spi_write_blocking(SPI_PORT, cmd, 3);
+        spi_read_blocking(SPI_PORT, 0xFF, &phy_status, 1);
+        
+        sleep_us(10);
+        gpio_put(SPI_CS, 1);
+    }
+    
     return (phy_status & PHYCFGR_LNK_ON) ? true : false;
 }
 

@@ -2,6 +2,12 @@
 #include "http_parser.h"
 #include "http_router.h"
 #include "http_response.h"
+#include "debug/debug.h"
+#include "led/status_led.h"
+#include <string.h>
+#include "http_parser.h"
+#include "http_router.h"
+#include "http_response.h"
 #include "http_handlers.h"
 #include "../network/network_config.h"
 
@@ -79,6 +85,9 @@ void http_server_process(void)
             {
                 case STATE_HTTP_IDLE:
                     if ((size = getSn_RX_RSR(sock)) > 0) {
+                        // HTTP 요청 수신 시 LED 깜빡임
+                        status_led_activity_blink();
+                        
                         if(size > HTTP_BUF_SIZE) size = HTTP_BUF_SIZE - 1;
                         
                         size = recv(sock, http_buf, size);

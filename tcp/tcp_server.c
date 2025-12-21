@@ -2,6 +2,7 @@
 #include "system/system_config.h"
 #include "handlers/command_handler.h"
 #include "gpio/gpio.h"
+#include "led/status_led.h"
 // 필요 라이브러리 include는 헤더에서 처리됨
 uint16_t tcp_port = 5050;
 
@@ -81,6 +82,9 @@ void tcp_servers_process(void) {
                 }
                 uint16_t rx_size = getSn_RX_RSR(i);
                 if (rx_size > 0) {
+                    // TCP 데이터 수신 시 LED 깜빡임
+                    status_led_activity_blink();
+                    
                     uint8_t buf[512];
                     if (rx_size > sizeof(buf)) rx_size = sizeof(buf);
                     int len = recv(i, buf, rx_size);

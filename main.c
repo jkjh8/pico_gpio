@@ -159,20 +159,12 @@ int main()
         // 네트워크 처리
         network_process();
         
-        // 네트워크 연결 상태에 따라 LED 제어
-        static bool prev_connected = false;
+        // 네트워크 연결 상태를 LED 모듈에 전달
         bool current_connected = network_is_connected();
+        status_led_set_network_connected(current_connected);
         
-        if (current_connected != prev_connected) {
-            if (current_connected) {
-                status_led_set_state(STATUS_LED_GREEN_ON);  // 연결됨: 녹색
-                DBG_MAIN_PRINT("Network connected - Status LED green\n");
-            } else {
-                status_led_set_state(STATUS_LED_RED_ON);   // 연결 끊김: 빨강색
-                DBG_MAIN_PRINT("Network disconnected - Status LED red\n");
-            }
-            prev_connected = current_connected;
-        }
+        // LED 처리 (non-blocking)
+        status_led_process();
         
         // TCP 서버 초기화 (네트워크 연결 후)
         if (!tcp_servers_initialized && network_is_connected()) {
