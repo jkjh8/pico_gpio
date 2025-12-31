@@ -70,6 +70,13 @@ void system_config_reset_to_defaults(void) {
     // 멀티캐스트 기본값
     g_system_config.multicast_enabled = true;
     
+    // DHCP 마지막 IP 정보 초기화
+    memset(g_system_config.last_dhcp_ip, 0, 4);
+    memset(g_system_config.last_dhcp_gw, 0, 4);
+    memset(g_system_config.last_dhcp_sn, 0, 4);
+    memset(g_system_config.last_dhcp_dns, 0, 4);
+    g_system_config.has_last_dhcp_ip = false;
+    
     // 디버그 플래그 기본값 (모두 활성화)
     g_system_config.debug_flags = 0xFFFFFFFF;
     
@@ -85,12 +92,18 @@ bool system_config_save_to_flash(void) {
     g_system_config.checksum = calculate_checksum(&g_system_config);
     
     // Flash 쓰기 (인터럽트 비활성화 필요)
+    // flash_range_program의 데이터 크기는 반드시 256의 배수(FLASH_PAGE_SIZE)여야 합니다.
+    uint8_t page_buffer[FLASH_PAGE_SIZE];
+    memset(page_buffer, 0, FLASH_PAGE_SIZE);
+    memcpy(page_buffer, &g_system_config, sizeof(system_config_t));
+
     uint32_t ints = save_and_disable_interrupts();
     flash_range_erase(FLASH_TARGET_OFFSET, FLASH_SECTOR_SIZE);
-    flash_range_program(FLASH_TARGET_OFFSET, (const uint8_t*)&g_system_config, sizeof(system_config_t));
+    flash_range_program(FLASH_TARGET_OFFSET, page_buffer, FLASH_PAGE_SIZE);
     restore_interrupts(ints);
     
-    DBG_MAIN_PRINT("System config saved to flash (size: %d bytes)\n", sizeof(system_config_t));
+    DBG_MAIN_PRINT("System config saved to flash (size: %d, programmed: %d)\n", 
+                   sizeof(system_config_t), FLASH_PAGE_SIZE);
     return true;
 }
 
@@ -135,6 +148,12 @@ bool system_config_load_from_flash(void) {
     DBG_MAIN_PRINT("  UART Baud: %u\n", g_system_config.uart_baud);
     DBG_MAIN_PRINT("  Multicast: %s\n", g_system_config.multicast_enabled ? "enabled" : "disabled");
     DBG_MAIN_PRINT("  Network DHCP: %s\n", g_system_config.network.dhcp == NETINFO_DHCP ? "enabled" : "disabled");
+    DBG_MAIN_PRINT("  Last DHCP IP available: %s\n", g_system_config.has_last_dhcp_ip ? "yes" : "no");
+    if (g_system_config.has_last_dhcp_ip) {
+        DBG_MAIN_PRINT("  Last DHCP IP: %d.%d.%d.%d\n", 
+            g_system_config.last_dhcp_ip[0], g_system_config.last_dhcp_ip[1],
+            g_system_config.last_dhcp_ip[2], g_system_config.last_dhcp_ip[3]);
+    }
     
     return true;
 }

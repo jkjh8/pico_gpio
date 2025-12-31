@@ -34,7 +34,7 @@ void system_restart(void) {
 // USB CDC 명령 처리
 // =============================================================================
 
-static void process_usb_cdc_commands(void)
+void process_usb_cdc_commands(void)
 {
     static char usb_line[512];
     static size_t usb_pos = 0;

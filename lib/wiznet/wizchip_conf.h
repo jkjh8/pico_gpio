@@ -76,7 +76,7 @@ extern "C" {
 
 #ifndef _WIZCHIP_
 // NOTE_LIHAN: Some sections of this code are not yet fully defined.
-#define _WIZCHIP_                      W6300   // W5100, W5100S, W5200, W5300, W5500, 6300
+#define _WIZCHIP_                      W5500   // W5100, W5100S, W5200, W5300, W5500, 6300
 #endif
 
 //

@@ -15,26 +15,30 @@ typedef struct {
     bool is_compressed;
 } embedded_file_t;
 
-extern const uint8_t favicon_ico_data[];
-extern const size_t favicon_ico_size;
-extern const size_t favicon_ico_original_size;
-extern const bool favicon_ico_is_compressed;
+extern const uint8_t favicon_svg_data[];
+extern const size_t favicon_svg_size;
+extern const size_t favicon_svg_original_size;
+extern const bool favicon_svg_is_compressed;
+extern const uint8_t icon_svg_data[];
+extern const size_t icon_svg_size;
+extern const size_t icon_svg_original_size;
+extern const bool icon_svg_is_compressed;
 extern const uint8_t index_html_data[];
 extern const size_t index_html_size;
 extern const size_t index_html_original_size;
 extern const bool index_html_is_compressed;
-extern const uint8_t assets_index_Dk_VSzyV_css_data[];
-extern const size_t assets_index_Dk_VSzyV_css_size;
-extern const size_t assets_index_Dk_VSzyV_css_original_size;
-extern const bool assets_index_Dk_VSzyV_css_is_compressed;
-extern const uint8_t assets_index_xYdIJ3jA_js_data[];
-extern const size_t assets_index_xYdIJ3jA_js_size;
-extern const size_t assets_index_xYdIJ3jA_js_original_size;
-extern const bool assets_index_xYdIJ3jA_js_is_compressed;
-extern const uint8_t assets_index_xYdIJ3jA_js_gz_data[];
-extern const size_t assets_index_xYdIJ3jA_js_gz_size;
-extern const size_t assets_index_xYdIJ3jA_js_gz_original_size;
-extern const bool assets_index_xYdIJ3jA_js_gz_is_compressed;
+extern const uint8_t script_js_data[];
+extern const size_t script_js_size;
+extern const size_t script_js_original_size;
+extern const bool script_js_is_compressed;
+extern const uint8_t server_js_data[];
+extern const size_t server_js_size;
+extern const size_t server_js_original_size;
+extern const bool server_js_is_compressed;
+extern const uint8_t style_css_data[];
+extern const size_t style_css_size;
+extern const size_t style_css_original_size;
+extern const bool style_css_is_compressed;
 
 // 임베드된 파일 테이블
 extern const embedded_file_t embedded_files[];

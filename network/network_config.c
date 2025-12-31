@@ -57,40 +57,13 @@ bool is_mac_invalid(const uint8_t mac[6]) {
 
 // Apply network configuration to W5500 chip
 void apply_network_config(const wiz_NetInfo* config) {
-    wiz_NetInfo temp_config;
-    memcpy(&temp_config, config, sizeof(wiz_NetInfo));
+    // WIZnet 라이브러리 함수를 사용하여 설정 (내부 상태 업데이트 포함)
+    wizchip_setnetinfo((wiz_NetInfo*)config);
     
-    // wizchip_setnetinfo 대신 직접 레지스터에 쓰기
-    DBG_NET_PRINT("Applying network config (direct register access)...\n");
-    
-    // MAC 주소 설정
-    setSHAR(temp_config.mac);
-    DBG_NET_PRINT("MAC set to: %02X:%02X:%02X:%02X:%02X:%02X\n",
-        temp_config.mac[0], temp_config.mac[1], temp_config.mac[2],
-        temp_config.mac[3], temp_config.mac[4], temp_config.mac[5]);
-    
-    // IP 주소 설정
-    setSIPR(temp_config.ip);
-    DBG_NET_PRINT("IP set to: %d.%d.%d.%d\n",
-        temp_config.ip[0], temp_config.ip[1], temp_config.ip[2], temp_config.ip[3]);
-    
-    // 서브넷 마스크 설정
-    setSUBR(temp_config.sn);
-    DBG_NET_PRINT("Subnet set to: %d.%d.%d.%d\n",
-        temp_config.sn[0], temp_config.sn[1], temp_config.sn[2], temp_config.sn[3]);
-    
-    // 게이트웨이 설정
-    setGAR(temp_config.gw);
-    DBG_NET_PRINT("Gateway set to: %d.%d.%d.%d\n",
-        temp_config.gw[0], temp_config.gw[1], temp_config.gw[2], temp_config.gw[3]);
-    
-    sleep_ms(100);  // 설정 적용 시간
-    
-    // 설정 확인
-    uint8_t read_mac[6];
-    getSHAR(read_mac);
-    DBG_NET_PRINT("MAC read back: %02X:%02X:%02X:%02X:%02X:%02X\n",
-        read_mac[0], read_mac[1], read_mac[2], read_mac[3], read_mac[4], read_mac[5]);
+    DBG_NET_PRINT("Network configuration applied to W5500\n");
+    DBG_NET_PRINT("IP: %d.%d.%d.%d, DHCP: %s\n", 
+        config->ip[0], config->ip[1], config->ip[2], config->ip[3],
+        config->dhcp == NETINFO_DHCP ? "DHCP" : "Static");
 }
 
 // Apply network configuration with status message
@@ -372,17 +345,32 @@ bool w5500_set_static_ip(wiz_NetInfo *net_info) {
     return true;
 }
 
-// DHCP 설정 (W5500용 수정된 코드)
+// DHCP 설정 (W5500용 수정된 코드 - 빠른 부팅 지원)
 bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
     DBG_DHCP_PRINT("Starting DHCP process...\n");
     
+    // 저장된 DHCP IP가 있으면 먼저 적용 (빠른 네트워크 연결)
+    system_config_t *sys_cfg = system_config_get();
+    if (sys_cfg->has_last_dhcp_ip) {
+        DBG_DHCP_PRINT("Found last DHCP IP, applying temporarily...\n");
+        memcpy(net_info->ip, sys_cfg->last_dhcp_ip, 4);
+        memcpy(net_info->gw, sys_cfg->last_dhcp_gw, 4);
+        memcpy(net_info->sn, sys_cfg->last_dhcp_sn, 4);
+        memcpy(net_info->dns, sys_cfg->last_dhcp_dns, 4);
+        net_info->dhcp = NETINFO_STATIC;  // 임시로 Static으로 설정
+        apply_network_config(net_info);
+        DBG_DHCP_PRINT("Last IP applied: %d.%d.%d.%d\n", 
+            net_info->ip[0], net_info->ip[1], net_info->ip[2], net_info->ip[3]);
+        sleep_ms(100);
+    }
+    
     // DHCP 모드로 변경
     net_info->dhcp = NETINFO_DHCP;
-    sleep_ms(200);
+    sleep_ms(100);
     
     DBG_DHCP_PRINT("Closing all sockets...\n");
     for(int i = 0; i < 8; i++) close(i);
-    sleep_ms(100);
+    sleep_ms(50);
     
     DBG_DHCP_PRINT("Opening DHCP socket on port 68...\n");
     uint8_t sock_ret = socket(0, Sn_MR_UDP, 68, 0);
@@ -406,9 +394,9 @@ bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
     DHCP_init(0, g_ethernet_buf);
     
     uint32_t dhcp_timeout = 0;
-    DBG_DHCP_PRINT("Starting DHCP negotiation (max 60 seconds)...\n");
+    DBG_DHCP_PRINT("Starting DHCP negotiation (max 20 seconds)...\n");
     
-    while (dhcp_timeout < 60) {
+    while (dhcp_timeout < 20) {
         uint8_t dhcp_status = DHCP_run();
         
         uint8_t phy_status = getPHYCFGR();
@@ -427,6 +415,29 @@ bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
                 getSNfromDHCP(net_info->sn);
                 getDNSfromDHCP(net_info->dns);
                 memcpy(&g_net_info, net_info, sizeof(wiz_NetInfo));
+                
+                // 새로 받은 IP와 저장된 IP 비교
+                system_config_t *sys_cfg = system_config_get();
+                bool ip_changed = false;
+                if (!sys_cfg->has_last_dhcp_ip || 
+                    memcmp(sys_cfg->last_dhcp_ip, net_info->ip, 4) != 0 ||
+                    memcmp(sys_cfg->last_dhcp_gw, net_info->gw, 4) != 0 ||
+                    memcmp(sys_cfg->last_dhcp_sn, net_info->sn, 4) != 0 ||
+                    memcmp(sys_cfg->last_dhcp_dns, net_info->dns, 4) != 0) {
+                    ip_changed = true;
+                    DBG_DHCP_PRINT("DHCP IP changed or first time, saving to flash...\n");
+                    memcpy(sys_cfg->last_dhcp_ip, net_info->ip, 4);
+                    memcpy(sys_cfg->last_dhcp_gw, net_info->gw, 4);
+                    memcpy(sys_cfg->last_dhcp_sn, net_info->sn, 4);
+                    memcpy(sys_cfg->last_dhcp_dns, net_info->dns, 4);
+                    sys_cfg->has_last_dhcp_ip = true;
+                    system_config_save_to_flash();
+                    DBG_DHCP_PRINT("New DHCP IP saved: %d.%d.%d.%d\n",
+                        net_info->ip[0], net_info->ip[1], net_info->ip[2], net_info->ip[3]);
+                } else {
+                    DBG_DHCP_PRINT("DHCP IP unchanged, no save needed\n");
+                }
+                
                 apply_network_config(net_info);
                 close(0);
                 return true;
@@ -435,13 +446,20 @@ bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
                 sleep_ms(1000);
                 if(socket(0, Sn_MR_UDP, 68, 0) != 0) return false;
                 DHCP_init(0, g_ethernet_buf);
-                // dhcp_timeout을 리셋하지 말고 계속 증가
+                dhcp_timeout++;
                 break;
             default:
+                // DHCP_run()이 진행 중인 경우
+                sleep_ms(100);
+                static uint32_t last_tick = 0;
+                uint32_t current_tick = to_ms_since_boot(get_absolute_time());
+                if (current_tick - last_tick > 1000) {
+                    dhcp_timeout++;
+                    last_tick = current_tick;
+                    DBG_DHCP_PRINT("DHCP waiting... %d/20\n", dhcp_timeout);
+                }
                 break;
         }
-        sleep_ms(1000);
-        dhcp_timeout++;
     }
     close(0);
     return false;

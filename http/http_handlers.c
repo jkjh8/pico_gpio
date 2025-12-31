@@ -232,10 +232,12 @@ void http_handler_gpio_config_info(const http_request_t *request, http_response_
     
     uint8_t device_id = get_gpio_device_id();
     bool auto_resp = get_gpio_auto_response();
+    gpio_rt_mode_t rt_mode = get_gpio_rt_mode();
     
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "device_id", device_id);
-    cJSON_AddStringToObject(root, "rt_mode", get_gpio_rt_mode() == GPIO_RT_MODE_CHANNEL ? "channel" : "bytes");
+    cJSON_AddStringToObject(root, "comm_mode", rt_mode == GPIO_RT_MODE_CHANNEL ? "text" : "json");
+    cJSON_AddStringToObject(root, "rt_mode", rt_mode == GPIO_RT_MODE_CHANNEL ? "channel" : "bytes");
     cJSON_AddStringToObject(root, "trigger_mode", get_gpio_trigger_mode() == GPIO_MODE_TRIGGER ? "trigger" : "toggle");
     cJSON_AddBoolToObject(root, "auto_response", auto_resp);
 
@@ -257,12 +259,13 @@ void http_handler_gpio_config_setup(const http_request_t *request, http_response
     DBG_HTTP_PRINT("Raw JSON: %s\n", request->content);
 
     cJSON *device_id_item = cJSON_GetObjectItem(json, "device_id");
+    cJSON *comm_mode_item = cJSON_GetObjectItem(json, "comm_mode");
     cJSON *rt_mode_item = cJSON_GetObjectItem(json, "rt_mode");
     cJSON *trigger_mode_item = cJSON_GetObjectItem(json, "trigger_mode");
     cJSON *auto_response_item = cJSON_GetObjectItem(json, "auto_response");
 
-    DBG_HTTP_PRINT("device_id_item: %p, rt_mode_item: %p, trigger_mode_item: %p, auto_response_item: %p\n", 
-        device_id_item, rt_mode_item, trigger_mode_item, auto_response_item);
+    DBG_HTTP_PRINT("device_id_item: %p, comm_mode_item: %p, rt_mode_item: %p, trigger_mode_item: %p, auto_response_item: %p\n", 
+        device_id_item, comm_mode_item, rt_mode_item, trigger_mode_item, auto_response_item);
 
     // 현재 설정값 가져오기
     uint8_t device_id = get_gpio_device_id();
@@ -283,11 +286,19 @@ void http_handler_gpio_config_setup(const http_request_t *request, http_response
             DBG_HTTP_PRINT("device_id out of range: %d\n", new_id);
             valid = false;
         }
-    } else {
-    DBG_HTTP_PRINT("device_id_item not found or not a number\n");
     }
 
-    // RT 모드 파싱
+    // 통신 모드 파싱 (comm_mode: "text" -> channel, "json" -> bytes)
+    if (comm_mode_item && cJSON_IsString(comm_mode_item)) {
+        const char* mode_str = comm_mode_item->valuestring;
+        if (strcmp(mode_str, "json") == 0) {
+            rt_mode = GPIO_RT_MODE_BYTES;
+        } else if (strcmp(mode_str, "text") == 0) {
+            rt_mode = GPIO_RT_MODE_CHANNEL;
+        }
+    }
+
+    // RT 모드 파싱 (기존 필드 유지)
     if (rt_mode_item && cJSON_IsString(rt_mode_item)) {
         const char* mode_str = rt_mode_item->valuestring;
         if (strcmp(mode_str, "bytes") == 0) {
@@ -370,6 +381,8 @@ void http_handler_get_status(const http_request_t *request, http_response_t *res
     gpio_config_t* gpio_cfg = system_config_get_gpio();
     cJSON_AddNumberToObject(gpio, "device_id", gpio_cfg->device_id);
     cJSON_AddBoolToObject(gpio, "auto_response", gpio_cfg->auto_response);
+    cJSON_AddStringToObject(gpio, "comm_mode", 
+        gpio_cfg->rt_mode == GPIO_RT_MODE_CHANNEL ? "text" : "json");
     cJSON_AddStringToObject(gpio, "rt_mode", 
         gpio_cfg->rt_mode == GPIO_RT_MODE_CHANNEL ? "channel" : "bytes");
     cJSON_AddStringToObject(gpio, "trigger_mode",

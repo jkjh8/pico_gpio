@@ -134,18 +134,17 @@ cmd_result_t cmd_get_ip(char* response, size_t response_size) {
     wiz_NetInfo current_info;
     wizchip_getnetinfo(&current_info);
 
-    uint8_t ip[4];
-    getSIPR(ip);
-
     snprintf(response, response_size,
              "IP Address: %d.%d.%d.%d\r\n"
              "Subnet Mask: %d.%d.%d.%d\r\n"
              "Gateway: %d.%d.%d.%d\r\n"
+             "DNS: %d.%d.%d.%d\r\n"
              "DHCP Mode: %s\r\n",
-             ip[0], ip[1], ip[2], ip[3],
+             current_info.ip[0], current_info.ip[1], current_info.ip[2], current_info.ip[3],
              current_info.sn[0], current_info.sn[1], current_info.sn[2], current_info.sn[3],
              current_info.gw[0], current_info.gw[1], current_info.gw[2], current_info.gw[3],
-             current_info.dhcp == NETINFO_DHCP ? "DHCP" : "Static");
+             current_info.dns[0], current_info.dns[1], current_info.dns[2], current_info.dns[3],
+             g_net_info.dhcp == NETINFO_DHCP ? "DHCP" : "Static");
 
     return CMD_SUCCESS;
 }

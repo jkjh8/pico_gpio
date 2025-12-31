@@ -35,6 +35,13 @@ typedef struct
     // 멀티캐스트 설정
     bool multicast_enabled;
     
+    // DHCP로 마지막에 받은 IP 정보 (빠른 부팅용)
+    uint8_t last_dhcp_ip[4];
+    uint8_t last_dhcp_gw[4];
+    uint8_t last_dhcp_sn[4];
+    uint8_t last_dhcp_dns[4];
+    bool has_last_dhcp_ip;  // 저장된 DHCP IP가 있는지 플래그
+    
     // 디버그 플래그
     uint32_t debug_flags;
     

@@ -96,8 +96,9 @@ int network_dhcp_process(void) {
             break;
     }
 
-    // timeout after 60 seconds
-    if ((now - dhcp_start_time) > 60000) {
+    // timeout after 20 seconds (빠른 DHCP를 위해 60초에서 단축)
+    if ((now - dhcp_start_time) > 20000) {
+        DBG_DHCP_PRINT("DHCP timeout (20s), stopping\n");
         if (dhcp_socket >= 0) close(0);
         dhcp_socket = -1;
         dhcp_state = 0;

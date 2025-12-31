@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pico Control</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <div
+        id="loading-message"
+        style="margin-top: 16px; font-weight: 500">
+        Loading...
+      </div>
+    </div>
+
+      <!-- Toast Container -->
+      <div id="toast-container"></div>
+
+      <!-- Header -->
+      <header>
+        <button
+          class="header-btn"
+          id="menu-toggle">
+          <svg class="icon"><use href="icon.svg#logo2"></use></svg>
+        </button>
+        <div class="header-title">MIC CONTROL</div>
+        <div
+          class="header-mac"
+          id="header-mac">
+          N/A
+        </div>
+      </header>
+
+      <!-- Sidebar -->
+      <aside id="sidebar">
+        <ul class="nav-list">
+          <li
+            class="nav-item active"
+            data-target="page-summary">
+            <svg class="nav-icon"><use href="icon.svg#home"></use></svg>
+            <div class="nav-label">
+              <span class="nav-label-main">Home</span>
+              <span class="nav-label-sub">Status Summary</span>
+            </div>
+          </li>
+          <li
+            class="nav-item"
+            data-target="page-settings">
+            <svg class="nav-icon"><use href="icon.svg#settings"></use></svg>
+            <div class="nav-label">
+              <span class="nav-label-main">Settings</span>
+              <span class="nav-label-sub">System Configuration</span>
+            </div>
+          </li>
+        </ul>
+      </aside>
+
+      <div class="layout">
+        <!-- Main Content -->
+        <main id="main-content">
+          <!-- Page: Summary -->
+          <div
+            id="page-summary"
+            class="page">
+            <div class="card">
+              <div class="card-header">
+                <svg class="icon text-primary">
+                  <use href="icon.svg#home"></use>
+                </svg>
+                <span class="card-title">System Status</span>
+              </div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label>Network</label>
+                  <div
+                    class="row items-center justify-between"
+                    style="
+                      padding: 8px;
+                      background: #f5f5f5;
+                      border-radius: 4px;
+                      margin-bottom: 8px;
+                    ">
+                    <span>MAC Address</span>
+                    <strong id="sum-mac">Loading...</strong>
+                  </div>
+                  <div
+                    class="row items-center justify-between"
+                    style="
+                      padding: 8px;
+                      background: #f5f5f5;
+                      border-radius: 4px;
+                      margin-bottom: 8px;
+                    ">
+                    <span>DHCP</span>
+                    <strong id="sum-dhcp">Loading...</strong>
+                  </div>
+                  <div
+                    class="row items-center justify-between"
+                    style="
+                      padding: 8px;
+                      background: #f5f5f5;
+                      border-radius: 4px;
+                      margin-bottom: 8px;
+                    ">
+                    <span>IP Address</span>
+                    <strong id="sum-ip">Loading...</strong>
+                  </div>
+                  <div
+                    class="row items-center justify-between"
+                    style="
+                      padding: 8px;
+                      background: #f5f5f5;
+                      border-radius: 4px;
+                      margin-bottom: 8px;
+                    ">
+                    <span>Netmask</span>
+                    <strong id="sum-mask">Loading...</strong>
+                  </div>
+                  <div
+                    class="row items-center justify-between"
+                    style="
+                      padding: 8px;
+                      background: #f5f5f5;
+                      border-radius: 4px;
+                      margin-bottom: 8px;
+                    ">
+                    <span>Gateway</span>
+                    <strong id="sum-gateway">Loading...</strong>
+                  </div>
+                  <div
+                    class="row items-center justify-between"
+                    style="
+                      padding: 8px;
+                      background: #f5f5f5;
+                      border-radius: 4px;
+                    ">
+                    <span>DNS</span>
+                    <strong id="sum-dns">Loading...</strong>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label>Communication</label>
+                  <div
+                    class="row items-center justify-between"
+                    style="
+                      padding: 8px;
+                      background: #f5f5f5;
+                      border-radius: 4px;
+                      margin-bottom: 8px;
+                    ">
+                    <span>TCP Port</span>
+                    <strong id="sum-tcp">Loading...</strong>
+                  </div>
+                  <div
+                    class="row items-center justify-between"
+                    style="
+                      padding: 8px;
+                      background: #f5f5f5;
+                      border-radius: 4px;
+                    ">
+                    <span>Baud Rate</span>
+                    <strong id="sum-baud">Loading...</strong>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label>GPIO Control</label>
+                  <div
+                    class="row items-center justify-between"
+                    style="
+                      padding: 8px;
+                      background: #f5f5f5;
+                      border-radius: 4px;
+                      margin-bottom: 8px;
+                    ">
+                    <span>Device ID</span>
+                    <strong id="sum-id">Loading...</strong>
+                  </div>
+                  <div
+                    class="row items-center justify-between"
+                    style="
+                      padding: 8px;
+                      background: #f5f5f5;
+                      border-radius: 4px;
+                    ">
+                    <span>Mode</span>
+                    <strong id="sum-mode">Loading...</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Page: Settings -->
+          <div
+            id="page-settings"
+            class="page hidden">
+            <!-- Network Status Card -->
+            <div class="card">
+              <div class="card-header">
+                <svg class="icon text-primary">
+                  <use href="icon.svg#network-node"></use>
+                </svg>
+                <span class="card-title">Network Status</span>
+              </div>
+              <form id="network-form">
+                <div class="card-body">
+                  <div class="form-row">
+                    <div class="row items-center gap-sm">
+                      <svg class="icon-sm text-primary">
+                        <use href="icon.svg#adjust"></use>
+                      </svg>
+                      <span>DHCP</span>
+                    </div>
+                    <label class="toggle-switch">
+                      <input
+                        type="checkbox"
+                        id="net-dhcp" />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+
+                  <div class="form-group">
+                    <label>IP Address</label>
+                    <input
+                      type="text"
+                      id="net-ip"
+                      required
+                      pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$" />
+                  </div>
+                  <div class="form-group">
+                    <label>Netmask</label>
+                    <input
+                      type="text"
+                      id="net-mask"
+                      required
+                      pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$" />
+                  </div>
+                  <div class="form-group">
+                    <label>Gateway</label>
+                    <input
+                      type="text"
+                      id="net-gateway"
+                      required
+                      pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$" />
+                  </div>
+                  <div class="form-group">
+                    <label>DNS</label>
+                    <input
+                      type="text"
+                      id="net-dns"
+                      required
+                      pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$" />
+                  </div>
+                </div>
+                <div class="card-actions">
+                  <button
+                    type="submit"
+                    class="btn btn-flat btn-round">
+                    <svg class="icon">
+                      <use href="icon.svg#check_circle"></use>
+                    </svg>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Communication Card -->
+            <div class="card">
+              <div class="card-header">
+                <svg class="icon text-primary">
+                  <use href="icon.svg#adjust"></use>
+                </svg>
+                <span class="card-title">Communication</span>
+              </div>
+              <form id="comm-form">
+                <div class="card-body">
+                  <div class="form-group">
+                    <div
+                      class="row items-center gap-sm"
+                      style="margin-bottom: 8px">
+                      <svg class="icon-sm text-primary">
+                        <use href="icon.svg#terminal"></use>
+                      </svg>
+                      <span>TCP PORT</span>
+                    </div>
+                    <input
+                      type="number"
+                      id="comm-tcp"
+                      required
+                      min="1"
+                      max="65535" />
+                  </div>
+
+                  <div class="form-group">
+                    <div
+                      class="row items-center gap-sm"
+                      style="margin-bottom: 8px">
+                      <svg class="icon-sm text-primary">
+                        <use href="icon.svg#terminal"></use>
+                      </svg>
+                      <span>RS232</span>
+                    </div>
+                    <select id="comm-baud">
+                      <option value="9600">9600</option>
+                      <option value="19200">19200</option>
+                      <option value="38400">38400</option>
+                      <option value="57600">57600</option>
+                      <option value="115200">115200</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="card-actions">
+                  <button
+                    type="submit"
+                    class="btn btn-flat btn-round">
+                    <svg class="icon">
+                      <use href="icon.svg#check_circle"></use>
+                    </svg>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- GPIO Card -->
+            <div class="card">
+              <div class="card-header">
+                <svg class="icon text-primary">
+                  <use href="icon.svg#adjust"></use>
+                </svg>
+                <span class="card-title">GPIO Settings</span>
+              </div>
+              <form id="gpio-form">
+                <div class="card-body">
+                  <div class="form-group">
+                    <div
+                      class="row items-center gap-sm"
+                      style="margin-bottom: 8px">
+                      <svg class="icon-sm text-primary">
+                        <use href="icon.svg#terminal"></use>
+                      </svg>
+                      <span>DEVICE ID</span>
+                    </div>
+                    <input
+                      type="number"
+                      id="gpio-id"
+                      required />
+                  </div>
+
+                  <div class="form-group">
+                    <div
+                      class="row items-center gap-sm"
+                      style="margin-bottom: 8px">
+                      <svg class="icon-sm text-primary">
+                        <use href="icon.svg#terminal"></use>
+                      </svg>
+                      <span>MODE</span>
+                    </div>
+                    <select id="gpio-mode">
+                      <option value="text">TEXT</option>
+                      <option value="json">JSON</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <div
+                      class="row items-center gap-sm"
+                      style="margin-bottom: 8px">
+                      <svg class="icon-sm text-primary">
+                        <use href="icon.svg#terminal"></use>
+                      </svg>
+                      <span>AUTO RESPONSE</span>
+                    </div>
+                    <select id="gpio-auto">
+                      <option value="true">ENABLED</option>
+                      <option value="false">DISABLED</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="card-actions">
+                  <button
+                    type="submit"
+                    class="btn btn-flat btn-round">
+                    <svg class="icon">
+                      <use href="icon.svg#check_circle"></use>
+                    </svg>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- System Settings Card -->
+            <div class="card">
+              <div class="card-header">
+                <svg class="icon text-primary">
+                  <use href="icon.svg#settings"></use>
+                </svg>
+                <span class="card-title">System Actions</span>
+              </div>
+              <div class="card-body">
+                <div class="row items-center justify-between">
+                  <div class="row items-center gap-sm">
+                    <svg class="icon-sm text-primary">
+                      <use href="icon.svg#power"></use>
+                    </svg>
+                    <span>REBOOT</span>
+                  </div>
+                  <button
+                    id="btn-reboot"
+                    class="btn btn-flat btn-round">
+                    <svg class="icon"><use href="icon.svg#power"></use></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <script src="script.js"></script>
+    </body>
+  </html>
+</html>
