@@ -1,48 +1,577 @@
+<!-- @format -->
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0" />
     <title>Pico Control</title>
-    <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css" />
+    <style>
+      :root {
+        --primary: #1976d2;
+        --secondary: #26a69a;
+        --positive: #21ba45;
+        --negative: #c10015;
+        --bg-grey: #f5f5f5;
+        --border-color: #e0e0e0;
+        --drawer-width: 250px;
+        --header-height: 50px;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        background-color: var(--bg-grey);
+        color: #333;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        font-size: 0.8rem;
+      }
+      .layout {
+        display: flex;
+        flex: 1;
+        height: calc(100vh - var(--header-height));
+      }
+      header {
+        height: var(--header-height);
+        background-color: var(--primary);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+        z-index: 10;
+      }
+      .header-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 50%;
+        margin-right: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .header-btn:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+      }
+      .header-title {
+        font-size: 1.5rem;
+        font-weight: bold;
+        flex: 1;
+      }
+      .header-mac {
+        font-size: 0.7rem;
+        color: #fff;
+      }
+      aside {
+        width: var(--drawer-width);
+        background-color: #fff;
+        border-right: 1px solid var(--border-color);
+        transition: transform 0.3s ease;
+        position: relative;
+        height: 100%;
+        z-index: 5;
+      }
+      .nav-list {
+        list-style: none;
+        padding: 8px 0;
+      }
+      .nav-item {
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        color: #333;
+      }
+      .nav-item:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+      }
+      .nav-item.active {
+        color: var(--primary);
+        background-color: rgba(25, 118, 210, 0.1);
+      }
+      .nav-icon {
+        margin-right: 16px;
+        width: 24px;
+        height: 24px;
+        fill: currentColor;
+        color: var(--primary);
+      }
+      .nav-label {
+        display: flex;
+        flex-direction: column;
+      }
+      .nav-label-main {
+        font-size: 0.9rem;
+        font-weight: 500;
+      }
+      .nav-label-sub {
+        font-size: 0.75rem;
+        color: #757575;
+      }
+      main {
+        flex: 1;
+        padding: 24px;
+        overflow-y: auto;
+      }
+      .page {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        align-items: flex-start;
+      }
+      .card {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+        margin-bottom: 24px;
+        max-width: 400px;
+        flex: 1 1 400px;
+        overflow: hidden;
+      }
+      .card-header {
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid #efefef;
+        gap: 16px;
+        background-color: #f2f2f2;
+      }
+      .card-title {
+        font-size: 1rem;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .card-body {
+        padding: 16px 16px 8px;
+      }
+      .card-actions {
+        padding: 8px 16px 16px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .form-group {
+        margin-bottom: 8px;
+      }
+      .form-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--primary);
+        font-size: 0.8rem;
+      }
+      input[type='text'],
+      input[type='number'],
+      select {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        background: #f2f2f2;
+        transition: border-color 0.2s;
+      }
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: var(--primary);
+        background: #fff;
+      }
+      input:disabled {
+        color: #999;
+        background: #e0e0e0;
+      }
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 22px;
+      }
+      .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: 0.4s;
+        border-radius: 34px;
+      }
+      .slider:before {
+        position: absolute;
+        content: '';
+        height: 16px;
+        width: 16px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: 0.4s;
+        border-radius: 50%;
+      }
+      input:checked + .slider {
+        background-color: var(--primary);
+      }
+      input:checked + .slider:before {
+        transform: translateX(18px);
+      }
+      .btn {
+        border: none;
+        border-radius: 4px;
+        padding: 8px 16px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      .btn-primary {
+        background-color: var(--primary);
+        color: #fff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+      }
+      .btn-primary:hover {
+        background-color: #1565c0;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      }
+      .btn-expand {
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border-radius: 50%;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .btn-expand .btn-text {
+        max-width: 0;
+        opacity: 0;
+        overflow: hidden;
+        transition: all 0.3s ease;
+      }
+      .btn-expand:hover {
+        width: auto;
+        padding: 0 14px 0 10px;
+        border-radius: 20px;
+        gap: 6px;
+      }
+      .btn-expand:hover .btn-text {
+        max-width: 100px;
+        opacity: 1;
+      }
+      .btn-flat {
+        background: none;
+        color: var(--primary);
+      }
+      .btn-flat:hover {
+        background-color: rgba(25, 118, 210, 0.1);
+      }
+      .icon {
+        width: 24px;
+        height: 24px;
+        fill: currentColor;
+      }
+      .icon-sm {
+        width: 20px;
+        height: 20px;
+      }
+      .text-primary {
+        color: var(--primary);
+      }
+      .hidden {
+        display: none !important;
+      }
+      #confirm-modal.modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(3px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      }
+      .modal-content {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        max-width: 400px;
+        width: 90%;
+        animation: modalSlideIn 0.3s ease;
+      }
+      @keyframes modalSlideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .modal-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .modal-header h3 {
+        margin: 0;
+        font-size: 1.125rem;
+        font-weight: 500;
+      }
+      .modal-body {
+        padding: 24px;
+      }
+      .modal-body p {
+        margin: 0;
+        color: #666;
+        line-height: 1.5;
+      }
+      .modal-actions {
+        padding: 16px 24px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        border-top: 1px solid #eee;
+      }
+      .row {
+        display: flex;
+        flex-direction: row;
+      }
+      .items-center {
+        align-items: center;
+      }
+      .justify-between {
+        justify-content: space-between;
+      }
+      .gap-sm {
+        gap: 8px;
+      }
+      #loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          135deg,
+          rgba(25, 118, 210, 0.5) 0%,
+          rgba(21, 101, 192, 0.5) 100%
+        );
+        backdrop-filter: blur(8px);
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        animation: overlayFadeIn 0.3s ease;
+      }
+      @keyframes overlayFadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      .spinner {
+        position: relative;
+        width: 60px;
+        height: 60px;
+      }
+      .spinner::before,
+      .spinner::after {
+        content: '';
+        position: absolute;
+        border-radius: 50%;
+      }
+      .spinner::before {
+        width: 60px;
+        height: 60px;
+        border: 10px solid rgba(255, 255, 255, 0.3);
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+      .spinner::after {
+        width: 60px;
+        height: 60px;
+        border: 10px solid transparent;
+        border-top-color: #fff;
+        border-right-color: #fff;
+        animation: spin 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(1.1);
+          opacity: 0.5;
+        }
+      }
+      #loading-message {
+        color: white;
+        font-size: 1rem;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+        animation: textGlow 1.5s ease-in-out infinite;
+      }
+      @keyframes textGlow {
+        0%,
+        100% {
+          text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+        50% {
+          text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+        }
+      }
+      #toast-container {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 2000;
+      }
+      .toast {
+        background: #333;
+        color: #fff;
+        padding: 12px 24px;
+        border-radius: 4px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        box-shadow: 0 3px 5px rgba(0, 0, 0, 0.2);
+        animation: fadeIn 0.3s, fadeOut 0.3s 2.7s forwards;
+      }
+      .toast.positive {
+        background-color: var(--positive);
+      }
+      .toast.negative {
+        background-color: var(--negative);
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes fadeOut {
+        from {
+          opacity: 1;
+        }
+        to {
+          opacity: 0;
+        }
+      }
+      @media (max-width: 600px) {
+        aside {
+          transform: translateX(-100%);
+        }
+        main {
+          margin-left: 0;
+        }
+      }
+    </style>
   </head>
   <body>
-    <!-- Loading Overlay -->
-    <div id="loading-overlay">
+    <div
+      id="loading-overlay"
+      class="hidden">
       <div class="spinner"></div>
       <div
         id="loading-message"
-        style="margin-top: 16px; font-weight: 500">
+        style="margin-top: 64px; font-weight: 500">
         Loading...
       </div>
     </div>
-
-      <!-- Toast Container -->
-      <div id="toast-container"></div>
-
-      <!-- Header -->
-      <header>
-        <button
-          class="header-btn"
-          id="menu-toggle">
-          <svg class="icon"><use href="icon.svg#logo2"></use></svg>
-        </button>
-        <div class="header-title">MIC CONTROL</div>
-        <div
-          class="header-mac"
-          id="header-mac">
-          N/A
+    <div id="toast-container"></div>
+    <div
+      id="confirm-modal"
+      class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <svg class="icon text-primary"><use href="#power"></use></svg>
+          <h3>Confirm Reboot</h3>
         </div>
-      </header>
-
-      <!-- Sidebar -->
+        <div class="modal-body">
+          <p>Are you sure you want to reboot the system?</p>
+        </div>
+        <div class="modal-actions">
+          <button
+            id="modal-cancel"
+            class="btn btn-flat">
+            Cancel
+          </button>
+          <button
+            id="modal-confirm"
+            class="btn btn-primary">
+            Reboot
+          </button>
+        </div>
+      </div>
+    </div>
+    <header>
+      <button class="header-btn">
+        <svg class="icon"><use href="#logo2"></use></svg>
+      </button>
+      <div class="header-title">MIC CONTROL</div>
+      <div
+        class="header-mac"
+        id="header-mac">
+        N/A
+      </div>
+    </header>
+    <div class="layout">
       <aside id="sidebar">
         <ul class="nav-list">
           <li
             class="nav-item active"
-            data-target="page-summary">
-            <svg class="nav-icon"><use href="icon.svg#home"></use></svg>
+            data-page="summary">
+            <svg class="nav-icon"><use href="#home"></use></svg>
             <div class="nav-label">
               <span class="nav-label-main">Home</span>
               <span class="nav-label-sub">Status Summary</span>
@@ -50,8 +579,8 @@
           </li>
           <li
             class="nav-item"
-            data-target="page-settings">
-            <svg class="nav-icon"><use href="icon.svg#settings"></use></svg>
+            data-page="settings">
+            <svg class="nav-icon"><use href="#settings"></use></svg>
             <div class="nav-label">
               <span class="nav-label-main">Settings</span>
               <span class="nav-label-sub">System Configuration</span>
@@ -59,136 +588,84 @@
           </li>
         </ul>
       </aside>
-
-      <div class="layout">
-        <!-- Main Content -->
-        <main id="main-content">
-          <!-- Page: Summary -->
-          <div
-            id="page-summary"
-            class="page">
-            <div class="card">
-              <div class="card-header">
-                <svg class="icon text-primary">
-                  <use href="icon.svg#home"></use>
-                </svg>
-                <span class="card-title">System Status</span>
-              </div>
-              <div class="card-body">
-                <div class="form-group">
-                  <label>Network</label>
-                  <div
-                    class="row items-center justify-between"
-                    style="
-                      padding: 8px;
-                      background: #f5f5f5;
-                      border-radius: 4px;
-                      margin-bottom: 8px;
-                    ">
+      <main>
+        <div
+          id="page-summary"
+          class="page">
+          <div class="card">
+            <div class="card-header">
+              <svg class="icon text-primary"><use href="#home"></use></svg>
+              <span class="card-title">System Status</span>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label>Network</label>
+                <div
+                  style="
+                    padding: 8px 8px 8px 24px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                  ">
+                  <div class="row items-center justify-between">
                     <span>MAC Address</span>
                     <strong id="sum-mac">Loading...</strong>
                   </div>
-                  <div
-                    class="row items-center justify-between"
-                    style="
-                      padding: 8px;
-                      background: #f5f5f5;
-                      border-radius: 4px;
-                      margin-bottom: 8px;
-                    ">
+                  <div class="row items-center justify-between">
                     <span>DHCP</span>
                     <strong id="sum-dhcp">Loading...</strong>
                   </div>
-                  <div
-                    class="row items-center justify-between"
-                    style="
-                      padding: 8px;
-                      background: #f5f5f5;
-                      border-radius: 4px;
-                      margin-bottom: 8px;
-                    ">
+                  <div class="row items-center justify-between">
                     <span>IP Address</span>
                     <strong id="sum-ip">Loading...</strong>
                   </div>
-                  <div
-                    class="row items-center justify-between"
-                    style="
-                      padding: 8px;
-                      background: #f5f5f5;
-                      border-radius: 4px;
-                      margin-bottom: 8px;
-                    ">
+                  <div class="row items-center justify-between">
                     <span>Netmask</span>
                     <strong id="sum-mask">Loading...</strong>
                   </div>
-                  <div
-                    class="row items-center justify-between"
-                    style="
-                      padding: 8px;
-                      background: #f5f5f5;
-                      border-radius: 4px;
-                      margin-bottom: 8px;
-                    ">
+                  <div class="row items-center justify-between">
                     <span>Gateway</span>
                     <strong id="sum-gateway">Loading...</strong>
                   </div>
-                  <div
-                    class="row items-center justify-between"
-                    style="
-                      padding: 8px;
-                      background: #f5f5f5;
-                      border-radius: 4px;
-                    ">
+                  <div class="row items-center justify-between">
                     <span>DNS</span>
                     <strong id="sum-dns">Loading...</strong>
                   </div>
                 </div>
-
-                <div class="form-group">
-                  <label>Communication</label>
-                  <div
-                    class="row items-center justify-between"
-                    style="
-                      padding: 8px;
-                      background: #f5f5f5;
-                      border-radius: 4px;
-                      margin-bottom: 8px;
-                    ">
+              </div>
+              <div class="form-group">
+                <label>Communication</label>
+                <div
+                  style="
+                    padding: 8px 8px 8px 24px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                  ">
+                  <div class="row items-center justify-between">
                     <span>TCP Port</span>
                     <strong id="sum-tcp">Loading...</strong>
                   </div>
-                  <div
-                    class="row items-center justify-between"
-                    style="
-                      padding: 8px;
-                      background: #f5f5f5;
-                      border-radius: 4px;
-                    ">
+                  <div class="row items-center justify-between">
                     <span>Baud Rate</span>
                     <strong id="sum-baud">Loading...</strong>
                   </div>
                 </div>
-
-                <div class="form-group">
-                  <label>GPIO Control</label>
-                  <div
-                    class="row items-center justify-between"
-                    style="
-                      padding: 8px;
-                      background: #f5f5f5;
-                      border-radius: 4px;
-                      margin-bottom: 8px;
-                    ">
+              </div>
+              <div class="form-group">
+                <label>GPIO Control</label>
+                <div
+                  style="
+                    padding: 8px 8px 8px 24px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                  ">
+                  <div class="row items-center justify-between">
                     <span>Device ID</span>
                     <strong id="sum-id">Loading...</strong>
                   </div>
-                  <div
-                    class="row items-center justify-between"
-                    style="
-                      padding: 8px;
-                      background: #f5f5f5;
-                      border-radius: 4px;
-                    ">
+                  <div class="row items-center justify-between">
                     <span>Mode</span>
                     <strong id="sum-mode">Loading...</strong>
                   </div>
@@ -196,234 +673,556 @@
               </div>
             </div>
           </div>
-
-          <!-- Page: Settings -->
-          <div
-            id="page-settings"
-            class="page hidden">
-            <!-- Network Status Card -->
-            <div class="card">
-              <div class="card-header">
-                <svg class="icon text-primary">
-                  <use href="icon.svg#network-node"></use>
-                </svg>
-                <span class="card-title">Network Status</span>
-              </div>
-              <form id="network-form">
-                <div class="card-body">
-                  <div class="form-row">
-                    <div class="row items-center gap-sm">
-                      <svg class="icon-sm text-primary">
-                        <use href="icon.svg#adjust"></use>
-                      </svg>
-                      <span>DHCP</span>
-                    </div>
-                    <label class="toggle-switch">
-                      <input
-                        type="checkbox"
-                        id="net-dhcp" />
-                      <span class="slider"></span>
-                    </label>
-                  </div>
-
-                  <div class="form-group">
-                    <label>IP Address</label>
-                    <input
-                      type="text"
-                      id="net-ip"
-                      required
-                      pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$" />
-                  </div>
-                  <div class="form-group">
-                    <label>Netmask</label>
-                    <input
-                      type="text"
-                      id="net-mask"
-                      required
-                      pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$" />
-                  </div>
-                  <div class="form-group">
-                    <label>Gateway</label>
-                    <input
-                      type="text"
-                      id="net-gateway"
-                      required
-                      pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$" />
-                  </div>
-                  <div class="form-group">
-                    <label>DNS</label>
-                    <input
-                      type="text"
-                      id="net-dns"
-                      required
-                      pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$" />
-                  </div>
-                </div>
-                <div class="card-actions">
-                  <button
-                    type="submit"
-                    class="btn btn-flat btn-round">
-                    <svg class="icon">
-                      <use href="icon.svg#check_circle"></use>
-                    </svg>
-                  </button>
-                </div>
-              </form>
+        </div>
+        <div
+          id="page-settings"
+          class="page hidden">
+          <div class="card">
+            <div class="card-header">
+              <svg class="icon text-primary">
+                <use href="#network-node"></use>
+              </svg>
+              <span class="card-title">Network Status</span>
             </div>
-
-            <!-- Communication Card -->
-            <div class="card">
-              <div class="card-header">
-                <svg class="icon text-primary">
-                  <use href="icon.svg#adjust"></use>
-                </svg>
-                <span class="card-title">Communication</span>
-              </div>
-              <form id="comm-form">
-                <div class="card-body">
-                  <div class="form-group">
-                    <div
-                      class="row items-center gap-sm"
-                      style="margin-bottom: 8px">
-                      <svg class="icon-sm text-primary">
-                        <use href="icon.svg#terminal"></use>
-                      </svg>
-                      <span>TCP PORT</span>
-                    </div>
-                    <input
-                      type="number"
-                      id="comm-tcp"
-                      required
-                      min="1"
-                      max="65535" />
-                  </div>
-
-                  <div class="form-group">
-                    <div
-                      class="row items-center gap-sm"
-                      style="margin-bottom: 8px">
-                      <svg class="icon-sm text-primary">
-                        <use href="icon.svg#terminal"></use>
-                      </svg>
-                      <span>RS232</span>
-                    </div>
-                    <select id="comm-baud">
-                      <option value="9600">9600</option>
-                      <option value="19200">19200</option>
-                      <option value="38400">38400</option>
-                      <option value="57600">57600</option>
-                      <option value="115200">115200</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="card-actions">
-                  <button
-                    type="submit"
-                    class="btn btn-flat btn-round">
-                    <svg class="icon">
-                      <use href="icon.svg#check_circle"></use>
-                    </svg>
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            <!-- GPIO Card -->
-            <div class="card">
-              <div class="card-header">
-                <svg class="icon text-primary">
-                  <use href="icon.svg#adjust"></use>
-                </svg>
-                <span class="card-title">GPIO Settings</span>
-              </div>
-              <form id="gpio-form">
-                <div class="card-body">
-                  <div class="form-group">
-                    <div
-                      class="row items-center gap-sm"
-                      style="margin-bottom: 8px">
-                      <svg class="icon-sm text-primary">
-                        <use href="icon.svg#terminal"></use>
-                      </svg>
-                      <span>DEVICE ID</span>
-                    </div>
-                    <input
-                      type="number"
-                      id="gpio-id"
-                      required />
-                  </div>
-
-                  <div class="form-group">
-                    <div
-                      class="row items-center gap-sm"
-                      style="margin-bottom: 8px">
-                      <svg class="icon-sm text-primary">
-                        <use href="icon.svg#terminal"></use>
-                      </svg>
-                      <span>MODE</span>
-                    </div>
-                    <select id="gpio-mode">
-                      <option value="text">TEXT</option>
-                      <option value="json">JSON</option>
-                    </select>
-                  </div>
-
-                  <div class="form-group">
-                    <div
-                      class="row items-center gap-sm"
-                      style="margin-bottom: 8px">
-                      <svg class="icon-sm text-primary">
-                        <use href="icon.svg#terminal"></use>
-                      </svg>
-                      <span>AUTO RESPONSE</span>
-                    </div>
-                    <select id="gpio-auto">
-                      <option value="true">ENABLED</option>
-                      <option value="false">DISABLED</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="card-actions">
-                  <button
-                    type="submit"
-                    class="btn btn-flat btn-round">
-                    <svg class="icon">
-                      <use href="icon.svg#check_circle"></use>
-                    </svg>
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            <!-- System Settings Card -->
-            <div class="card">
-              <div class="card-header">
-                <svg class="icon text-primary">
-                  <use href="icon.svg#settings"></use>
-                </svg>
-                <span class="card-title">System Actions</span>
-              </div>
+            <form id="network-form">
               <div class="card-body">
-                <div class="row items-center justify-between">
+                <div class="form-row">
                   <div class="row items-center gap-sm">
-                    <svg class="icon-sm text-primary">
-                      <use href="icon.svg#power"></use>
+                    <svg
+                      class="icon-sm text-primary"
+                      style="fill: var(--primary)">
+                      <use href="#adjust"></use>
                     </svg>
-                    <span>REBOOT</span>
+                    <span>DHCP</span>
                   </div>
-                  <button
-                    id="btn-reboot"
-                    class="btn btn-flat btn-round">
-                    <svg class="icon"><use href="icon.svg#power"></use></svg>
-                  </button>
+                  <label class="toggle-switch">
+                    <input
+                      type="checkbox"
+                      id="net-dhcp" />
+                    <span class="slider"></span>
+                  </label>
                 </div>
+                <div class="form-group">
+                  <label>IP Address</label>
+                  <input
+                    type="text"
+                    id="net-ip"
+                    required
+                    pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$" />
+                </div>
+                <div class="form-group">
+                  <label>Netmask</label>
+                  <input
+                    type="text"
+                    id="net-mask"
+                    required
+                    pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$" />
+                </div>
+                <div class="form-group">
+                  <label>Gateway</label>
+                  <input
+                    type="text"
+                    id="net-gateway"
+                    required
+                    pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$" />
+                </div>
+                <div class="form-group">
+                  <label>DNS</label>
+                  <input
+                    type="text"
+                    id="net-dns"
+                    required
+                    pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$" />
+                </div>
+              </div>
+              <div class="card-actions">
+                <button
+                  type="submit"
+                  class="btn btn-primary btn-expand">
+                  <svg
+                    class="icon"
+                    style="fill: white; width: 20px; height: 20px">
+                    <use href="#check_circle"></use>
+                  </svg>
+                  <span class="btn-text">Apply</span>
+                </button>
+              </div>
+            </form>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <svg class="icon text-primary"><use href="#adjust"></use></svg>
+              <span class="card-title">Communication</span>
+            </div>
+            <form id="comm-form">
+              <div class="card-body">
+                <div class="form-group">
+                  <div
+                    class="row items-center gap-sm"
+                    style="margin-bottom: 8px">
+                    <svg
+                      class="icon-sm text-primary"
+                      style="fill: var(--primary)">
+                      <use href="#terminal"></use>
+                    </svg>
+                    <span>TCP PORT</span>
+                  </div>
+                  <input
+                    type="number"
+                    id="comm-tcp"
+                    required
+                    min="1"
+                    max="65535" />
+                </div>
+                <div class="form-group">
+                  <div
+                    class="row items-center gap-sm"
+                    style="margin-bottom: 8px">
+                    <svg
+                      class="icon-sm text-primary"
+                      style="fill: var(--primary)">
+                      <use href="#terminal"></use>
+                    </svg>
+                    <span>RS232</span>
+                  </div>
+                  <select id="comm-baud">
+                    <option value="9600">9600</option>
+                    <option value="19200">19200</option>
+                    <option value="38400">38400</option>
+                    <option value="57600">57600</option>
+                    <option value="115200">115200</option>
+                  </select>
+                </div>
+              </div>
+              <div class="card-actions">
+                <button
+                  type="submit"
+                  class="btn btn-primary btn-expand">
+                  <svg
+                    class="icon"
+                    style="fill: white; width: 20px; height: 20px">
+                    <use href="#check_circle"></use>
+                  </svg>
+                  <span class="btn-text">Apply</span>
+                </button>
+              </div>
+            </form>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <svg class="icon text-primary"><use href="#adjust"></use></svg>
+              <span class="card-title">GPIO Settings</span>
+            </div>
+            <form id="gpio-form">
+              <div class="card-body">
+                <div class="form-group">
+                  <div
+                    class="row items-center gap-sm"
+                    style="margin-bottom: 8px">
+                    <svg
+                      class="icon-sm text-primary"
+                      style="fill: var(--primary)">
+                      <use href="#terminal"></use>
+                    </svg>
+                    <span>DEVICE ID</span>
+                  </div>
+                  <input
+                    type="number"
+                    id="gpio-id"
+                    required />
+                </div>
+                <div class="form-group">
+                  <div
+                    class="row items-center gap-sm"
+                    style="margin-bottom: 8px">
+                    <svg
+                      class="icon-sm text-primary"
+                      style="fill: var(--primary)">
+                      <use href="#terminal"></use>
+                    </svg>
+                    <span>MODE</span>
+                  </div>
+                  <select id="gpio-mode">
+                    <option value="text">TEXT</option>
+                    <option value="json">JSON</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <div
+                    class="row items-center gap-sm"
+                    style="margin-bottom: 8px">
+                    <svg
+                      class="icon-sm text-primary"
+                      style="fill: var(--primary)">
+                      <use href="#terminal"></use>
+                    </svg>
+                    <span>AUTO RESPONSE</span>
+                  </div>
+                  <select id="gpio-auto">
+                    <option value="true">ENABLED</option>
+                    <option value="false">DISABLED</option>
+                  </select>
+                </div>
+              </div>
+              <div class="card-actions">
+                <button
+                  type="submit"
+                  class="btn btn-primary btn-expand">
+                  <svg
+                    class="icon"
+                    style="fill: white; width: 20px; height: 20px">
+                    <use href="#check_circle"></use>
+                  </svg>
+                  <span class="btn-text">Apply</span>
+                </button>
+              </div>
+            </form>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <svg class="icon text-primary"><use href="#settings"></use></svg>
+              <span class="card-title">System Actions</span>
+            </div>
+            <div class="card-body">
+              <div class="row items-center justify-between">
+                <div class="row items-center gap-sm">
+                  <svg class="icon-sm text-primary">
+                    <use href="#power"></use>
+                  </svg>
+                  <span>REBOOT</span>
+                </div>
+                <button
+                  id="btn-reboot"
+                  class="btn btn-primary btn-expand">
+                  <svg
+                    class="icon"
+                    style="fill: white; width: 20px; height: 20px">
+                    <use href="#power"></use>
+                  </svg>
+                  <span class="btn-text">Reboot</span>
+                </button>
               </div>
             </div>
           </div>
-        </main>
-      </div>
-
-      <script src="script.js"></script>
-    </body>
-  </html>
+        </div>
+      </main>
+    </div>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      style="display: none">
+      <symbol
+        id="logo2"
+        viewBox="0 0 25 25">
+        <path
+          d="M7.92434227,9.50760167 L13.166166,17.1713934 L3.11391106,17.4355781 L7.92434227,9.50760167 Z"
+          stroke="#00B849"
+          fill="#00B849"
+          transform="translate(8.068683, 13.250591) rotate(90.000000) translate(-8.068683, -13.250591)"></path>
+        <path
+          d="M10.0486849,8.44861279 L20.3709471,18.4291766 L10.2211543,18.7231471 L10.0486849,8.44861279 Z"
+          stroke="#003264"
+          fill="#003264"
+          transform="translate(15.538000, 13.188142) rotate(270.000000) translate(-15.538000, -13.188142)"></path>
+        <path
+          d="M24.4575339,0.70928923 L24.7464569,18.5142465 L23.9387245,18.6296368 L23.7494589,2.46928598 L23.7494589,2.46928598 L23.6730913,2.52631027 C23.1519539,2.91545127 20.7093107,4.73946367 18.2214685,6.59785501 L17.7398901,6.95759686 C16.8578092,7.61653164 15.9852789,8.26841853 15.2061289,8.85068643 C14.626852,9.28358676 14.0991886,9.67800707 13.659798,10.0065838 L13.2511894,10.3121991 L13.2511894,10.3121991 L13.0714991,10.4466457 L2.68248635,3.53792857 L1.24476831,2.4652013 L1.24476831,18.5137403 L0.433959828,18.6295701 L0.254849974,0.845172958 C8.23443277,6.36894495 12.1603589,9.28369344 12.300063,9.46628998 C12.838196,9.28548883 16.7625176,6.36950984 24.4575339,0.70928923 L24.4575339,0.70928923 Z"
+          stroke="#092333"
+          fill="#092333"></path>
+      </symbol>
+      <symbol
+        id="home"
+        viewBox="0 -960 960 960">
+        <path
+          d="M240-200h120v-240h240v240h120v-360L480-740 240-560v360Zm-80 80v-480l320-240 320 240v480H520v-240h-80v240H160Zm320-350Z" />
+      </symbol>
+      <symbol
+        id="network-node"
+        viewBox="0 -960 960 960">
+        <path
+          d="M220-80q-58 0-99-41t-41-99q0-58 41-99t99-41q18 0 35 4.5t32 12.5l153-153v-110q-44-13-72-49.5T340-740q0-58 41-99t99-41q58 0 99 41t41 99q0 48-28 84.5T520-606v110l154 153q15-8 31.5-12.5T740-360q58 0 99 41t41 99q0 58-41 99t-99 41q-58 0-99-41t-41-99q0-18 4.5-35t12.5-32L480-424 343-287q8 15 12.5 32t4.5 35q0 58-41 99t-99 41Zm520-80q25 0 42.5-17.5T800-220q0-25-17.5-42.5T740-280q-25 0-42.5 17.5T680-220q0 25 17.5 42.5T740-160ZM480-680q25 0 42.5-17.5T540-740q0-25-17.5-42.5T480-800q-25 0-42.5 17.5T420-740q0 25 17.5 42.5T480-680ZM220-160q25 0 42.5-17.5T280-220q0-25-17.5-42.5T220-280q-25 0-42.5 17.5T160-220q0 25 17.5 42.5T220-160Z" />
+      </symbol>
+      <symbol
+        id="adjust"
+        viewBox="0 -960 960 960">
+        <path
+          d="M480-360q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35Zm0 280q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z" />
+      </symbol>
+      <symbol
+        id="check_circle"
+        viewBox="0 -960 960 960">
+        <path
+          d="m424-296 282-282-56-56-226 226-114-114-56 56 170 170Zm56 216q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z" />
+      </symbol>
+      <symbol
+        id="cancel"
+        viewBox="0 -960 960 960">
+        <path
+          d="m336-280 144-144 144 144 56-56-144-144 144-144-56-56-144 144-144-144-56 56 144 144-144 144 56 56ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z" />
+      </symbol>
+      <symbol
+        id="terminal"
+        viewBox="0 -960 960 960">
+        <path
+          d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h640q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H160v400Zm140-40-56-56 103-104-104-104 57-56 160 160-160 160Zm180 0v-80h240v80H480Z" />
+      </symbol>
+      <symbol
+        id="settings"
+        viewBox="0 -960 960 960">
+        <path
+          d="m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm70-80h79l14-106q31-8 57.5-23.5T639-327l99 41 39-68-86-65q5-14 7-29.5t2-31.5q0-16-2-31.5t-7-29.5l86-65-39-68-99 42q-22-23-48.5-38.5T533-694l-13-106h-79l-14 106q-31 8-57.5 23.5T321-633l-99-41-39 68 86 64q-5 15-7 30t-2 32q0 16 2 31t7 30l-86 65 39 68 99-42q22 23 48.5 38.5T427-266l13 106Zm42-180q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Zm-2-140Z" />
+      </symbol>
+      <symbol
+        id="power"
+        viewBox="0 -960 960 960">
+        <path
+          d="M480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-84 31.5-156.5T197-763l56 56q-44 44-68.5 102T160-480q0 134 93 227t227 93q134 0 227-93t93-227q0-67-24.5-125T707-707l56-56q54 54 85.5 126.5T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm-40-360v-440h80v440h-80Z" />
+      </symbol>
+    </svg>
+    <script>
+      const state = { network: {}, comm: {}, gpio: {} }
+      function showLoading(msg = 'Loading...') {
+        document.getElementById('loading-message').textContent = msg
+        document.getElementById('loading-overlay').classList.remove('hidden')
+      }
+      function hideLoading() {
+        document.getElementById('loading-overlay').classList.add('hidden')
+      }
+      function showToast(message, type = 'positive') {
+        const container = document.getElementById('toast-container')
+        const toast = document.createElement('div')
+        toast.className = `toast ${type}`
+        const iconId = type === 'positive' ? 'check_circle' : 'cancel'
+        toast.innerHTML = `<svg class="icon-sm" style="fill:white"><use href="#${iconId}"></use></svg><span>${message}</span>`
+        container.appendChild(toast)
+        setTimeout(() => toast.remove(), 3000)
+      }
+      function showConfirmModal() {
+        const modal = document.getElementById('confirm-modal')
+        modal.classList.remove('hidden')
+        const cancelBtn = document.getElementById('modal-cancel')
+        const confirmBtn = document.getElementById('modal-confirm')
+        const handleCancel = () => {
+          modal.classList.add('hidden')
+          cleanup()
+        }
+        const handleConfirm = async () => {
+          modal.classList.add('hidden')
+          cleanup()
+          showLoading('Rebooting system...')
+          try {
+            const res = await fetch('/api/restart')
+            if (!res.ok) throw new Error('Failed')
+            showToast('System is rebooting...', 'positive')
+            setTimeout(async () => {
+              await fetchAll()
+              hideLoading()
+            }, 5000)
+          } catch (err) {
+            showToast('Failed to reboot', 'negative')
+            hideLoading()
+          }
+        }
+        const cleanup = () => {
+          cancelBtn.removeEventListener('click', handleCancel)
+          confirmBtn.removeEventListener('click', handleConfirm)
+          modal.removeEventListener('click', handleBackdropClick)
+        }
+        const handleBackdropClick = (e) => {
+          if (e.target === modal) {
+            handleCancel()
+          }
+        }
+        cancelBtn.addEventListener('click', handleCancel)
+        confirmBtn.addEventListener('click', handleConfirm)
+        modal.addEventListener('click', handleBackdropClick)
+      }
+      function toggleNetworkInputs(disabled) {
+        ;['net-ip', 'net-mask', 'net-gateway', 'net-dns'].forEach((id) => {
+          const el = document.getElementById(id)
+          if (el) el.disabled = disabled
+        })
+      }
+      async function fetchNetwork() {
+        try {
+          const res = await fetch('/api/network')
+          const data = await res.json()
+          state.network = data.network || {}
+          const hm = document.getElementById('header-mac')
+          if (hm) hm.textContent = state.network.mac || 'N/A'
+          const nd = document.getElementById('net-dhcp')
+          if (nd) {
+            nd.checked = state.network.dhcp_enabled
+            const ni = document.getElementById('net-ip')
+            const nm = document.getElementById('net-mask')
+            const ng = document.getElementById('net-gateway')
+            const ndn = document.getElementById('net-dns')
+            if (ni) ni.value = state.network.ip || ''
+            if (nm) nm.value = state.network.subnet || ''
+            if (ng) ng.value = state.network.gateway || ''
+            if (ndn) ndn.value = state.network.dns || ''
+            toggleNetworkInputs(state.network.dhcp_enabled)
+          }
+          const si = document.getElementById('sum-ip')
+          if (si) si.textContent = state.network.ip || 'N/A'
+          const sm = document.getElementById('sum-mac')
+          if (sm) sm.textContent = state.network.mac || 'N/A'
+          const sd = document.getElementById('sum-dhcp')
+          if (sd)
+            sd.textContent = state.network.dhcp_enabled ? 'Enabled' : 'Disabled'
+          const smask = document.getElementById('sum-mask')
+          if (smask) smask.textContent = state.network.subnet || 'N/A'
+          const sg = document.getElementById('sum-gateway')
+          if (sg) sg.textContent = state.network.gateway || 'N/A'
+          const sdn = document.getElementById('sum-dns')
+          if (sdn) sdn.textContent = state.network.dns || 'N/A'
+        } catch (e) {
+          console.error(e)
+          showToast('Failed to fetch network', 'negative')
+        }
+      }
+      async function fetchComm() {
+        try {
+          const res = await fetch('/api/control')
+          const data = await res.json()
+          state.comm = data
+          const ct = document.getElementById('comm-tcp')
+          if (ct) ct.value = data.tcp_port
+          const cb = document.getElementById('comm-baud')
+          if (cb) cb.value = data.rs232_1_baud
+          const st = document.getElementById('sum-tcp')
+          if (st) st.textContent = data.tcp_port
+          const sb = document.getElementById('sum-baud')
+          if (sb) sb.textContent = data.rs232_1_baud
+        } catch (e) {
+          console.error(e)
+        }
+      }
+      async function fetchGpio() {
+        try {
+          const res = await fetch('/api/gpio')
+          const data = await res.json()
+          state.gpio = data
+          const gi = document.getElementById('gpio-id')
+          if (gi) gi.value = data.device_id
+          const gm = document.getElementById('gpio-mode')
+          if (gm) gm.value = data.comm_mode
+          const ga = document.getElementById('gpio-auto')
+          if (ga) ga.value = data.auto_response.toString()
+          const sid = document.getElementById('sum-id')
+          if (sid) sid.textContent = data.device_id
+          const smode = document.getElementById('sum-mode')
+          if (smode) smode.textContent = data.comm_mode.toUpperCase()
+        } catch (e) {
+          console.error(e)
+        }
+      }
+      async function fetchAll() {
+        await Promise.all([fetchNetwork(), fetchComm(), fetchGpio()])
+      }
+      document.querySelectorAll('.nav-item').forEach((item) => {
+        item.addEventListener('click', () => {
+          document
+            .querySelectorAll('.nav-item')
+            .forEach((n) => n.classList.remove('active'))
+          item.classList.add('active')
+          const page = item.dataset.page
+          document
+            .querySelectorAll('.page')
+            .forEach((p) => p.classList.add('hidden'))
+          document.getElementById('page-' + page).classList.remove('hidden')
+        })
+      })
+      document
+        .getElementById('network-form')
+        .addEventListener('submit', async (e) => {
+          e.preventDefault()
+          showLoading('Applying Network Settings...')
+          const dhcp = document.getElementById('net-dhcp').checked
+          const payload = {
+            dhcp_enabled: dhcp,
+            ip: dhcp ? '' : document.getElementById('net-ip').value,
+            subnet: dhcp ? '' : document.getElementById('net-mask').value,
+            gateway: dhcp ? '' : document.getElementById('net-gateway').value,
+            dns: dhcp ? '' : document.getElementById('net-dns').value,
+            mac: state.network.mac
+          }
+          try {
+            const res = await fetch('/api/network', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            })
+            if (!res.ok) throw new Error('Failed')
+            showToast('Network settings updated!', 'positive')
+            setTimeout(async () => {
+              await fetchAll()
+              hideLoading()
+            }, 5000)
+          } catch (err) {
+            showToast('Failed to update network', 'negative')
+            hideLoading()
+          }
+        })
+      document.getElementById('net-dhcp').addEventListener('change', (e) => {
+        toggleNetworkInputs(e.target.checked)
+      })
+      document.getElementById('btn-reboot').addEventListener('click', () => {
+        showConfirmModal()
+      })
+      document
+        .getElementById('comm-form')
+        .addEventListener('submit', async (e) => {
+          e.preventDefault()
+          showLoading('Applying Control Settings...')
+          const payload = {
+            tcp_port: parseInt(document.getElementById('comm-tcp').value),
+            rs232_1_baud: parseInt(document.getElementById('comm-baud').value)
+          }
+          try {
+            const res = await fetch('/api/control', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            })
+            if (!res.ok) throw new Error('Failed')
+            showToast('Control settings updated!', 'positive')
+            setTimeout(async () => {
+              await fetchAll()
+              hideLoading()
+            }, 5000)
+          } catch (err) {
+            showToast('Failed to update control', 'negative')
+            hideLoading()
+          }
+        })
+      document
+        .getElementById('gpio-form')
+        .addEventListener('submit', async (e) => {
+          e.preventDefault()
+          showLoading('Applying GPIO Settings...')
+          const payload = {
+            device_id: parseInt(document.getElementById('gpio-id').value),
+            rt_mode: document.getElementById('gpio-mode').value,
+            auto_response: document.getElementById('gpio-auto').value === 'true'
+          }
+          try {
+            const res = await fetch('/api/gpio', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            })
+            if (!res.ok) throw new Error('Failed')
+            showToast('GPIO settings updated!', 'positive')
+          } catch (err) {
+            showToast('Failed to update GPIO', 'negative')
+          } finally {
+            hideLoading()
+          }
+        })
+      window.addEventListener('DOMContentLoaded', async () => {
+        showLoading('Fetching status...')
+        await fetchAll()
+        hideLoading()
+      })
+    </script>
+  </body>
 </html>
