@@ -78,6 +78,7 @@ void apply_network_config(const wiz_NetInfo* config);
 
 // Network initialization and processing functions
 void network_init(void);
+void network_enable_spi_mutex(void);  // FreeRTOS 스케줄러 시작 후 호출
 void network_process(void);
 
 #endif // NETWORK_CONFIG_H

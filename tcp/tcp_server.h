@@ -31,6 +31,7 @@ extern "C"
   void tcp_servers_restart(void);
   void tcp_servers_restart_with_port(uint16_t new_port);
   void tcp_servers_broadcast(const uint8_t *data, uint16_t len);
+  bool tcp_servers_has_clients(void);  // 클라이언트 연결 여부 확인
 
 #ifdef __cplusplus
 }

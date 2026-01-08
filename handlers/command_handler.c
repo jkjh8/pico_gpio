@@ -395,7 +395,7 @@ cmd_result_t cmd_set_output(const char* param, char* response, size_t response_s
     
     hct595_write(gpio_output_data);
     
-    snprintf(response, response_size, "output_set,OK");
+    response[0] = '\0';
     return CMD_SUCCESS;
 }
 
@@ -442,7 +442,7 @@ cmd_result_t cmd_set_outputs(const char* param, char* response, size_t response_
     // GPIO 출력에 적용
     hct595_write(gpio_value);
     
-    snprintf(response, response_size, "output_set,OK");
+    response[0] = '\0';
     return CMD_SUCCESS;
 }
 

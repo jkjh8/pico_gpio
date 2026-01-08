@@ -1,218 +1,193 @@
 #include "http_server.h"
-#include "http_parser.h"
-#include "http_router.h"
-#include "http_response.h"
+#include "lib/wiznet/socket.h"
+#include "lib/wiznet/w5500.h"
 #include "debug/debug.h"
-#include "led/status_led.h"
+#include "gpio/gpio.h"
+#include "system/system_config.h"
+#include "static_files.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #include <string.h>
-#include "http_parser.h"
-#include "http_router.h"
-#include "http_response.h"
-#include "http_handlers.h"
-#include "../network/network_config.h"
+#include <stdio.h>
 
-// 디버그 매크로
+// HTTP 소켓 (소켓 1번만 사용 - 간단한 사용 시)
+static const uint8_t http_sockets[] = {1};
+#define HTTP_SOCKET_COUNT (sizeof(http_sockets) / sizeof(http_sockets[0]))
 
-#undef HTTP_LOG
-#define HTTP_LOG(fmt, ...)
-#undef HTTP_DEBUG
-#define HTTP_DEBUG(fmt, ...)
-
-// 전역 변수
-static uint8_t http_buf[HTTP_BUF_SIZE];
-static uint16_t http_port = HTTP_SERVER_PORT;
-static http_process_state_t http_process_state = STATE_HTTP_IDLE;  // HTTP 처리 상태 추가
-
-// 타임아웃 관리 (ioLibrary 스타일)
-volatile uint32_t http_server_tick_1s = 0;
-
-// 콜백 함수 포인터 (ioLibrary 스타일)
-static http_server_mcu_reset_callback http_server_mcu_reset_cb = NULL;
-static http_server_wdt_reset_callback http_server_wdt_reset_cb = NULL;
-
-#define KEEP_ALIVE_TIMEOUT_MS 5000  // 5초 Keep-Alive 타임아웃
-
-// 내부 함수 선언
-
-bool http_server_init(uint16_t port)
-{
-    // printf("HTTP 서버 시작 (포트: %d)\n", port);
-
-    http_port = port;
-
-    // 라우터 초기화
-    http_router_init();
-
-    // printf("HTTP 서버 초기화 완료 (포트: %d)\n", port);
-    return true;
+// HTTP 응답 헤더 (바이너리 데이터 지원)
+static void http_send_response_binary(uint8_t sock, const char* status, const char* content_type, 
+                                      const uint8_t* body, size_t body_len) {
+    char header[256];
+    
+    snprintf(header, sizeof(header),
+        "HTTP/1.1 %s\r\n"
+        "Content-Type: %s\r\n"
+        "Content-Length: %d\r\n"
+        "Connection: close\r\n"
+        "\r\n",
+        status, content_type, (int)body_len);
+    
+    send(sock, (uint8_t*)header, strlen(header));
+    if (body && body_len > 0) {
+        send(sock, (uint8_t*)body, body_len);
+    }
 }
 
-void http_server_process(void)
-{
-    uint8_t sock = HTTP_SOCKET_NUM;
-    uint16_t size = 0;
-    uint8_t current_status = getSn_SR(sock);
+// HTTP 응답 헤더 (문자열)
+static void http_send_response(uint8_t sock, const char* status, const char* content_type, const char* body) {
+    int body_len = body ? strlen(body) : 0;
+    http_send_response_binary(sock, status, content_type, (const uint8_t*)body, body_len);
+}
+
+// 정적 파일 처리
+static void http_handle_static_file(uint8_t sock, const char* path) {
+    size_t file_size, original_size;
+    bool is_compressed;
+    const char* content_type;
     
-    // 네트워크 연결 상태 확인 - 재시작 로직 제거
-    bool network_connected = network_is_connected();
+    // 임베드된 파일 찾기
+    const char* file_data = get_embedded_file_with_content_type(path, &file_size, &is_compressed, &original_size, &content_type);
     
-    // 네트워크가 연결되지 않은 경우 서버 처리 중단
-    if (!network_connected) {
+    if (file_data) {
+        DBG_HTTP_PRINT("Serving %s: %zu bytes (compressed: %d)\n", path, file_size, is_compressed);
+        
+        // HTTP 헤더 생성
+        char header[256];
+        if (is_compressed) {
+            snprintf(header, sizeof(header),
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: %s\r\n"
+                "Content-Encoding: gzip\r\n"
+                "Content-Length: %d\r\n"
+                "Connection: close\r\n"
+                "\r\n",
+                content_type, (int)file_size);
+        } else {
+            snprintf(header, sizeof(header),
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: %s\r\n"
+                "Content-Length: %d\r\n"
+                "Connection: close\r\n"
+                "\r\n",
+                content_type, (int)file_size);
+        }
+        
+        // 헤더 전송
+        send(sock, (uint8_t*)header, strlen(header));
+        
+        // 파일 데이터를 청크 단위로 전송 (512 바이트씩)
+        const size_t chunk_size = 512;
+        size_t sent = 0;
+        while (sent < file_size) {
+            // TX 버퍼 공간 확인
+            uint16_t free_size = getSn_TX_FSR(sock);
+            if (free_size == 0) {
+                vTaskDelay(pdMS_TO_TICKS(10));
+                continue;
+            }
+            
+            // 전송할 크기 결정 (버퍼 공간, 청크 크기, 남은 데이터 중 최소값)
+            size_t remaining = file_size - sent;
+            size_t to_send = (remaining > chunk_size) ? chunk_size : remaining;
+            to_send = (to_send > free_size) ? free_size : to_send;
+            
+            int32_t result = send(sock, (uint8_t*)(file_data + sent), to_send);
+            if (result <= 0) {
+                DBG_HTTP_PRINT("Send failed at offset %zu\n", sent);
+                break;
+            }
+            sent += result;
+        }
+        DBG_HTTP_PRINT("Sent %zu/%zu bytes\n", sent, file_size);
+    } else {
+        http_send_response(sock, "404 Not Found", "text/plain", "Not Found");
+    }
+}
+
+// API 엔드포인트 처리
+static void http_handle_api(uint8_t sock, const char* path) {
+    char response[512];
+    
+    if (strcmp(path, "/api/status") == 0) {
+        // GPIO 상태 반환
+        extern uint16_t gpio_output_data;
+        gpio_config_t* cfg = system_config_get_gpio();
+        
+        snprintf(response, sizeof(response),
+            "{\"id\":%d,\"outputs\":\"%04X\"}",
+            cfg->device_id, gpio_output_data);
+        
+        http_send_response(sock, "200 OK", "application/json", response);
+    } else {
+        http_send_response(sock, "404 Not Found", "text/plain", "Not Found");
+    }
+}
+
+// HTTP 요청 처리
+static void http_handle_request(uint8_t sock, char* request) {
+    // GET /path HTTP/1.1 파싱
+    char method[16], path[128];
+    if (sscanf(request, "%15s %127s", method, path) != 2) {
+        http_send_response(sock, "400 Bad Request", "text/plain", "Bad Request");
         return;
     }
     
-    switch(current_status)
-    {
-        case SOCK_CLOSED:
-            if(socket(sock, Sn_MR_TCP, http_port, 0x00) == sock) {
-                http_process_state = STATE_HTTP_IDLE;
-            }
-            break;
-            
-        case SOCK_INIT:
-            if(listen(sock) == SOCK_OK) {
-                http_process_state = STATE_HTTP_IDLE;
-            }
-            break;
-            
-        case SOCK_LISTEN:
-            // server_state = HTTP_SERVER_LISTENING;
-            break;
-            
-        case SOCK_ESTABLISHED:
-            // HTTP Process states (ioLibrary 스타일)
-            switch(http_process_state)
-            {
-                case STATE_HTTP_IDLE:
-                    if ((size = getSn_RX_RSR(sock)) > 0) {
-                        // HTTP 요청 수신 시 LED 깜빡임
-                        status_led_activity_blink();
-                        
-                        if(size > HTTP_BUF_SIZE) size = HTTP_BUF_SIZE - 1;
-                        
-                        size = recv(sock, http_buf, size);
-                        http_buf[size] = '\0';
-                        
-                        // POST 요청 처리 로직 (기존 코드 유지)
-                        char* method_check = strstr((char*)http_buf, "POST");
-                        char* content_length_check = strstr((char*)http_buf, "Content-Length:");
-                        if (!content_length_check) {
-                            content_length_check = strstr((char*)http_buf, "content-length:");
-                        }
-                        
-                        if (method_check && content_length_check) {
-                            uint16_t expected_length = 0;
-                            sscanf(content_length_check, "%*[^:]: %hu", &expected_length);
-                            
-                            char* header_end = strstr((char*)http_buf, "\r\n\r\n");
-                            if (!header_end) {
-                                header_end = strstr((char*)http_buf, "\n\n");
-                            }
-                            
-                            if (header_end) {
-                                int header_length = header_end - (char*)http_buf + (strstr((char*)http_buf, "\r\n\r\n") ? 4 : 2);
-                                int received_body_length = size - header_length;
-                                
-                                if (received_body_length < expected_length) {
-                                    int remaining = expected_length - received_body_length;
-                                    sleep_ms(10);
-                                    int additional_size = getSn_RX_RSR(sock);
-                                    if (additional_size > 0) {
-                                        if (size + additional_size > HTTP_BUF_SIZE - 1) {
-                                            additional_size = HTTP_BUF_SIZE - 1 - size;
-                                        }
-                                        int extra = recv(sock, http_buf + size, additional_size);
-                                        size += extra;
-                                        http_buf[size] = '\0';
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // HTTP 요청 파싱 및 처리
-                        http_request_t request;
-                        http_response_t response;
-                        
-                        http_parse_request((char*)http_buf, &request);
-                        
-                        // 핸들러 실행 또는 기본 처리
-                        http_handler_t handler = http_router_find_handler(request.uri, request.method);
-                        if(handler) {
-                            handler(&request, &response);
-                        }
-                        else {
-                            http_router_handle_default(&request, &response);
-                        }
-                        
-                        // 응답 전송
-                        http_send_response(sock, &response);
-                        
-                        // 파일 스트리밍이 필요한 경우 상태 변경
-                        if (response.stream_required && response.stream_size > 0) {
-                            http_process_state = STATE_HTTP_RES_INPROC;
-                        } else {
-                            http_process_state = STATE_HTTP_RES_DONE;
-                        }
-                    }
-                    break;
-                    
-                case STATE_HTTP_RES_INPROC:
-                    // 스트리밍이 완료되었는지 확인하고 처리
-                    // 현재는 간단하게 바로 완료로 처리 (추후 개선)
-                    http_process_state = STATE_HTTP_RES_DONE;
-                    break;
-                    
-                case STATE_HTTP_RES_DONE:
-                    // 연결 종료 (간단한 HTTP/1.0 방식)
-                    disconnect(sock);
-                    http_process_state = STATE_HTTP_IDLE;
-                    break;
-                    
-                default:
-                    http_process_state = STATE_HTTP_IDLE;
-                    break;
-            }
-            break;
-            
-        case SOCK_CLOSE_WAIT:
-            if((size = getSn_RX_RSR(sock)) > 0)
-            {
-                if(size > HTTP_BUF_SIZE) size = HTTP_BUF_SIZE - 1;
-                recv(sock, http_buf, size);
-            }
-            disconnect(sock);
-            http_process_state = STATE_HTTP_IDLE;
-            break;
-            
-        default:
-            break;
+    DBG_HTTP_PRINT("HTTP %s %s\n", method, path);
+    
+    if (strcmp(method, "GET") != 0) {
+        http_send_response(sock, "405 Method Not Allowed", "text/plain", "Method Not Allowed");
+        return;
+    }
+    
+    // 라우팅
+    if (strncmp(path, "/api/", 5) == 0) {
+        http_handle_api(sock, path);
+    } else if (strcmp(path, "/") == 0) {
+        // 루트 경로는 index.html로 리다이렉트
+        http_handle_static_file(sock, "/index.html");
+    } else {
+        // 모든 다른 경로는 static_files에서 찾기
+        http_handle_static_file(sock, path);
     }
 }
 
-
-
-
-
-
-
-void http_register_handler(const char* uri, http_method_t method, http_handler_t handler)
-{
-    http_router_register(uri, method, handler);
+bool http_server_init(void) {
+    for (int i = 0; i < HTTP_SOCKET_COUNT; i++) {
+        uint8_t sock = http_sockets[i];
+        socket(sock, Sn_MR_TCP, HTTP_PORT, 0);
+        listen(sock);
+        DBG_HTTP_PRINT("HTTP server listening on socket %d, port %d\n", sock, HTTP_PORT);
+    }
+    return true;
 }
 
-// 콜백 함수 등록 (ioLibrary 스타일)
-void http_server_register_callbacks(http_server_mcu_reset_callback mcu_reset_cb, 
-                                   http_server_wdt_reset_callback wdt_reset_cb)
-{
-    http_server_mcu_reset_cb = mcu_reset_cb;
-    http_server_wdt_reset_cb = wdt_reset_cb;
-}
-
-// HTTP 서버 타임아웃 관련 함수 (ioLibrary 스타일)
-void http_server_time_handler(void) {
-    http_server_tick_1s++;
-}
-
-uint32_t http_server_get_timecount(void) {
-    return http_server_tick_1s;
+void http_server_process(void) {
+    static char buffer[HTTP_BUFFER_SIZE];
+    for (int i = 0; i < HTTP_SOCKET_COUNT; i++) {
+        uint8_t sock = http_sockets[i];
+        uint8_t status = getSn_SR(sock);
+        
+        switch (status) {
+            case SOCK_ESTABLISHED: {
+                int len = getSn_RX_RSR(sock);
+                if (len > 0) {
+                    if (len > HTTP_BUFFER_SIZE - 1) len = HTTP_BUFFER_SIZE - 1;
+                    len = recv(sock, (uint8_t*)buffer, len);
+                    if (len > 0) {
+                        buffer[len] = '\0';
+                        http_handle_request(sock, buffer);
+                    }
+                    disconnect(sock);
+                }
+                break;
+            }
+            case SOCK_CLOSE_WAIT:
+                disconnect(sock);
+                break;
+            case SOCK_CLOSED:
+                socket(sock, Sn_MR_TCP, HTTP_PORT, 0);
+                listen(sock);
+                break;
+        }
+    }
 }

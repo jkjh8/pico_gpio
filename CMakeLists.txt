@@ -32,6 +32,10 @@ endif()
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
+# Pull in FreeRTOS
+set(FREERTOS_KERNEL_PATH ${CMAKE_CURRENT_LIST_DIR}/lib/FreeRTOS-Kernel)
+include(FreeRTOS_Kernel_import.cmake)
+
 project(main C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
@@ -47,10 +51,6 @@ add_executable(main
     network/multicast.c
     debug/debug.c
     http/http_server.c
-    http/http_parser.c
-    http/http_router.c
-    http/http_response.c
-    http/http_handlers.c
     static_files.c
     tcp/tcp_server.c
     uart/uart_rs232.c
@@ -93,6 +93,8 @@ target_link_libraries(main
         hardware_sync
         hardware_watchdog
         hardware_uart
+        FreeRTOS-Kernel
+        FreeRTOS-Kernel-Heap4
 )
 
 # Add the standard include files to the build

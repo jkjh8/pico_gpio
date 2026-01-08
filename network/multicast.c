@@ -26,7 +26,6 @@ void multicast_init(void) {
     if (status != SOCK_CLOSED) {
         DBG_NET_PRINT("Closing existing multicast socket (status: 0x%02X)\n", status);
         close(MULTICAST_SOCKET);
-        sleep_ms(100);
     }
     
     // UDP 소켓 열기 (브로드캐스트 전용)

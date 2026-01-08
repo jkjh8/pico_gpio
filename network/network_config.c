@@ -3,6 +3,47 @@
 #include "debug/debug.h"
 #include "../uart/uart_rs232.h"
 #include "../tcp/tcp_server.h"
+#include "../led/status_led.h"
+#include "FreeRTOS.h"
+#include "semphr.h"
+
+// =============================================================================
+// W5500 SPI Mutex for FreeRTOS
+// =============================================================================
+static SemaphoreHandle_t w5500_mutex = NULL;
+static bool w5500_mutex_initialized = false;
+
+static void w5500_critical_enter(void) {
+    if (w5500_mutex != NULL && xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
+        xSemaphoreTakeRecursive(w5500_mutex, portMAX_DELAY);  // Recursive로 변경
+    }
+}
+
+static void w5500_critical_exit(void) {
+    if (w5500_mutex != NULL && xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
+        xSemaphoreGiveRecursive(w5500_mutex);  // Recursive로 변경
+    }
+}
+
+// 뮤텍스 초기화 (스케줄러 시작 후 호출)
+void network_enable_spi_mutex(void) {
+    if (!w5500_mutex_initialized) {
+        w5500_mutex = xSemaphoreCreateRecursiveMutex();  // Recursive로 변경
+        if (w5500_mutex != NULL) {
+            w5500_mutex_initialized = true;
+            reg_wizchip_cris_cbfunc(w5500_critical_enter, w5500_critical_exit);
+            DBG_NET_PRINT("W5500 SPI recursive mutex initialized and registered\n");
+        }
+    }
+}
+
+// =============================================================================
+// DHCP State Management
+// =============================================================================
+static bool dhcp_in_progress = false;
+static uint32_t dhcp_start_time = 0;
+static uint32_t dhcp_last_check = 0;
+static uint32_t dhcp_last_tick = 0; // DHCP_time_handler용
 
 // =============================================================================
 // IP Address Utility Functions
@@ -361,16 +402,13 @@ bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
         apply_network_config(net_info);
         DBG_DHCP_PRINT("Last IP applied: %d.%d.%d.%d\n", 
             net_info->ip[0], net_info->ip[1], net_info->ip[2], net_info->ip[3]);
-        sleep_ms(100);
     }
     
     // DHCP 모드로 변경
     net_info->dhcp = NETINFO_DHCP;
-    sleep_ms(100);
     
     DBG_DHCP_PRINT("Closing all sockets...\n");
     for(int i = 0; i < 8; i++) close(i);
-    sleep_ms(50);
     
     DBG_DHCP_PRINT("Opening DHCP socket on port 68...\n");
     uint8_t sock_ret = socket(0, Sn_MR_UDP, 68, 0);
@@ -392,77 +430,108 @@ bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
     
     DBG_DHCP_PRINT("Initializing DHCP...\n");
     DHCP_init(0, g_ethernet_buf);
+    DBG_DHCP_PRINT("DHCP_init completed\n");
     
-    uint32_t dhcp_timeout = 0;
-    DBG_DHCP_PRINT("Starting DHCP negotiation (max 20 seconds)...\n");
+    dhcp_in_progress = true;
+    dhcp_start_time = to_ms_since_boot(get_absolute_time());
+    dhcp_last_check = dhcp_start_time;
+    dhcp_last_tick = dhcp_start_time;
+    status_led_set_mode(LED_MODE_DHCP);  // DHCP 모드: 녹색 깜박임
+    DBG_DHCP_PRINT("DHCP state variables initialized\n");
     
-    while (dhcp_timeout < 20) {
-        uint8_t dhcp_status = DHCP_run();
-        
-        uint8_t phy_status = getPHYCFGR();
-        if(!(phy_status & 0x01)) { 
-            DBG_DHCP_PRINT("ERROR: Link lost during DHCP\n");
-            close(0); 
-            return false; 
-        }
-        
-        switch(dhcp_status) {
-            case DHCP_IP_LEASED:
-                DBG_DHCP_PRINT("DHCP SUCCESS: IP leased!\n");
-                // DHCP에서 받은 정보를 net_info와 g_net_info에 모두 복사
-                getIPfromDHCP(net_info->ip);
-                getGWfromDHCP(net_info->gw);
-                getSNfromDHCP(net_info->sn);
-                getDNSfromDHCP(net_info->dns);
-                memcpy(&g_net_info, net_info, sizeof(wiz_NetInfo));
-                
-                // 새로 받은 IP와 저장된 IP 비교
-                system_config_t *sys_cfg = system_config_get();
-                bool ip_changed = false;
-                if (!sys_cfg->has_last_dhcp_ip || 
-                    memcmp(sys_cfg->last_dhcp_ip, net_info->ip, 4) != 0 ||
-                    memcmp(sys_cfg->last_dhcp_gw, net_info->gw, 4) != 0 ||
-                    memcmp(sys_cfg->last_dhcp_sn, net_info->sn, 4) != 0 ||
-                    memcmp(sys_cfg->last_dhcp_dns, net_info->dns, 4) != 0) {
-                    ip_changed = true;
-                    DBG_DHCP_PRINT("DHCP IP changed or first time, saving to flash...\n");
-                    memcpy(sys_cfg->last_dhcp_ip, net_info->ip, 4);
-                    memcpy(sys_cfg->last_dhcp_gw, net_info->gw, 4);
-                    memcpy(sys_cfg->last_dhcp_sn, net_info->sn, 4);
-                    memcpy(sys_cfg->last_dhcp_dns, net_info->dns, 4);
-                    sys_cfg->has_last_dhcp_ip = true;
-                    system_config_save_to_flash();
-                    DBG_DHCP_PRINT("New DHCP IP saved: %d.%d.%d.%d\n",
-                        net_info->ip[0], net_info->ip[1], net_info->ip[2], net_info->ip[3]);
-                } else {
-                    DBG_DHCP_PRINT("DHCP IP unchanged, no save needed\n");
-                }
-                
-                apply_network_config(net_info);
-                close(0);
-                return true;
-            case DHCP_FAILED:
-                close(0);
-                sleep_ms(1000);
-                if(socket(0, Sn_MR_UDP, 68, 0) != 0) return false;
-                DHCP_init(0, g_ethernet_buf);
-                dhcp_timeout++;
-                break;
-            default:
-                // DHCP_run()이 진행 중인 경우
-                sleep_ms(100);
-                static uint32_t last_tick = 0;
-                uint32_t current_tick = to_ms_since_boot(get_absolute_time());
-                if (current_tick - last_tick > 1000) {
-                    dhcp_timeout++;
-                    last_tick = current_tick;
-                    DBG_DHCP_PRINT("DHCP waiting... %d/20\n", dhcp_timeout);
-                }
-                break;
-        }
+    DBG_DHCP_PRINT("DHCP started (non-blocking mode)\n");
+    return false; // 아직 완료 안 됨, 다음 호출에서 상태 체크
+}
+
+// DHCP 진행 상태 체크 및 처리 (non-blocking)
+bool dhcp_process_check(wiz_NetInfo *net_info) {
+    if (!dhcp_in_progress) {
+        return false; // DHCP가 시작되지 않음
     }
-    close(0);
-    return false;
+    
+    uint32_t current_time = to_ms_since_boot(get_absolute_time());
+    
+    // 타임아웃 체크 (20초)
+    if (current_time - dhcp_start_time > 20000) {
+        DBG_DHCP_PRINT("DHCP timeout after 20 seconds\n");
+        close(0);
+        dhcp_in_progress = false;
+        status_led_set_mode(LED_MODE_NORMAL);  // 일반 모드로 복귀
+        return false;
+    }
+    
+    // 링크 체크
+    uint8_t phy_status = getPHYCFGR();
+    if (!(phy_status & 0x01)) {
+        DBG_DHCP_PRINT("ERROR: Link lost during DHCP\n");
+        close(0);
+        dhcp_in_progress = false;
+        return false;
+    }
+    
+    // DHCP 내부 타이머 핸들러 (1초마다 호출 필수)
+    if (current_time - dhcp_last_tick >= 1000) {
+        DHCP_time_handler();
+        dhcp_last_tick = current_time;
+        // 진행 상태 표시
+        uint32_t elapsed_sec = (current_time - dhcp_start_time) / 1000;
+        DBG_DHCP_PRINT("DHCP waiting for IP... (elapsed: %lus)\n", elapsed_sec);
+    }
+    
+    // 100ms마다 한 번만 체크
+    if (current_time - dhcp_last_check < 100) {
+        return false;
+    }
+    dhcp_last_check = current_time;
+    
+    // DHCP 상태 확인
+    uint8_t dhcp_status = DHCP_run();
+    
+    switch(dhcp_status) {
+        case DHCP_IP_LEASED:
+            DBG_DHCP_PRINT("DHCP SUCCESS: IP leased!\n");
+            getIPfromDHCP(net_info->ip);
+            getGWfromDHCP(net_info->gw);
+            getSNfromDHCP(net_info->sn);
+            getDNSfromDHCP(net_info->dns);
+            memcpy(&g_net_info, net_info, sizeof(wiz_NetInfo));
+            
+            // IP 저장
+            system_config_t *sys_cfg = system_config_get();
+            if (!sys_cfg->has_last_dhcp_ip || 
+                memcmp(sys_cfg->last_dhcp_ip, net_info->ip, 4) != 0) {
+                memcpy(sys_cfg->last_dhcp_ip, net_info->ip, 4);
+                memcpy(sys_cfg->last_dhcp_gw, net_info->gw, 4);
+                memcpy(sys_cfg->last_dhcp_sn, net_info->sn, 4);
+                memcpy(sys_cfg->last_dhcp_dns, net_info->dns, 4);
+                sys_cfg->has_last_dhcp_ip = true;
+                system_config_save_to_flash();
+                DBG_DHCP_PRINT("New DHCP IP saved\n");
+            }
+            
+            apply_network_config(net_info);
+            close(0);
+            dhcp_in_progress = false;
+            status_led_set_mode(LED_MODE_CONNECTED);  // 연결 모드: 녹색 고정
+            return true;
+            
+        case DHCP_FAILED:
+            DBG_DHCP_PRINT("DHCP FAILED\n");
+            close(0);
+            dhcp_in_progress = false;
+            status_led_set_mode(LED_MODE_NORMAL);  // 일반 모드로 복귀
+            return false;
+            
+        default:
+            // 진행 중 - 1초마다 로그 출력
+            uint32_t elapsed = (current_time - dhcp_start_time) / 1000;
+            static uint32_t last_log_sec = 0;
+            if (elapsed != last_log_sec) {
+                DBG_DHCP_PRINT("DHCP waiting... %lu/20s\n", elapsed);
+                last_log_sec = elapsed;
+            }
+            return false;
+    }
 }
 
 // 네트워크 상태 출력
@@ -568,20 +637,35 @@ void network_process(void) {
     }
     
     // 케이블이 연결되어 있고 IP가 배분되지 않은 경우 IP 배분 시도
+    static uint32_t dhcp_retry_time = 0;
+    uint32_t current_time = to_ms_since_boot(get_absolute_time());
+    
+    // DHCP가 진행 중이면 상태 체크
+    if (dhcp_in_progress) {
+        static uint32_t last_debug = 0;
+        uint32_t now = to_ms_since_boot(get_absolute_time());
+        if (now - last_debug >= 5000) {  // 5초마다 체크 메시지
+            DBG_DHCP_PRINT("network_process: calling dhcp_process_check (dhcp_in_progress=true)\n");
+            last_debug = now;
+        }
+        
+        if (dhcp_process_check(&g_net_info)) {
+            printf("DHCP successful, IP assigned\n");
+            dhcp_configured = true;
+            w5500_print_network_status();
+        }
+        return; // DHCP 진행 중이면 다른 처리 건너뛰기
+    }
+    
     if (cable_connected && !network_is_connected()) {
         if (g_net_info.dhcp == NETINFO_DHCP && !dhcp_configured) {
-            // DHCP 모드: DHCP를 통한 IP 배분 시도
-            printf("Attempting DHCP for IP assignment...\n");
-            
-            // DHCP 시도
-            if (w5500_set_dhcp_mode(&g_net_info)) {
-                printf("DHCP successful, IP assigned\n");
-                dhcp_configured = true;
-                w5500_print_network_status();
-            } else {
-                printf("DHCP failed, will retry...\n");
-                // DHCP 실패시 잠시 대기 후 재시도 (다음 루프에서)
-                sleep_ms(1000);
+            // DHCP 재시도 간격 체크 (1초)
+            if (dhcp_retry_time == 0 || (current_time - dhcp_retry_time) >= 1000) {
+                printf("Attempting DHCP for IP assignment...\n");
+                
+                // DHCP 시작 (non-blocking)
+                w5500_set_dhcp_mode(&g_net_info);
+                dhcp_retry_time = current_time;
             }
         } else if (g_net_info.dhcp == NETINFO_STATIC) {
             // 고정 IP 모드: 설정된 고정 IP 적용

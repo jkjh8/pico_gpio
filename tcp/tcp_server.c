@@ -38,6 +38,16 @@ void tcp_servers_broadcast(const uint8_t* data, uint16_t len) {
     }
 }
 
+// TCP 클라이언트 연결 여부 확인
+bool tcp_servers_has_clients(void) {
+    for (uint8_t i = TCP_SOCKET_START; i < TCP_SOCKET_START + TCP_SOCKET_COUNT; i++) {
+        if (getSn_SR(i) == SOCK_ESTABLISHED) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // 모든 TCP 서버 소켓을 닫고 다시 여는 함수 (기존 포트)
 void tcp_servers_restart(void) {
     for (uint8_t i = TCP_SOCKET_START; i < TCP_SOCKET_START + TCP_SOCKET_COUNT; i++) {
