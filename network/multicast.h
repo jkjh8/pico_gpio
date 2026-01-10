@@ -12,7 +12,7 @@ extern "C"
 #endif
 
 // 멀티캐스트/브로드캐스트 설정
-#define MULTICAST_SOCKET 7
+#define MULTICAST_SOCKET 1
 #define MULTICAST_PORT 36721           // 송수신 포트 통일
 #define MULTICAST_GROUP_IP {224, 255, 0, 1}  // 224.255.0.1
 #define BROADCAST_IP {255, 255, 255, 255}    // 255.255.255.255

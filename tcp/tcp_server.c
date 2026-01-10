@@ -6,6 +6,9 @@
 // 필요 라이브러리 include는 헤더에서 처리됨
 uint16_t tcp_port = 5050;
 
+// 소켓별 연결 상태 추적
+static bool socket_welcome_sent[8] = {false};
+
 void save_tcp_port_to_flash(uint16_t port) {
     system_config_set_tcp_port(port);
     system_config_save_to_flash();
@@ -82,13 +85,14 @@ void tcp_servers_process(void) {
     for (uint8_t i = TCP_SOCKET_START; i < TCP_SOCKET_START + TCP_SOCKET_COUNT; i++) {
         switch (getSn_SR(i)) {
             case SOCK_ESTABLISHED: {
-                // 최초 연결 시에만 환영 메시지 전송 (텍스트 모드)
-                if (getSn_IR(i) & Sn_IR_CON) {
+                // 최초 연결 시에만 환영 메시지 전송 (한 번만)
+                if (!socket_welcome_sent[i]) {
+                    socket_welcome_sent[i] = true;
                     char welcome_text[64];
                     snprintf(welcome_text, sizeof(welcome_text), 
                             "Connected,%d,text\r\n", get_gpio_device_id());
                     send(i, (uint8_t*)welcome_text, strlen(welcome_text));
-                    setSn_IR(i, Sn_IR_CON);
+                    DBG_TCP_PRINT("TCP[%d] Welcome message sent\n", i);
                 }
                 uint16_t rx_size = getSn_RX_RSR(i);
                 if (rx_size > 0) {
@@ -140,8 +144,10 @@ void tcp_servers_process(void) {
             }
             case SOCK_CLOSE_WAIT:
                 disconnect(i);
+                socket_welcome_sent[i] = false;  // 연결 종료 시 플래그 리셋
                 break;
             case SOCK_CLOSED:
+                socket_welcome_sent[i] = false;  // 소켓 닫힘 시 플래그 리셋
                 // 네트워크가 연결된 경우에만 재오픈
                 if (network_is_connected()) {
                     close(i); // 안전하게 닫기

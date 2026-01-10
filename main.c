@@ -3,6 +3,7 @@
 #include "system/system_config.h"
 #include "led/status_led.h"
 #include "http/http_server.h"
+#include "lib/wiznet/socket.h"
 #include <stdio.h>
 #include "pico/stdio.h"
 #include <string.h>
@@ -10,6 +11,8 @@
 #include "task.h"
 #include "semphr.h"
 #include "queue.h"
+#include "hardware/watchdog.h"
+#include "pico/stdlib.h"
 
 // GPIO 응답 메시지 큐 (통합 큐 구조)
 #define GPIO_MSG_MAX_LEN 64  // 실제 메시지는 최대 27바이트
@@ -24,11 +27,14 @@ bool gpio_queues_enabled[MAX_GPIO_QUEUES] = {false};
 // =============================================================================
 
 static volatile bool restart_requested = false;
+static volatile bool restart_in_progress = false;
 static bool tcp_servers_initialized = false;
 volatile bool g_network_connected = false;  // 네트워크 연결 상태 (다른 태스크에서 읽기 전용)
 
 void system_restart_request(void) {
+    DBG_MAIN_PRINT("[RESTART] Request received, setting flag\n");
     restart_requested = true;
+    DBG_MAIN_PRINT("[RESTART] Flag set: %d\n", restart_requested);
 }
 
 bool is_system_restart_requested(void) {
@@ -36,12 +42,45 @@ bool is_system_restart_requested(void) {
 }
 
 void system_restart(void) {
-    DBG_MAIN_PRINT("System restart requested...\n");
-    sleep_ms(500);
+    // 이미 다른 태스크에서 실행 중이면 무한 대기
+    if (restart_in_progress) {
+        DBG_MAIN_PRINT("[RESTART] Already in progress, waiting...\n");
+        while(1) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+    restart_in_progress = true;
+    
+    DBG_MAIN_PRINT("[RESTART] System restarting...\n");
     fflush(stdout);
-    sleep_ms(500);
-    watchdog_reboot(0, 0, 0);
-    while (1) { __wfi(); }
+    
+    // W5500 소켓 전부 닫기 (인터럽트 비활성화 전에)
+    DBG_MAIN_PRINT("[RESTART] Closing W5500 sockets...\n");
+    fflush(stdout);
+    for (int i = 0; i < 8; i++) {
+        close(i);
+    }
+    
+    // 플래시 쓰기 완료 대기 (단축)
+    DBG_MAIN_PRINT("[RESTART] Waiting for flash write completion...\n");
+    fflush(stdout);
+    sleep_ms(50);
+    
+    DBG_MAIN_PRINT("[RESTART] Disabling interrupts...\n");
+    fflush(stdout);
+    // 모든 인터럽트 비활성화
+    taskENTER_CRITICAL();
+    
+    // Watchdog을 통한 리부팅 (1초 후 - USB 초기화 시간 확보)
+    watchdog_enable(1000, 1);
+    
+    DBG_MAIN_PRINT("[RESTART] Waiting for watchdog reset...\n");
+    fflush(stdout);
+    
+    // 무한 루프 (리셋 대기)
+    while(1) {
+        tight_loop_contents();
+    }
 }
 
 // =============================================================================
@@ -118,19 +157,44 @@ void network_task(void *pvParameters)
 {
     char msg_buffer[GPIO_MSG_MAX_LEN];
     bool prev_connected = false;
+    bool prev_link_up = false;
     printf("[TASK] network_task started\n");
     fflush(stdout);
     
     while (true) {
+        // 시스템 재시작 체크 (최우선 처리)
+        if (is_system_restart_requested()) {
+            DBG_MAIN_PRINT("[RESTART] Network task detected restart request\n");
+            system_restart();
+        }
+        
         network_process();
         bool current_connected = network_is_connected();
+        
+        // W5500 물리적 링크 상태 확인
+        int8_t link_status = PHY_LINK_OFF;
+        ctlwizchip(CW_GET_PHYLINK, (void*)&link_status);
+        bool current_link_up = (link_status == PHY_LINK_ON);
+        
         g_network_connected = current_connected;
         status_led_set_network_connected(current_connected);
         
+        // 링크 상태 변경 감지 (케이블 빠짐/꽂힘)
+        if (!current_link_up && prev_link_up) {
+            // 케이블이 빠짐 -> 부팅 모드로 전환 (5초간 깜박임)
+            DBG_MAIN_PRINT("[NETWORK] Link down detected\n");
+            status_led_set_mode(LED_MODE_BOOT);
+        } else if (current_link_up && !prev_link_up) {
+            // 케이블이 꽂힘 -> 연결 상태 확인 후 LED 모드 설정
+            DBG_MAIN_PRINT("[NETWORK] Link up detected\n");
+        }
+        
         // 네트워크 연결 상태 변경 감지
         if (current_connected && !prev_connected) {
-            // 네트워크가 새로 연결됨 -> LED 모드 변경 및 TCP 큐 초기화
+            // 네트워크가 새로 연결됨 -> LED 모드 변경
             status_led_set_mode(LED_MODE_CONNECTED);
+            
+            // TCP 큐 초기화
             if (gpio_queues[GPIO_QUEUE_TCP] != NULL) {
                 xQueueReset(gpio_queues[GPIO_QUEUE_TCP]);
                 DBG_MAIN_PRINT("[TCP] Queue reset on network connect\n");
@@ -165,6 +229,7 @@ void network_task(void *pvParameters)
         }
         
         prev_connected = current_connected;
+        prev_link_up = current_link_up;
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
@@ -214,6 +279,7 @@ void system_monitor_task(void *pvParameters)
 {
     while (true) {
         if (is_system_restart_requested()) {
+            DBG_MAIN_PRINT("[RESTART] System monitor task detected restart request\n");
             system_restart();
         }
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -228,13 +294,38 @@ int main()
 {
     // 1. 기본 초기화
     stdio_init_all();
-    // 2. 상태 표시 LED 초기화 (부팅 모드 시작)
+    
+    // USB CDC 준비 대기 (최대 2초)
+    bool usb_connected = false;
+    for (int i = 0; i < 20; i++) {
+        if (stdio_usb_connected()) {
+            usb_connected = true;
+            break;
+        }
+        sleep_ms(100);
+    }
+    
+    // USB 연결 상태 확인 (시리얼로만 출력)
+    if (usb_connected) {
+        sleep_ms(800); // USB 안정화 대기 (리부팅 후 안정성 확보)
+    }
+    
+    printf("\n\n");
+    printf("=================================\n");
+    printf("System Starting...\n");
+    printf("=================================\n");
+    fflush(stdout);
+    
+    // 2. 상태 표시 LED 초기화 (녹색 켜짐)
     status_led_init();
-    status_led_set_mode(LED_MODE_BOOT);  // 부팅 모드: 녹색/빨간색 번갈아 깜박임
+    printf("LED initialized (Green ON)\n");
+    fflush(stdout);
     
     // 3. 시스템 설정 로드 (통합 Flash 설정)
     system_config_init();
     debug_init();
+    printf("System config loaded\n");
+    fflush(stdout);
     
     DBG_MAIN_PRINT("=== Pico GPIO Server v%s ===\n", PICO_PROGRAM_VERSION_STRING);
     DBG_MAIN_PRINT("Board: %s\n", PICO_BOARD);
@@ -246,9 +337,14 @@ int main()
     DBG_MAIN_PRINT("TCP port: %u\n", tcp_port);
     DBG_MAIN_PRINT("UART baud: %u\n", uart_rs232_1_baud);
     DBG_MAIN_PRINT("GPIO Device ID: 0x%02X\n", get_gpio_device_id());
+    fflush(stdout);
     
     // 5. 네트워크 초기화
+    printf("Initializing network...\n");
+    fflush(stdout);
     network_init();
+    printf("Network initialized\n");
+    fflush(stdout);
     
     // 6. HTTP 서버 시작 - 비활성화 (재구성 예정)
     // if (http_server_init(80)) {
@@ -258,24 +354,45 @@ int main()
     // }
     
     // 7. UART 초기화
+    printf("Initializing UART...\n");
+    fflush(stdout);
     uart_rs232_init(RS232_PORT_1, uart_rs232_1_baud);
     DBG_MAIN_PRINT("UART RS232 initialized at %u baud\n", uart_rs232_1_baud);
+    fflush(stdout);
     
     // 8. GPIO 초기화
+    printf("Initializing GPIO...\n");
+    fflush(stdout);
     gpio_spi_init();
     DBG_MAIN_PRINT("GPIO SPI initialized\n");
     
     // GPIO 출력 모두 끄기 (초기 상태)
     hct595_write(0x0000);
     DBG_MAIN_PRINT("GPIO outputs initialized (all OFF)\n");
+    fflush(stdout);
     
-    // 시스템 준비 완료: 녹색 LED 계속 켜짐
+    // 네트워크 연결 확인
+    int8_t link_status = PHY_LINK_OFF;
+    ctlwizchip(CW_GET_PHYLINK, (void*)&link_status);
+    if (link_status == PHY_LINK_OFF) {
+        DBG_MAIN_PRINT("Network cable not connected - Blinking for 5 seconds\n");
+        status_led_set_mode(LED_MODE_BOOT);  // 5초간 깜박임
+        sleep_ms(5000);
+    }
+    
+    // 시스템 준비 완료: 녹색 LED 고정
     status_led_set_state(STATUS_LED_GREEN_ON);
     DBG_MAIN_PRINT("System ready - Status LED green\n");
+    fflush(stdout);
 
     // =============================================================================
     // FreeRTOS 태스크 생성 및 스케줄러 시작
     // =============================================================================
+    
+    printf("\n=================================\n");
+    printf("Creating FreeRTOS tasks...\n");
+    printf("=================================\n");
+    fflush(stdout);
     
     DBG_MAIN_PRINT("Creating FreeRTOS tasks...\n");
     
@@ -292,6 +409,9 @@ int main()
         DBG_MAIN_PRINT("GPIO message queues created (UART + TCP broadcast, size=%d)\n", GPIO_QUEUE_SIZE);
     }
     
+    // 네트워크 정보 캐시 초기화 (뮤텍스 생성)
+    network_cache_init();
+    
     xTaskCreate(network_task, "Network", 2048, NULL, 4, NULL);
     xTaskCreate(gpio_task, "GPIO", 1024, NULL, 3, NULL);
     xTaskCreate(uart_task, "UART", 1024, NULL, 3, NULL);
@@ -306,6 +426,9 @@ int main()
     // Should never reach here
     DBG_MAIN_PRINT("ERROR: Scheduler failed to start!\n");
     while (1) {
+        if (restart_requested) {
+            system_restart();
+        }
         tight_loop_contents();
     }
 }

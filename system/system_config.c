@@ -3,6 +3,8 @@
 #include "hardware/flash.h"
 #include "hardware/sync.h"
 #include "pico/stdlib.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #include <string.h>
 
 // =============================================================================
@@ -88,21 +90,34 @@ void system_config_reset_to_defaults(void) {
 
 // Flash에 저장
 bool system_config_save_to_flash(void) {
+    DBG_MAIN_PRINT("[FLASH] Starting flash save...\n");
+    
     // 체크섬 업데이트
     g_system_config.checksum = calculate_checksum(&g_system_config);
+    DBG_MAIN_PRINT("[FLASH] Checksum calculated: 0x%08X\n", g_system_config.checksum);
     
     // Flash 쓰기 (인터럽트 비활성화 필요)
     // flash_range_program의 데이터 크기는 반드시 256의 배수(FLASH_PAGE_SIZE)여야 합니다.
     uint8_t page_buffer[FLASH_PAGE_SIZE];
     memset(page_buffer, 0, FLASH_PAGE_SIZE);
     memcpy(page_buffer, &g_system_config, sizeof(system_config_t));
+    DBG_MAIN_PRINT("[FLASH] Buffer prepared, size: %d bytes\n", sizeof(system_config_t));
+    DBG_MAIN_PRINT("[FLASH] Starting critical flash operation...\n");
 
+    // 크리티컬 섹션: 인터럽트와 스케줄러 비활성화
+    vTaskSuspendAll();
     uint32_t ints = save_and_disable_interrupts();
+    
+    // Flash erase & program (인터럽트 비활성화 상태에서 로그 출력 불가)
     flash_range_erase(FLASH_TARGET_OFFSET, FLASH_SECTOR_SIZE);
     flash_range_program(FLASH_TARGET_OFFSET, page_buffer, FLASH_PAGE_SIZE);
-    restore_interrupts(ints);
     
-    DBG_MAIN_PRINT("System config saved to flash (size: %d, programmed: %d)\n", 
+    // 복원
+    restore_interrupts(ints);
+    xTaskResumeAll();
+    
+    DBG_MAIN_PRINT("[FLASH] Flash operation completed successfully\n");
+    DBG_MAIN_PRINT("[FLASH] System config saved (size: %d, programmed: %d)\n", 
                    sizeof(system_config_t), FLASH_PAGE_SIZE);
     return true;
 }

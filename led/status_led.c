@@ -14,13 +14,15 @@ static bool network_connected_state = false;
 static led_mode_t current_led_mode = LED_MODE_BOOT;
 static uint32_t mode_blink_timer = 0;
 static bool mode_blink_state = false;
+static uint32_t boot_mode_start_time = 0;
+static int boot_mode_blink_count = 0;
 
 void status_led_init(void)
 {
     // 녹색 LED 핀 초기화 (풀업 회로: 0=ON, 1=OFF)
     gpio_init(STATUS_LED_GREEN_PIN);
     gpio_set_dir(STATUS_LED_GREEN_PIN, GPIO_OUT);
-    gpio_put(STATUS_LED_GREEN_PIN, 1);  // 초기 꺼짐
+    gpio_put(STATUS_LED_GREEN_PIN, 0);  // 초기 켜짐
     
     // 빨강색 LED 핀 초기화 (풀업 회로: 0=ON, 1=OFF)
     gpio_init(STATUS_LED_RED_PIN);
@@ -109,6 +111,12 @@ void status_led_set_mode(led_mode_t mode)
     current_led_mode = mode;
     mode_blink_timer = to_ms_since_boot(get_absolute_time());
     mode_blink_state = false;
+    
+    // 부팅 모드 시작 시간 및 카운터 초기화
+    if (mode == LED_MODE_BOOT) {
+        boot_mode_start_time = to_ms_since_boot(get_absolute_time());
+        boot_mode_blink_count = 0;
+    }
 }
 
 // LED 처리 함수 (메인 루프에서 호출)
@@ -132,10 +140,17 @@ void status_led_process(void)
     // 모드별 LED 제어
     switch (current_led_mode) {
         case LED_MODE_BOOT:
-            // 부팅 모드: 녹색/빨간색 번갈아 깜박임 (500ms 주기)
-            if (now - mode_blink_timer >= 500) {
+            // 부팅 모드: 5번 깜박임 후 녹색 고정
+            if (boot_mode_blink_count >= 10) {
+                // 5번 깜박임 완료 (10회 토글 = 5번 깜박임) -> 녹색 고정
+                gpio_put(STATUS_LED_GREEN_PIN, 0);  // 녹색 ON
+                gpio_put(STATUS_LED_RED_PIN, 1);    // 빨간색 OFF
+            } else if (now - mode_blink_timer >= 500) {
+                // 500ms 주기로 깜박임
                 mode_blink_timer = now;
                 mode_blink_state = !mode_blink_state;
+                boot_mode_blink_count++;
+                
                 if (mode_blink_state) {
                     // 녹색 ON, 빨간색 OFF
                     gpio_put(STATUS_LED_GREEN_PIN, 0);

@@ -7,7 +7,7 @@
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0" />
-    <title>Pico Control</title>
+    <title>MIC Control</title>
     <style>
       :root {
         --primary: #1976d2;
@@ -144,7 +144,7 @@
         display: flex;
         align-items: center;
         border-bottom: 1px solid #efefef;
-        gap: 16px;
+        gap: 8px;
         background-color: #f2f2f2;
       }
       .card-title {
@@ -241,7 +241,6 @@
       .btn {
         border: none;
         border-radius: 4px;
-        padding: 8px 16px;
         font-size: 0.9rem;
         font-weight: 500;
         cursor: pointer;
@@ -249,7 +248,18 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
+      }
+      .btn2 {
+        border: none;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        padding: 8px 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
       .btn-primary {
         background-color: var(--primary);
@@ -267,6 +277,9 @@
         border-radius: 50%;
         overflow: hidden;
         white-space: nowrap;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .btn-expand .btn-text {
         max-width: 0;
@@ -276,7 +289,7 @@
       }
       .btn-expand:hover {
         width: auto;
-        padding: 0 14px 0 10px;
+        padding: 0 16px;
         border-radius: 20px;
         gap: 6px;
       }
@@ -295,6 +308,8 @@
         width: 24px;
         height: 24px;
         fill: currentColor;
+        display: block;
+        flex-shrink: 0;
       }
       .icon-sm {
         width: 20px;
@@ -543,12 +558,12 @@
         <div class="modal-actions">
           <button
             id="modal-cancel"
-            class="btn btn-flat">
+            class="btn2 btn-flat">
             Cancel
           </button>
           <button
             id="modal-confirm"
-            class="btn btn-primary">
+            class="btn2 btn-primary">
             Reboot
           </button>
         </div>
@@ -666,8 +681,12 @@
                     <strong id="sum-id">Loading...</strong>
                   </div>
                   <div class="row items-center justify-between">
-                    <span>Mode</span>
+                    <span>RETURN Mode</span>
                     <strong id="sum-mode">Loading...</strong>
+                  </div>
+                  <div class="row items-center justify-between">
+                    <span>Trigger Mode</span>
+                    <strong id="sum-trigger">Loading...</strong>
                   </div>
                 </div>
               </div>
@@ -840,11 +859,27 @@
                       style="fill: var(--primary)">
                       <use href="#terminal"></use>
                     </svg>
-                    <span>MODE</span>
+                    <span>RETURN MODE</span>
                   </div>
                   <select id="gpio-mode">
-                    <option value="text">TEXT</option>
-                    <option value="json">JSON</option>
+                    <option value="bytes">BYTES</option>
+                    <option value="channel">CHANNEL</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <div
+                    class="row items-center gap-sm"
+                    style="margin-bottom: 8px">
+                    <svg
+                      class="icon-sm text-primary"
+                      style="fill: var(--primary)">
+                      <use href="#terminal"></use>
+                    </svg>
+                    <span>TRIGGER MODE</span>
+                  </div>
+                  <select id="gpio-trigger">
+                    <option value="toggle">TOGGLE</option>
+                    <option value="trigger">TRIGGER</option>
                   </select>
                 </div>
                 <div class="form-group">
@@ -1116,7 +1151,73 @@
         }
       }
       async function fetchAll() {
-        await Promise.all([fetchNetwork(), fetchComm(), fetchGpio()])
+        try {
+          const res = await fetch('/api/all')
+          const data = await res.json()
+
+          // Network data
+          state.network = data.network || {}
+          const hm = document.getElementById('header-mac')
+          if (hm) hm.textContent = state.network.mac || 'N/A'
+          const nd = document.getElementById('net-dhcp')
+          if (nd) {
+            nd.checked = state.network.dhcp_enabled
+            const ni = document.getElementById('net-ip')
+            const nm = document.getElementById('net-mask')
+            const ng = document.getElementById('net-gateway')
+            const ndn = document.getElementById('net-dns')
+            if (ni) ni.value = state.network.ip || ''
+            if (nm) nm.value = state.network.subnet || ''
+            if (ng) ng.value = state.network.gateway || ''
+            if (ndn) ndn.value = state.network.dns || ''
+            toggleNetworkInputs(state.network.dhcp_enabled)
+          }
+          const si = document.getElementById('sum-ip')
+          if (si) si.textContent = state.network.ip || 'N/A'
+          const sm = document.getElementById('sum-mac')
+          if (sm) sm.textContent = state.network.mac || 'N/A'
+          const sd = document.getElementById('sum-dhcp')
+          if (sd)
+            sd.textContent = state.network.dhcp_enabled ? 'Enabled' : 'Disabled'
+          const smask = document.getElementById('sum-mask')
+          if (smask) smask.textContent = state.network.subnet || 'N/A'
+          const sg = document.getElementById('sum-gateway')
+          if (sg) sg.textContent = state.network.gateway || 'N/A'
+          const sdn = document.getElementById('sum-dns')
+          if (sdn) sdn.textContent = state.network.dns || 'N/A'
+
+          // Control data
+          state.comm = data.control
+          const ct = document.getElementById('comm-tcp')
+          if (ct) ct.value = data.control.tcp_port
+          const cb = document.getElementById('comm-baud')
+          if (cb) cb.value = data.control.rs232_1_baud
+          const st = document.getElementById('sum-tcp')
+          if (st) st.textContent = data.control.tcp_port
+          const sb = document.getElementById('sum-baud')
+          if (sb) sb.textContent = data.control.rs232_1_baud
+
+          // GPIO data
+          state.gpio = data.gpio
+          const gi = document.getElementById('gpio-id')
+          if (gi) gi.value = data.gpio.device_id
+          const gm = document.getElementById('gpio-mode')
+          if (gm) gm.value = data.gpio.rt_mode
+          const gt = document.getElementById('gpio-trigger')
+          if (gt) gt.value = data.gpio.trigger_mode
+          const ga = document.getElementById('gpio-auto')
+          if (ga) ga.value = data.gpio.auto_response.toString()
+          const sid = document.getElementById('sum-id')
+          if (sid) sid.textContent = data.gpio.device_id
+          const smode = document.getElementById('sum-mode')
+          if (smode) smode.textContent = data.gpio.rt_mode.toUpperCase()
+          const strigger = document.getElementById('sum-trigger')
+          if (strigger)
+            strigger.textContent = data.gpio.trigger_mode.toUpperCase()
+        } catch (e) {
+          console.error(e)
+          showToast('Failed to fetch data', 'negative')
+        }
       }
       document.querySelectorAll('.nav-item').forEach((item) => {
         item.addEventListener('click', () => {
@@ -1202,6 +1303,7 @@
           const payload = {
             device_id: parseInt(document.getElementById('gpio-id').value),
             rt_mode: document.getElementById('gpio-mode').value,
+            trigger_mode: document.getElementById('gpio-trigger').value,
             auto_response: document.getElementById('gpio-auto').value === 'true'
           }
           try {

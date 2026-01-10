@@ -129,21 +129,26 @@ static void send_gpio_response(uint16_t changed_bits, uint16_t current_data) {
             }
         }
     } else {
-        // BYTES 모드: 전체 상태를 2바이트로 전송
-        uint8_t low_byte = (uint8_t)(current_data & 0xFF);
-        uint8_t high_byte = (uint8_t)((current_data >> 8) & 0xFF);
-        
-        snprintf(feedback, sizeof(feedback),
-                "input_bytes,%d,%d,%d\r\n",
-                gpio_config.device_id, low_byte, high_byte);
-        
-        DBG_GPIO_PRINT("Queue IN BYTES: %s", feedback);
-        
-        // 모든 활성화된 큐에 전송
-        for (i = 0; i < MAX_GPIO_QUEUES; i++) {
-            if (gpio_queues[i] != NULL && gpio_queues_enabled[i]) {
-                result = xQueueSend(gpio_queues[i], feedback, 0);
-                DBG_GPIO_PRINT("  -> Q[%d] %s\n", i, result == pdTRUE ? "OK" : "FULL");
+        // BYTES 모드: 변경된 각 채널에 대해 개별 메시지 전송 (CHANNEL 모드와 동일)
+        int channel;
+        for (channel = 1; channel <= 16; channel++) {
+            uint16_t mask = (1 << (channel - 1));
+            if (changed_bits & mask) {
+                bool value = (current_data & mask) ? true : false;
+                
+                snprintf(feedback, sizeof(feedback),
+                        "input_channel,%d,%d,%s\r\n",
+                        gpio_config.device_id, channel, value ? "1" : "0");
+                
+                DBG_GPIO_PRINT("Queue IN CH%d: %s", channel, feedback);
+                
+                // 모든 활성화된 큐에 전송
+                for (i = 0; i < MAX_GPIO_QUEUES; i++) {
+                    if (gpio_queues[i] != NULL && gpio_queues_enabled[i]) {
+                        result = xQueueSend(gpio_queues[i], feedback, 0);
+                        DBG_GPIO_PRINT("  -> Q[%d] %s\n", i, result == pdTRUE ? "OK" : "FULL");
+                    }
+                }
             }
         }
     }

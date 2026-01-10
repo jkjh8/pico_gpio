@@ -1,17 +1,21 @@
 #include "http_server.h"
+#include "http_handlers.h"
+#include "../main.h"
 #include "lib/wiznet/socket.h"
 #include "lib/wiznet/w5500.h"
+#include "lib/wiznet/wizchip_conf.h"
 #include "debug/debug.h"
 #include "gpio/gpio.h"
 #include "system/system_config.h"
 #include "static_files.h"
 #include "FreeRTOS.h"
+#include "semphr.h"
 #include "task.h"
 #include <string.h>
 #include <stdio.h>
 
 // HTTP 소켓 (소켓 1번만 사용 - 간단한 사용 시)
-static const uint8_t http_sockets[] = {1};
+static const uint8_t http_sockets[] = {6,7};
 #define HTTP_SOCKET_COUNT (sizeof(http_sockets) / sizeof(http_sockets[0]))
 
 // HTTP 응답 헤더 (바이너리 데이터 지원)
@@ -104,20 +108,25 @@ static void http_handle_static_file(uint8_t sock, const char* path) {
     }
 }
 
-// API 엔드포인트 처리
-static void http_handle_api(uint8_t sock, const char* path) {
-    char response[512];
-    
-    if (strcmp(path, "/api/status") == 0) {
-        // GPIO 상태 반환
-        extern uint16_t gpio_output_data;
-        gpio_config_t* cfg = system_config_get_gpio();
-        
-        snprintf(response, sizeof(response),
-            "{\"id\":%d,\"outputs\":\"%04X\"}",
-            cfg->device_id, gpio_output_data);
-        
-        http_send_response(sock, "200 OK", "application/json", response);
+// API 엔드포인트 처리 (GET 요청)
+static void http_handle_api_get(uint8_t sock, const char* path) {
+    if (strcmp(path, "/api/all") == 0) {
+        http_handle_get_all(sock);
+    } else if (strcmp(path, "/api/restart") == 0) {
+        http_handle_get_restart(sock);
+    } else {
+        http_send_response(sock, "404 Not Found", "text/plain", "Not Found");
+    }
+}
+
+// API 엔드포인트 처리 (POST 요청)
+static void http_handle_api_post(uint8_t sock, const char* path, const char* body) {
+    if (strcmp(path, "/api/network") == 0) {
+        http_handle_post_network(sock, body);
+    } else if (strcmp(path, "/api/control") == 0) {
+        http_handle_post_control(sock, body);
+    } else if (strcmp(path, "/api/gpio") == 0) {
+        http_handle_post_gpio(sock, body);
     } else {
         http_send_response(sock, "404 Not Found", "text/plain", "Not Found");
     }
@@ -134,14 +143,28 @@ static void http_handle_request(uint8_t sock, char* request) {
     
     DBG_HTTP_PRINT("HTTP %s %s\n", method, path);
     
-    if (strcmp(method, "GET") != 0) {
-        http_send_response(sock, "405 Method Not Allowed", "text/plain", "Method Not Allowed");
-        return;
+    // POST 요청인 경우 body 찾기
+    char* body = NULL;
+    if (strcmp(method, "POST") == 0) {
+        body = strstr(request, "\r\n\r\n");
+        if (body) {
+            body += 4; // "\r\n\r\n" 건너뛰기
+        }
     }
     
     // 라우팅
     if (strncmp(path, "/api/", 5) == 0) {
-        http_handle_api(sock, path);
+        if (strcmp(method, "GET") == 0) {
+            http_handle_api_get(sock, path);
+        } else if (strcmp(method, "POST") == 0) {
+            if (body) {
+                http_handle_api_post(sock, path, body);
+            } else {
+                http_send_response(sock, "400 Bad Request", "text/plain", "No body");
+            }
+        } else {
+            http_send_response(sock, "405 Method Not Allowed", "text/plain", "Method Not Allowed");
+        }
     } else if (strcmp(path, "/") == 0) {
         // 루트 경로는 index.html로 리다이렉트
         http_handle_static_file(sock, "/index.html");

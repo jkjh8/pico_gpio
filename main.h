@@ -10,6 +10,8 @@
 #include "hardware/spi.h"
 #include "hardware/sync.h"
 #include "hardware/watchdog.h"
+#include "FreeRTOS.h"
+#include "semphr.h"
 #include "network/mac_utils.h"
 #include "network/network_config.h"
 #include "network/multicast.h"
@@ -20,9 +22,15 @@
 
 // 전역 상태 변수
 extern volatile bool g_network_connected;
+extern wiz_NetInfo g_network_info;
+extern SemaphoreHandle_t g_network_info_mutex;
+
+// 네트워크 정보 업데이트 함수
+// 네트워크 정보 캐시 (HTTP API에서 사용)
+extern wiz_NetInfo g_network_info;
+extern SemaphoreHandle_t g_network_info_mutex;
 
 // GPIO 응답 메시지 큐 (통합 큐 구조)
-#include "FreeRTOS.h"
 #include "queue.h"
 #define GPIO_QUEUE_SIZE 20       // 큐 크기 증가 (16채널 동시 변경 대응)
 #define GPIO_MSG_MAX_LEN 64      // 실제 메시지는 최대 27바이트

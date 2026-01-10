@@ -175,7 +175,7 @@ cmd_result_t cmd_get_input(const char* param, char* response, size_t response_si
     // 디바이스 ID 체크
     if (target_id != 0 && target_id != get_gpio_device_id()) {
         // ID가 맞지 않으면 응답하지 않음
-        response[0] = '\0';
+        // response[0] = '\\0'; // 응답하지 않음
         return CMD_SUCCESS;
     }
 
@@ -193,7 +193,7 @@ cmd_result_t cmd_get_input(const char* param, char* response, size_t response_si
     return CMD_SUCCESS;
 }
 
-// GPIO 전체 입력 읽기 (getinputs,id -> low,high)
+// GPIO 전체 입력 읽기 (getinputs,id -> low,high 또는 binary string)
 cmd_result_t cmd_get_inputs(const char* param, char* response, size_t response_size) {
     if (param == NULL) {
         snprintf(response, response_size, "Error: Parameter required. Use: getinputs,id\r\n");
@@ -205,15 +205,28 @@ cmd_result_t cmd_get_inputs(const char* param, char* response, size_t response_s
     // 디바이스 ID 체크
     if (target_id != 0 && target_id != get_gpio_device_id()) {
         // ID가 맞지 않으면 응답하지 않음
-        response[0] = '\0';
+        // response[0] = '\0'; // 응답하지 않음
         return CMD_SUCCESS;
     }
 
     uint16_t gpio_state = gpio_input_data;
-    uint8_t low_byte = (uint8_t)(gpio_state & 0xFF);
-    uint8_t high_byte = (uint8_t)((gpio_state >> 8) & 0xFF);
-
-    snprintf(response, response_size, "input_bytes,%d,%d,%d", get_gpio_device_id(), low_byte, high_byte);
+    gpio_rt_mode_t rt_mode = get_gpio_rt_mode();
+    
+    if (rt_mode == GPIO_RT_MODE_CHANNEL) {
+        // CHANNEL 모드: 바이너리 스트링 형식 (LSB first)
+        char binary[17];
+        for (int i = 0; i < 16; i++) {
+            binary[i] = (gpio_state & (1 << i)) ? '1' : '0';
+        }
+        binary[16] = '\0';
+        snprintf(response, response_size, "inputs,%d,%s", get_gpio_device_id(), binary);
+    } else {
+        // BYTES 모드: 바이트 형식
+        uint8_t low_byte = (uint8_t)(gpio_state & 0xFF);
+        uint8_t high_byte = (uint8_t)((gpio_state >> 8) & 0xFF);
+        snprintf(response, response_size, "input_bytes,%d,%d,%d", get_gpio_device_id(), low_byte, high_byte);
+    }
+    
     return CMD_SUCCESS;
 }
 
@@ -242,7 +255,7 @@ cmd_result_t cmd_get_input_channel(const char* param, char* response, size_t res
     // 디바이스 ID 체크
     if (target_id != 0 && target_id != get_gpio_device_id()) {
         // ID가 맞지 않으면 응답하지 않음
-        response[0] = '\0';
+        // response[0] = '\\0'; // 응답하지 않음
         return CMD_SUCCESS;
     }
 
@@ -298,7 +311,7 @@ cmd_result_t cmd_get_output(const char* param, char* response, size_t response_s
     // 디바이스 ID 체크
     if (target_id != 0 && target_id != get_gpio_device_id()) {
         // ID가 맞지 않으면 응답하지 않음
-        response[0] = '\0';
+        // response[0] = '\\0'; // 응답하지 않음
         return CMD_SUCCESS;
     }
 
@@ -328,7 +341,7 @@ cmd_result_t cmd_get_outputs(const char* param, char* response, size_t response_
     // 디바이스 ID 체크
     if (target_id != 0 && target_id != get_gpio_device_id()) {
         // ID가 맞지 않으면 응답하지 않음
-        response[0] = '\0';
+        // response[0] = '\\0'; // 응답하지 않음
         return CMD_SUCCESS;
     }
 
@@ -368,7 +381,7 @@ cmd_result_t cmd_set_output(const char* param, char* response, size_t response_s
     // 디바이스 ID 체크
     if (target_id != 0 && target_id != get_gpio_device_id()) {
         // ID가 맞지 않으면 응답하지 않음
-        response[0] = '\0';
+        // response[0] = '\\0'; // 응답하지 않음
         return CMD_SUCCESS;
     }
 
@@ -395,7 +408,6 @@ cmd_result_t cmd_set_output(const char* param, char* response, size_t response_s
     
     hct595_write(gpio_output_data);
     
-    response[0] = '\0';
     return CMD_SUCCESS;
 }
 
@@ -425,7 +437,7 @@ cmd_result_t cmd_set_outputs(const char* param, char* response, size_t response_
     // 디바이스 ID 체크
     if (target_id != 0 && target_id != get_gpio_device_id()) {
         // ID가 맞지 않으면 응답하지 않음
-        response[0] = '\0';
+        // response[0] = '\\0'; // 응답하지 않음
         return CMD_SUCCESS;
     }
 
@@ -442,7 +454,6 @@ cmd_result_t cmd_set_outputs(const char* param, char* response, size_t response_
     // GPIO 출력에 적용
     hct595_write(gpio_value);
     
-    response[0] = '\0';
     return CMD_SUCCESS;
 }
 

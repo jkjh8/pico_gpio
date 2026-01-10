@@ -4,6 +4,7 @@
 #include "../uart/uart_rs232.h"
 #include "../tcp/tcp_server.h"
 #include "../led/status_led.h"
+#include "../main.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
 
@@ -12,6 +13,12 @@
 // =============================================================================
 static SemaphoreHandle_t w5500_mutex = NULL;
 static bool w5500_mutex_initialized = false;
+
+// =============================================================================
+// Network Info Cache (for HTTP API)
+// =============================================================================
+wiz_NetInfo g_network_info;
+SemaphoreHandle_t g_network_info_mutex = NULL;
 
 static void w5500_critical_enter(void) {
     if (w5500_mutex != NULL && xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
@@ -33,6 +40,27 @@ void network_enable_spi_mutex(void) {
             w5500_mutex_initialized = true;
             reg_wizchip_cris_cbfunc(w5500_critical_enter, w5500_critical_exit);
             DBG_NET_PRINT("W5500 SPI recursive mutex initialized and registered\n");
+        }
+    }
+}
+
+// 네트워크 정보 캐시 초기화 (FreeRTOS 스케줄러 시작 전 호출)
+void network_cache_init(void) {
+    g_network_info_mutex = xSemaphoreCreateMutex();
+    if (g_network_info_mutex == NULL) {
+        DBG_NET_PRINT("ERROR: Failed to create network info cache mutex\n");
+    } else {
+        DBG_NET_PRINT("Network info cache mutex created\n");
+    }
+}
+
+// 네트워크 정보 캐시 업데이트 함수 (네트워크 설정 변경 시 호출)
+void update_network_info_cache(void) {
+    if (g_network_info_mutex != NULL) {
+        if (xSemaphoreTake(g_network_info_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            wizchip_getnetinfo(&g_network_info);
+            xSemaphoreGive(g_network_info_mutex);
+            DBG_NET_PRINT("[NET] Network info cache updated\n");
         }
     }
 }
@@ -383,6 +411,9 @@ bool w5500_set_static_ip(wiz_NetInfo *net_info) {
     // 네트워크 정보를 W5500에 설정
     apply_network_config(net_info);
     
+    // 네트워크 정보 캐시 업데이트
+    update_network_info_cache();
+    
     return true;
 }
 
@@ -513,6 +544,10 @@ bool dhcp_process_check(wiz_NetInfo *net_info) {
             close(0);
             dhcp_in_progress = false;
             status_led_set_mode(LED_MODE_CONNECTED);  // 연결 모드: 녹색 고정
+            
+            // 네트워크 정보 캠시 업데이트
+            update_network_info_cache();
+            
             return true;
             
         case DHCP_FAILED:
@@ -597,8 +632,19 @@ void network_init(void) {
     // W5500 및 네트워크 초기화
     if (w5500_initialize() == W5500_INIT_SUCCESS) {
         DBG_WIZNET_PRINT("W5500 initialization successful\n");
-        // W5500에 네트워크 설정 적용
-        apply_network_config(&g_net_info);
+        
+        // DHCP 또는 Static IP 모드에 따라 설정 적용
+        if (g_net_info.dhcp == NETINFO_DHCP) {
+            DBG_NET_PRINT("Starting DHCP mode...\n");
+            w5500_set_dhcp_mode(&g_net_info);
+        } else {
+            DBG_NET_PRINT("Applying Static IP mode...\n");
+            w5500_set_static_ip(&g_net_info);
+        }
+        
+        // 네트워크 정보 캐시 직접 업데이트 (스케줄러 시작 전이므로 mutex 없이)
+        wizchip_getnetinfo(&g_network_info);
+        DBG_NET_PRINT("[NET] Network info cache initialized\n");
     } else {
         DBG_WIZNET_PRINT("ERROR: W5500 initialization failed\n");
     }
