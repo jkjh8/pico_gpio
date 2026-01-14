@@ -3,6 +3,8 @@
 #include "system/system_config.h"
 #include "led/status_led.h"
 #include "http/http_server.h"
+#include "network/mdns.h"
+#include "network/network_config.h"
 #include "lib/wiznet/socket.h"
 #include <stdio.h>
 #include "pico/stdio.h"
@@ -28,12 +30,27 @@ bool gpio_queues_enabled[MAX_GPIO_QUEUES] = {false};
 
 static volatile bool restart_requested = false;
 static volatile bool restart_in_progress = false;
+static uint32_t restart_request_time = 0;
 static bool tcp_servers_initialized = false;
 volatile bool g_network_connected = false;  // 네트워크 연결 상태 (다른 태스크에서 읽기 전용)
 
 void system_restart_request(void) {
+    // 이미 재부팅 진행 중이면 무시
+    if (restart_in_progress) {
+        DBG_MAIN_PRINT("[RESTART] Already in progress, ignoring new request\n");
+        return;
+    }
+    
+    // 중복 요청 방지 (1초 내 중복 요청 무시)
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    if (restart_requested && (now - restart_request_time) < 1000) {
+        DBG_MAIN_PRINT("[RESTART] Duplicate request ignored (within 1 second)\n");
+        return;
+    }
+    
     DBG_MAIN_PRINT("[RESTART] Request received, setting flag\n");
     restart_requested = true;
+    restart_request_time = now;
     DBG_MAIN_PRINT("[RESTART] Flag set: %d\n", restart_requested);
 }
 
@@ -50,6 +67,7 @@ void system_restart(void) {
         }
     }
     restart_in_progress = true;
+    restart_requested = false;  // 플래그 리셋하여 중복 처리 방지
     
     DBG_MAIN_PRINT("[RESTART] System restarting...\n");
     fflush(stdout);
@@ -66,8 +84,15 @@ void system_restart(void) {
     fflush(stdout);
     sleep_ms(50);
     
+    // USB 시리얼 버퍼 완전 플러시를 위한 추가 지연
+    DBG_MAIN_PRINT("[RESTART] Flushing USB serial buffer...\n");
+    fflush(stdout);
+    sleep_ms(1500);  // USB CDC 버퍼 플러시 시간 충분히 확보
+    
     DBG_MAIN_PRINT("[RESTART] Disabling interrupts...\n");
     fflush(stdout);
+    sleep_ms(200);  // 마지막 메시지 전송 시간
+    
     // 모든 인터럽트 비활성화
     taskENTER_CRITICAL();
     
@@ -213,19 +238,33 @@ void network_task(void *pvParameters)
         }
         
         if (!tcp_servers_initialized && current_connected) {
-            tcp_servers_init(tcp_port);
-            tcp_servers_initialized = true;
-            multicast_init();
-            http_server_init();  // HTTP 서버 초기화
-            printf("[TCP] TCP servers initialized\n");
-            printf("[HTTP] HTTP server started on port 80\n");
-            fflush(stdout);
+            // 재부팅 요청 시 초기화 건너뛰기
+            if (!is_system_restart_requested()) {
+                tcp_servers_init(tcp_port);
+                tcp_servers_initialized = true;
+                // mDNS는 IP가 유효하게 할당된 경우 초기화 (DHCP 또는 Static)
+                if (network_is_connected()) {
+                    mdns_init();  // mDNS 초기화
+                } else {
+                    DBG_NET_PRINT("[MAIN] Network not ready - delaying mDNS init\n");
+                }
+                http_server_init();  // HTTP 서버 초기화
+                printf("[TCP] TCP servers initialized\n");
+                printf("[HTTP] HTTP server started on port 80\n");
+                fflush(stdout);
+            }
         }
         
         if (current_connected) {
-            multicast_process();
-            tcp_servers_process();
-            http_server_process();  // HTTP 서버 처리
+            // 재부팅 요청 시 네트워크 처리 중단
+            if (!is_system_restart_requested()) {
+                // mDNS 처리: 네트워크에 IP가 있으면 실행 (DHCP 또는 Static)
+                if (network_is_connected()) {
+                    mdns_process();  // mDNS 처리
+                }
+                tcp_servers_process();
+                http_server_process();  // HTTP 서버 처리
+            }
         }
         
         prev_connected = current_connected;

@@ -32,13 +32,25 @@ static void http_send_response_binary(uint8_t sock, const char* status, const ch
         status, content_type, (int)body_len);
     
     send(sock, (uint8_t*)header, strlen(header));
+    
+    // 큰 데이터는 분할 전송 (1KB 단위)
     if (body && body_len > 0) {
-        send(sock, (uint8_t*)body, body_len);
+        const size_t chunk_size = 1024;
+        size_t sent = 0;
+        while (sent < body_len) {
+            size_t to_send = (body_len - sent > chunk_size) ? chunk_size : (body_len - sent);
+            int32_t result = send(sock, (uint8_t*)(body + sent), to_send);
+            if (result <= 0) {
+                break; // 전송 실패
+            }
+            sent += result;
+            vTaskDelay(pdMS_TO_TICKS(5)); // 짧은 딜레이
+        }
     }
 }
 
 // HTTP 응답 헤더 (문자열)
-static void http_send_response(uint8_t sock, const char* status, const char* content_type, const char* body) {
+void http_send_response(uint8_t sock, const char* status, const char* content_type, const char* body) {
     int body_len = body ? strlen(body) : 0;
     http_send_response_binary(sock, status, content_type, (const uint8_t*)body, body_len);
 }
@@ -127,6 +139,8 @@ static void http_handle_api_post(uint8_t sock, const char* path, const char* bod
         http_handle_post_control(sock, body);
     } else if (strcmp(path, "/api/gpio") == 0) {
         http_handle_post_gpio(sock, body);
+    } else if (strcmp(path, "/api/command") == 0) {
+        http_handle_post_command(sock, body);
     } else {
         http_send_response(sock, "404 Not Found", "text/plain", "Not Found");
     }

@@ -33,14 +33,14 @@ cmd_result_t cmd_get_ip(char *response, size_t response_size);
 
 // GPIO 단일 채널 명령어들
 cmd_result_t cmd_get_input(const char *param, char *response, size_t response_size);
-cmd_result_t cmd_set_output(const char *param, char *response, size_t response_size);
 cmd_result_t cmd_get_output(const char *param, char *response, size_t response_size);
 
 // GPIO 전체 채널 명령어들
 cmd_result_t cmd_get_inputs(const char *param, char *response, size_t response_size);
-cmd_result_t cmd_get_input_channel(const char *param, char *response, size_t response_size);
-cmd_result_t cmd_set_outputs(const char *param, char *response, size_t response_size);
 cmd_result_t cmd_get_outputs(const char *param, char *response, size_t response_size);
+cmd_result_t cmd_set(const char *param, char *response, size_t response_size);
+cmd_result_t cmd_out(const char *param, char *response, size_t response_size);
+cmd_result_t cmd_outb(const char *param, char *response, size_t response_size);
 
 // 새로운 네트워크 설정 명령어들
 cmd_result_t cmd_set_ip(const char *param, char *response, size_t response_size);

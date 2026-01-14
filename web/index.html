@@ -601,6 +601,24 @@
               <span class="nav-label-sub">System Configuration</span>
             </div>
           </li>
+          <li
+            class="nav-item"
+            data-page="help">
+            <svg class="nav-icon"><use href="#help"></use></svg>
+            <div class="nav-label">
+              <span class="nav-label-main">Help</span>
+              <span class="nav-label-sub">Command Reference</span>
+            </div>
+          </li>
+          <li
+            class="nav-item"
+            data-page="terminal">
+            <svg class="nav-icon"><use href="#terminal"></use></svg>
+            <div class="nav-label">
+              <span class="nav-label-main">Terminal</span>
+              <span class="nav-label-sub">Command Console</span>
+            </div>
+          </li>
         </ul>
       </aside>
       <main>
@@ -940,6 +958,815 @@
             </div>
           </div>
         </div>
+        <div
+          id="page-help"
+          class="page hidden">
+          <div class="card">
+            <div class="card-header">
+              <svg class="icon text-primary"><use href="#help"></use></svg>
+              <span class="card-title">Command Reference</span>
+            </div>
+            <div class="card-body">
+              <h3 style="margin-bottom: 12px; color: var(--primary)">
+                Network Commands
+              </h3>
+              <table
+                style="
+                  width: 100%;
+                  border-collapse: collapse;
+                  margin-bottom: 24px;
+                  font-size: 0.75rem;
+                ">
+                <thead>
+                  <tr style="background-color: var(--bg-grey)">
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Command
+                    </th>
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Description
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>getip</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Show network configuration
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>setip,x.x.x.x</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Set IP address
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>setsubnet,x.x.x.x</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Set subnet mask
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>setgateway,x.x.x.x</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Set gateway
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>settcpport,port</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Set TCP port
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>setdhcp,on/off</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Enable/disable DHCP
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3 style="margin-bottom: 12px; color: var(--primary)">
+                UART Commands
+              </h3>
+              <table
+                style="
+                  width: 100%;
+                  border-collapse: collapse;
+                  margin-bottom: 24px;
+                  font-size: 0.75rem;
+                ">
+                <thead>
+                  <tr style="background-color: var(--bg-grey)">
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Command
+                    </th>
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Description
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>getuartconfig</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Show UART configuration
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>setuartbaud,rate</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Set UART baud rate
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3 style="margin-bottom: 12px; color: var(--primary)">
+                GPIO Control - All Channels
+              </h3>
+              <table
+                style="
+                  width: 100%;
+                  border-collapse: collapse;
+                  margin-bottom: 24px;
+                  font-size: 0.75rem;
+                ">
+                <thead>
+                  <tr style="background-color: var(--bg-grey)">
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Command
+                    </th>
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Description
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>getins,id</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Get all 16 inputs (format: low,high)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>getouts,id</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Get all 16 outputs (format: low,high)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>out,id,binary</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Set all 16 outputs with binary (id:0=all, e.g.,
+                      out,1,1010101010101010)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>outb,id,low,high</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Set all 16 outputs with 2 bytes (id:0=all, e.g.,
+                      outb,1,255,128)
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3 style="margin-bottom: 12px; color: var(--primary)">
+                GPIO Control - Single Channel
+              </h3>
+              <table
+                style="
+                  width: 100%;
+                  border-collapse: collapse;
+                  margin-bottom: 24px;
+                  font-size: 0.75rem;
+                ">
+                <thead>
+                  <tr style="background-color: var(--bg-grey)">
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Command
+                    </th>
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Description
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>set,id,ch,val</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Set single output (id:0=all/1-254, ch:1-16, val:0/1)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>getin,id,ch</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Get single input (returns: true/false)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>getout,id,ch</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Get single output (returns: true/false)
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3 style="margin-bottom: 12px; color: var(--primary)">
+                Device Configuration
+              </h3>
+              <table
+                style="
+                  width: 100%;
+                  border-collapse: collapse;
+                  margin-bottom: 24px;
+                  font-size: 0.75rem;
+                ">
+                <thead>
+                  <tr style="background-color: var(--bg-grey)">
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Command
+                    </th>
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Description
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>getid</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Get device ID
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>setid,id</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Set device ID (1-254)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>getgpioconfig</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Get all GPIO configuration
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>setrtmode,bytes/channel</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Set return mode
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>getrtmode</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Get return mode
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>settriggermode,toggle/trigger</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Set trigger mode
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>gettriggermode</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Get trigger mode
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3 style="margin-bottom: 12px; color: var(--primary)">
+                System Commands
+              </h3>
+              <table
+                style="
+                  width: 100%;
+                  border-collapse: collapse;
+                  margin-bottom: 24px;
+                  font-size: 0.75rem;
+                ">
+                <thead>
+                  <tr style="background-color: var(--bg-grey)">
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Command
+                    </th>
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Description
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>setautoresponse,0/1</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Enable/Disable auto response
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>getautoresponse</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Get auto response status
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>factoryreset</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Factory reset
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>restart</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Restart system
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>help</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Show this help
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3 style="margin-bottom: 12px; color: var(--primary)">
+                Feedback Messages
+              </h3>
+              <table
+                style="
+                  width: 100%;
+                  border-collapse: collapse;
+                  margin-bottom: 12px;
+                  font-size: 0.75rem;
+                ">
+                <thead>
+                  <tr style="background-color: var(--bg-grey)">
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Message
+                    </th>
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Description
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>in,id,ch,val</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Input change (CHANNEL mode)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>inb,id,low,high</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Input change (BYTES mode)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>out,id,binary</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Output feedback (CHANNEL mode)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <code>outb,id,low,high</code>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Output feedback (BYTES mode)
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div
+          id="page-terminal"
+          class="page hidden">
+          <div
+            class="card"
+            style="max-width: 100%">
+            <div class="card-header">
+              <svg class="icon text-primary"><use href="#terminal"></use></svg>
+              <span class="card-title">Terminal Console</span>
+            </div>
+            <div class="card-body">
+              <div
+                style="
+                  background: #1e1e1e;
+                  border-radius: 4px;
+                  padding: 12px;
+                  font-family: 'Courier New', monospace;
+                  font-size: 0.75rem;
+                  color: #d4d4d4;
+                  height: 500px;
+                  overflow-y: auto;
+                  margin-bottom: 12px;
+                  resize: vertical;
+                  min-height: 300px;
+                  max-height: 800px;
+                "
+                id="terminal-output">
+                <div style="color: #4ec9b0">MIC Terminal v1.0</div>
+                <div style="color: #6a9955">
+                  Type 'help' for available commands
+                </div>
+                <div style="margin-top: 8px">></div>
+              </div>
+              <div style="display: flex; gap: 8px">
+                <input
+                  type="text"
+                  id="terminal-input"
+                  placeholder="Enter command..."
+                  style="
+                    flex: 1;
+                    padding: 8px;
+                    border: 1px solid var(--border-color);
+                    border-radius: 4px;
+                    font-family: 'Courier New', monospace;
+                    font-size: 0.75rem;
+                  " />
+                <button
+                  id="btn-send-cmd"
+                  class="btn btn-primary"
+                  style="padding: 8px 16px">
+                  <span>Send</span>
+                </button>
+                <button
+                  id="btn-clear-terminal"
+                  class="btn btn-flat"
+                  style="padding: 8px 16px">
+                  <span>Clear</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </main>
     </div>
     <svg
@@ -1004,6 +1831,12 @@
         viewBox="0 -960 960 960">
         <path
           d="m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm70-80h79l14-106q31-8 57.5-23.5T639-327l99 41 39-68-86-65q5-14 7-29.5t2-31.5q0-16-2-31.5t-7-29.5l86-65-39-68-99 42q-22-23-48.5-38.5T533-694l-13-106h-79l-14 106q-31 8-57.5 23.5T321-633l-99-41-39 68 86 64q-5 15-7 30t-2 32q0 16 2 31t7 30l-86 65 39 68 99-42q22 23 48.5 38.5T427-266l13 106Zm42-180q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Zm-2-140Z" />
+      </symbol>
+      <symbol
+        id="help"
+        viewBox="0 -960 960 960">
+        <path
+          d="M478-240q21 0 35.5-14.5T528-290q0-21-14.5-35.5T478-340q-21 0-35.5 14.5T428-290q0 21 14.5 35.5T478-240Zm-36-154h74q0-33 7.5-52t42.5-52q26-26 41-49.5t15-56.5q0-56-41-86t-97-30q-57 0-92.5 30T342-618l66 26q5-18 22.5-39t53.5-21q32 0 48 17.5t16 38.5q0 20-12 37.5T506-526q-44 39-54 59t-10 73Zm38 314q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z" />
       </symbol>
       <symbol
         id="power"
@@ -1320,6 +2153,109 @@
             hideLoading()
           }
         })
+
+      // Terminal functionality
+      const terminalOutput = document.getElementById('terminal-output')
+      const terminalInput = document.getElementById('terminal-input')
+      const btnSendCmd = document.getElementById('btn-send-cmd')
+      const btnClearTerminal = document.getElementById('btn-clear-terminal')
+      let commandHistory = []
+      let historyIndex = -1
+
+      function addTerminalLine(text, type = 'normal') {
+        const line = document.createElement('div')
+        line.style.marginTop = '4px'
+
+        if (type === 'command') {
+          line.style.color = '#569cd6'
+          line.textContent = '> ' + text
+        } else if (type === 'error') {
+          line.style.color = '#f48771'
+          line.textContent = text
+        } else if (type === 'success') {
+          line.style.color = '#4ec9b0'
+          line.textContent = text
+        } else {
+          line.style.color = '#d4d4d4'
+          line.textContent = text
+        }
+
+        terminalOutput.appendChild(line)
+        terminalOutput.scrollTop = terminalOutput.scrollHeight
+      }
+
+      async function sendCommand(cmd) {
+        if (!cmd || cmd.trim() === '') return
+
+        const command = cmd.trim()
+        addTerminalLine(command, 'command')
+        commandHistory.unshift(command)
+        if (commandHistory.length > 50) commandHistory.pop()
+        historyIndex = -1
+
+        try {
+          const res = await fetch('/api/command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command })
+          })
+
+          if (!res.ok) {
+            addTerminalLine('Error: Failed to execute command', 'error')
+            return
+          }
+
+          const data = await res.json()
+          if (data.success) {
+            if (data.response && data.response.trim()) {
+              const lines = data.response.split('\n')
+              lines.forEach((line) => {
+                if (line.trim()) addTerminalLine(line, 'success')
+              })
+            }
+          } else {
+            addTerminalLine(data.response || 'Command failed', 'error')
+          }
+        } catch (err) {
+          addTerminalLine('Error: Network error', 'error')
+        }
+      }
+
+      btnSendCmd.addEventListener('click', () => {
+        sendCommand(terminalInput.value)
+        terminalInput.value = ''
+      })
+
+      terminalInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          sendCommand(terminalInput.value)
+          terminalInput.value = ''
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          if (historyIndex < commandHistory.length - 1) {
+            historyIndex++
+            terminalInput.value = commandHistory[historyIndex]
+          }
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          if (historyIndex > 0) {
+            historyIndex--
+            terminalInput.value = commandHistory[historyIndex]
+          } else if (historyIndex === 0) {
+            historyIndex = -1
+            terminalInput.value = ''
+          }
+        }
+      })
+
+      btnClearTerminal.addEventListener('click', () => {
+        terminalOutput.innerHTML =
+          '<div style="color: #4ec9b0;">MIC Terminal v1.0</div>' +
+          '<div style="color: #6a9955;">Type "help" for available commands</div>' +
+          '<div style="margin-top: 8px;">></div>'
+      })
+
       window.addEventListener('DOMContentLoaded', async () => {
         showLoading('Fetching status...')
         await fetchAll()

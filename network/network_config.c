@@ -7,6 +7,7 @@
 #include "../main.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
+#include "network/mdns.h"
 
 // =============================================================================
 // W5500 SPI Mutex for FreeRTOS
@@ -413,6 +414,12 @@ bool w5500_set_static_ip(wiz_NetInfo *net_info) {
     
     // 네트워크 정보 캐시 업데이트
     update_network_info_cache();
+
+    // 네트워크가 준비되었으면 mDNS 초기화 시도
+    if (network_is_connected()) {
+        DBG_NET_PRINT("[NET] Network ready after static IP, initializing mDNS\n");
+        mdns_init();
+    }
     
     return true;
 }
@@ -482,9 +489,9 @@ bool dhcp_process_check(wiz_NetInfo *net_info) {
     
     uint32_t current_time = to_ms_since_boot(get_absolute_time());
     
-    // 타임아웃 체크 (20초)
-    if (current_time - dhcp_start_time > 20000) {
-        DBG_DHCP_PRINT("DHCP timeout after 20 seconds\n");
+    // 타임아웃 체크 (10초)
+    if (current_time - dhcp_start_time > 10000) {
+        DBG_DHCP_PRINT("DHCP timeout after 10 seconds\n");
         close(0);
         dhcp_in_progress = false;
         status_led_set_mode(LED_MODE_NORMAL);  // 일반 모드로 복귀
@@ -500,8 +507,8 @@ bool dhcp_process_check(wiz_NetInfo *net_info) {
         return false;
     }
     
-    // DHCP 내부 타이머 핸들러 (1초마다 호출 필수)
-    if (current_time - dhcp_last_tick >= 1000) {
+    // DHCP 내부 타이머 핸들러 (500ms마다 호출)
+    if (current_time - dhcp_last_tick >= 500) {
         DHCP_time_handler();
         dhcp_last_tick = current_time;
         // 진행 상태 표시
@@ -509,8 +516,8 @@ bool dhcp_process_check(wiz_NetInfo *net_info) {
         DBG_DHCP_PRINT("DHCP waiting for IP... (elapsed: %lus)\n", elapsed_sec);
     }
     
-    // 100ms마다 한 번만 체크
-    if (current_time - dhcp_last_check < 100) {
+    // 50ms마다 한 번만 체크
+    if (current_time - dhcp_last_check < 50) {
         return false;
     }
     dhcp_last_check = current_time;

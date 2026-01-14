@@ -101,9 +101,11 @@ void uart_rs232_process(void) {
                         sent += this_len;
                         vTaskDelay(pdMS_TO_TICKS(1));  // 청크 간 짧은 지연
                     }
-                    // 줄바꿈 추가
-                    const char* newline = "\r\n";
-                    uart_rs232_write(RS232_PORT_1, (uint8_t*)newline, 2);
+                    // 응답이 줄바꿈으로 끝나지 않으면 추가
+                    if (resp_len < 2 || response[resp_len-2] != '\r' || response[resp_len-1] != '\n') {
+                        const char* newline = "\r\n";
+                        uart_rs232_write(RS232_PORT_1, (uint8_t*)newline, 2);
+                    }
                 } else {
                     char error_msg[128];
                     snprintf(error_msg, sizeof(error_msg), "Command error: %d\r\n", result);

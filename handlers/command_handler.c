@@ -41,6 +41,14 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
         return CMD_ERROR_INVALID;
     }
 
+    // 명령어 중간에 공백이나 줄바꿈이 있으면 그 이후 데이터 제거
+    for (char* p = start; *p != '\0'; p++) {
+        if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
+            *p = '\0';
+            break;
+        }
+    }
+
     // 명령어와 매개변수 분리 (쉼표로 구분)
     char* comma_pos = strchr(start, ',');
     char* cmd_part = start;
@@ -49,30 +57,37 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
     if (comma_pos != NULL) {
         *comma_pos = '\0';
         param_part = comma_pos + 1;
+        // param_part에서도 중간에 공백/줄바꿈 있으면 제거
+        for (char* p = param_part; *p != '\0'; p++) {
+            if (*p == '\n' || *p == '\r') {
+                *p = '\0';
+                break;
+            }
+        }
         // param_part 앞뒤 공백 제거
         while (*param_part == ' ' || *param_part == '\t') param_part++;
         char* param_end = param_part + strlen(param_part) - 1;
-        while (param_end > param_part && (*param_end == ' ' || *param_end == '\t' || *param_end == '\n' || *param_end == '\r')) param_end--;
+        while (param_end > param_part && (*param_end == ' ' || *param_end == '\t')) param_end--;
         *(param_end + 1) = '\0';
     }
 
     // 명령어 처리
     if (strcmp(cmd_part, "getip") == 0) {
         return cmd_get_ip(response, response_size);
-    } else if (strcmp(cmd_part, "getinput") == 0) {
+    } else if (strcmp(cmd_part, "getin") == 0) {
         return cmd_get_input(param_part, response, response_size);
-    } else if (strcmp(cmd_part, "getinputs") == 0) {
+    } else if (strcmp(cmd_part, "getins") == 0) {
         return cmd_get_inputs(param_part, response, response_size);
-    } else if (strcmp(cmd_part, "getinputchannel") == 0) {
-        return cmd_get_input_channel(param_part, response, response_size);
-    } else if (strcmp(cmd_part, "getoutput") == 0) {
+    } else if (strcmp(cmd_part, "getout") == 0) {
         return cmd_get_output(param_part, response, response_size);
-    } else if (strcmp(cmd_part, "getoutputs") == 0) {
+    } else if (strcmp(cmd_part, "getouts") == 0) {
         return cmd_get_outputs(param_part, response, response_size);
-    } else if (strcmp(cmd_part, "setoutput") == 0) {
-        return cmd_set_output(param_part, response, response_size);
-    } else if (strcmp(cmd_part, "setoutputs") == 0) {
-        return cmd_set_outputs(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "set") == 0) {
+        return cmd_set(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "out") == 0) {
+        return cmd_out(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "outb") == 0) {
+        return cmd_outb(param_part, response, response_size);
     } else if (strcmp(cmd_part, "setip") == 0) {
         return cmd_set_ip(param_part, response, response_size);
     } else if (strcmp(cmd_part, "setsubnet") == 0) {
@@ -89,9 +104,9 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
         return cmd_set_uart_baud(param_part, response, response_size);
     } else if (strcmp(cmd_part, "getuartconfig") == 0) {
         return cmd_get_uart_config(response, response_size);
-    } else if (strcmp(cmd_part, "setgpioid") == 0) {
+    } else if (strcmp(cmd_part, "setid") == 0) {
         return cmd_set_gpio_id(param_part, response, response_size);
-    } else if (strcmp(cmd_part, "getgpioid") == 0) {
+    } else if (strcmp(cmd_part, "getid") == 0) {
         return cmd_get_gpio_id(response, response_size);
     } else if (strcmp(cmd_part, "getgpioconfig") == 0) {
         return cmd_get_gpio_config(response, response_size);
@@ -111,10 +126,6 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
         return cmd_set_auto_response(param_part, response, response_size);
     } else if (strcmp(cmd_part, "getautoresponse") == 0) {
         return cmd_get_auto_response(response, response_size);
-    } else if (strcmp(cmd_part, "setbroadcastmode") == 0) {
-        return cmd_set_broadcast_mode(param_part, response, response_size);
-    } else if (strcmp(cmd_part, "getbroadcastmode") == 0) {
-        return cmd_get_broadcast_mode(response, response_size);
     } else if (strcmp(cmd_part, "factoryreset") == 0) {
         return cmd_factory_reset(response, response_size);
     } else if (strcmp(cmd_part, "help") == 0) {
@@ -149,10 +160,10 @@ cmd_result_t cmd_get_ip(char* response, size_t response_size) {
     return CMD_SUCCESS;
 }
 
-// GPIO 단일 채널 입력 읽기 (getinput,id,channel -> true/false)
+// GPIO 단일 채널 입력 읽기 (getin,id,channel -> true/false)
 cmd_result_t cmd_get_input(const char* param, char* response, size_t response_size) {
     if (param == NULL) {
-        snprintf(response, response_size, "Error: Parameters required (id,channel). Use: getinput,id,channel\r\n");
+        snprintf(response, response_size, "Error: Parameters required (id,channel). Use: getin,id,channel\r\n");
         return CMD_ERROR_INVALID;
     }
 
@@ -165,7 +176,7 @@ cmd_result_t cmd_get_input(const char* param, char* response, size_t response_si
     char* channel_str = strtok(NULL, ",");
 
     if (id_str == NULL || channel_str == NULL) {
-        snprintf(response, response_size, "Error: Use format 'getinput,id,channel' (e.g., 'getinput,1,5')\r\n");
+        snprintf(response, response_size, "Error: Use format 'getin,id,channel' (e.g., 'getin,1,5')\r\n");
         return CMD_ERROR_INVALID;
     }
 
@@ -193,10 +204,10 @@ cmd_result_t cmd_get_input(const char* param, char* response, size_t response_si
     return CMD_SUCCESS;
 }
 
-// GPIO 전체 입력 읽기 (getinputs,id -> low,high 또는 binary string)
+// GPIO 전체 입력 읽기 (getins,id -> low,high 또는 binary string)
 cmd_result_t cmd_get_inputs(const char* param, char* response, size_t response_size) {
     if (param == NULL) {
-        snprintf(response, response_size, "Error: Parameter required. Use: getinputs,id\r\n");
+        snprintf(response, response_size, "Error: Parameter required. Use: getins,id\r\n");
         return CMD_ERROR_INVALID;
     }
 
@@ -219,76 +230,21 @@ cmd_result_t cmd_get_inputs(const char* param, char* response, size_t response_s
             binary[i] = (gpio_state & (1 << i)) ? '1' : '0';
         }
         binary[16] = '\0';
-        snprintf(response, response_size, "inputs,%d,%s", get_gpio_device_id(), binary);
+        snprintf(response, response_size, "in,%d,%s", get_gpio_device_id(), binary);
     } else {
         // BYTES 모드: 바이트 형식
         uint8_t low_byte = (uint8_t)(gpio_state & 0xFF);
         uint8_t high_byte = (uint8_t)((gpio_state >> 8) & 0xFF);
-        snprintf(response, response_size, "input_bytes,%d,%d,%d", get_gpio_device_id(), low_byte, high_byte);
+        snprintf(response, response_size, "ins,%d,%d,%d", get_gpio_device_id(), low_byte, high_byte);
     }
     
     return CMD_SUCCESS;
 }
 
-// GPIO 입력 채널별 바이너리 텍스트 형태로 반환 (getinputchannel,id or getinputchannel,id,channel)
-cmd_result_t cmd_get_input_channel(const char* param, char* response, size_t response_size) {
-    if (param == NULL) {
-        snprintf(response, response_size, "Error: Parameter required. Use: getinputchannel,id or getinputchannel,id,channel\r\n");
-        return CMD_ERROR_INVALID;
-    }
-
-    // 매개변수를 ID와 채널로 분리
-    char param_copy[64];
-    strncpy(param_copy, param, sizeof(param_copy) - 1);
-    param_copy[sizeof(param_copy) - 1] = '\0';
-
-    char* id_str = strtok(param_copy, ",");
-    char* channel_str = strtok(NULL, ",");
-
-    if (id_str == NULL) {
-        snprintf(response, response_size, "Error: Device ID required\r\n");
-        return CMD_ERROR_INVALID;
-    }
-
-    uint8_t target_id = (uint8_t)atoi(id_str);
-    
-    // 디바이스 ID 체크
-    if (target_id != 0 && target_id != get_gpio_device_id()) {
-        // ID가 맞지 않으면 응답하지 않음
-        // response[0] = '\\0'; // 응답하지 않음
-        return CMD_SUCCESS;
-    }
-
-    uint16_t input_data = hct165_read();
-    uint8_t device_id = get_gpio_device_id();
-
-    // 채널 파라미터가 있으면 해당 채널만 반환
-    if (channel_str != NULL) {
-        int channel = atoi(channel_str);
-        if (channel < 1 || channel > 16) {
-            snprintf(response, response_size, "Error: Invalid channel. Use 1-16\r\n");
-            return CMD_ERROR_INVALID;
-        }
-        int channel_index = channel - 1;
-        bool value = (input_data & (1 << channel_index)) != 0;
-        snprintf(response, response_size, "input_ch,%d,%d,%d\r\n", device_id, channel, value ? 1 : 0);
-    } else {
-        // 전체 채널을 16자리 바이너리 텍스트로 반환 (채널 1부터 16까지)
-        char binary_str[17];
-        for (int i = 0; i < 16; i++) {
-            binary_str[i] = (input_data & (1 << i)) ? '1' : '0';
-        }
-        binary_str[16] = '\0';
-        snprintf(response, response_size, "inputs_ch,%d,%s\r\n", device_id, binary_str);
-    }
-    
-    return CMD_SUCCESS;
-}
-
-// GPIO 단일 채널 출력 읽기 (getoutput,id,channel -> true/false)
+// GPIO 단일 채널 출력 읽기 (getout,id,channel -> true/false)
 cmd_result_t cmd_get_output(const char* param, char* response, size_t response_size) {
     if (param == NULL) {
-        snprintf(response, response_size, "Error: Parameters required (id,channel). Use: getoutput,id,channel\r\n");
+        snprintf(response, response_size, "Error: Parameters required (id,channel). Use: getout,id,channel\r\n");
         return CMD_ERROR_INVALID;
     }
 
@@ -301,7 +257,7 @@ cmd_result_t cmd_get_output(const char* param, char* response, size_t response_s
     char* channel_str = strtok(NULL, ",");
 
     if (id_str == NULL || channel_str == NULL) {
-        snprintf(response, response_size, "Error: Use format 'getoutput,id,channel' (e.g., 'getoutput,1,5')\r\n");
+        snprintf(response, response_size, "Error: Use format 'getout,id,channel' (e.g., 'getout,1,5')\r\n");
         return CMD_ERROR_INVALID;
     }
 
@@ -329,10 +285,10 @@ cmd_result_t cmd_get_output(const char* param, char* response, size_t response_s
     return CMD_SUCCESS;
 }
 
-// GPIO 전체 출력 읽기 (getoutputs,id -> low,high)
+// GPIO 전체 출력 읽기 (getouts,id -> low,high)
 cmd_result_t cmd_get_outputs(const char* param, char* response, size_t response_size) {
     if (param == NULL) {
-        snprintf(response, response_size, "Error: Parameter required. Use: getoutputs,id\r\n");
+        snprintf(response, response_size, "Error: Parameter required. Use: getouts,id\r\n");
         return CMD_ERROR_INVALID;
     }
 
@@ -353,10 +309,10 @@ cmd_result_t cmd_get_outputs(const char* param, char* response, size_t response_
     return CMD_SUCCESS;
 }
 
-// GPIO 단일 채널 출력 설정 (setoutput,id,channel,value)
-cmd_result_t cmd_set_output(const char* param, char* response, size_t response_size) {
+// GPIO 단일 채널 출력 설정 (set,id,channel,value)
+cmd_result_t cmd_set(const char* param, char* response, size_t response_size) {
     if (param == NULL || strlen(param) == 0) {
-        snprintf(response, response_size, "Error: Parameters required. Use: setoutput,id,channel,value\r\n");
+        snprintf(response, response_size, "Error: Parameters required. Use: set,id,channel,value");
         return CMD_ERROR_INVALID;
     }
 
@@ -370,7 +326,7 @@ cmd_result_t cmd_set_output(const char* param, char* response, size_t response_s
     char* value_str = strtok(NULL, ",");
 
     if (id_str == NULL || channel_str == NULL || value_str == NULL) {
-        snprintf(response, response_size, "Error: Use format 'setoutput,id,channel,value' (e.g., 'setoutput,1,5,1')\r\n");
+        snprintf(response, response_size, "Error: Use format 'set,id,channel,value' (e.g., 'set,1,5,1')");
         return CMD_ERROR_INVALID;
     }
 
@@ -381,40 +337,38 @@ cmd_result_t cmd_set_output(const char* param, char* response, size_t response_s
     // 디바이스 ID 체크
     if (target_id != 0 && target_id != get_gpio_device_id()) {
         // ID가 맞지 않으면 응답하지 않음
-        // response[0] = '\\0'; // 응답하지 않음
         return CMD_SUCCESS;
     }
 
     if (channel < 1 || channel > 16) {
-        snprintf(response, response_size, "Error: Invalid channel. Use 1-16\r\n");
+        snprintf(response, response_size, "Error: Channel must be 1-16");
         return CMD_ERROR_INVALID;
     }
 
-    if (value != 0 && value != 1) {
-        snprintf(response, response_size, "Error: Invalid value. Use 0 or 1\r\n");
+    if (value < 0 || value > 1) {
+        snprintf(response, response_size, "Error: Value must be 0 or 1");
         return CMD_ERROR_INVALID;
     }
 
-    // 채널을 0-based 인덱스로 변환
-    int channel_index = channel - 1;
-    uint16_t mask = 1 << channel_index;
-    
-    extern uint16_t gpio_output_data;
-    if (value) {
-        gpio_output_data |= mask;
+    // 채널을 비트 인덱스로 변환 (1-16 -> 0-15)
+    uint16_t mask = 1 << (channel - 1);
+
+    if (value == 1) {
+        gpio_output_data |= mask;  // 비트 설정
     } else {
-        gpio_output_data &= ~mask;
+        gpio_output_data &= ~mask; // 비트 클리어
     }
-    
+
     hct595_write(gpio_output_data);
-    
+
+    snprintf(response, response_size, "OK,set,%d,%d,%d", get_gpio_device_id(), channel, value);
     return CMD_SUCCESS;
 }
 
-// GPIO 전체 출력 설정 (setoutputs,id,low,high)
-cmd_result_t cmd_set_outputs(const char* param, char* response, size_t response_size) {
+// GPIO 출력 설정 (바이트) (outb,id,low,high)
+cmd_result_t cmd_outb(const char* param, char* response, size_t response_size) {
     if (param == NULL || strlen(param) == 0) {
-        snprintf(response, response_size, "Error: Parameters required. Use: setoutputs,id,low,high\r\n");
+        snprintf(response, response_size, "Error: Parameters required. Use: outb,id,low,high");
         return CMD_ERROR_INVALID;
     }
 
@@ -428,7 +382,7 @@ cmd_result_t cmd_set_outputs(const char* param, char* response, size_t response_
     char* high_str = strtok(NULL, ",");
 
     if (id_str == NULL || low_str == NULL || high_str == NULL) {
-        snprintf(response, response_size, "Error: Use format 'setoutputs,id,low,high' (e.g., 'setoutputs,1,255,128')\r\n");
+        snprintf(response, response_size, "Error: Use format 'outb,id,low,high' (e.g., 'outb,1,255,128')");
         return CMD_ERROR_INVALID;
     }
 
@@ -437,7 +391,6 @@ cmd_result_t cmd_set_outputs(const char* param, char* response, size_t response_
     // 디바이스 ID 체크
     if (target_id != 0 && target_id != get_gpio_device_id()) {
         // ID가 맞지 않으면 응답하지 않음
-        // response[0] = '\\0'; // 응답하지 않음
         return CMD_SUCCESS;
     }
 
@@ -445,7 +398,7 @@ cmd_result_t cmd_set_outputs(const char* param, char* response, size_t response_
     int high_byte = atoi(high_str);
     
     if (low_byte < 0 || low_byte > 255 || high_byte < 0 || high_byte > 255) {
-        snprintf(response, response_size, "Error: Values must be 0-255\r\n");
+        snprintf(response, response_size, "Error: Values must be 0-255");
         return CMD_ERROR_INVALID;
     }
 
@@ -454,6 +407,65 @@ cmd_result_t cmd_set_outputs(const char* param, char* response, size_t response_
     // GPIO 출력에 적용
     hct595_write(gpio_value);
     
+    snprintf(response, response_size, "OK,outb,%d,%d,%d", get_gpio_device_id(), low_byte, high_byte);
+    return CMD_SUCCESS;
+}
+
+// GPIO 출력 설정 (바이너리) (out,id,binary_string)
+cmd_result_t cmd_out(const char* param, char* response, size_t response_size) {
+    if (param == NULL || strlen(param) == 0) {
+        snprintf(response, response_size, "Error: Parameters required. Use: out,id,binary (16 bits)");
+        return CMD_ERROR_INVALID;
+    }
+
+    // 매개변수를 ID, binary로 분리
+    char param_copy[64];
+    strncpy(param_copy, param, sizeof(param_copy) - 1);
+    param_copy[sizeof(param_copy) - 1] = '\0';
+
+    char* id_str = strtok(param_copy, ",");
+    char* binary_str = strtok(NULL, ",");
+
+    if (id_str == NULL || binary_str == NULL) {
+        snprintf(response, response_size, "Error: Use format 'out,id,binary' (e.g., 'out,1,1010101010101010')");
+        return CMD_ERROR_INVALID;
+    }
+
+    uint8_t target_id = (uint8_t)atoi(id_str);
+    
+    // 디바이스 ID 체크
+    if (target_id != 0 && target_id != get_gpio_device_id()) {
+        // ID가 맞지 않으면 응답하지 않음
+        return CMD_SUCCESS;
+    }
+
+    // 바이너리 문자열 길이 확인 (정확히 16자리)
+    size_t len = strlen(binary_str);
+    if (len != 16) {
+        snprintf(response, response_size, "Error: Binary string must be exactly 16 bits (received %zu)", len);
+        return CMD_ERROR_INVALID;
+    }
+
+    // 바이너리 문자열 유효성 검사 (0 또는 1만 허용)
+    for (size_t i = 0; i < len; i++) {
+        if (binary_str[i] != '0' && binary_str[i] != '1') {
+            snprintf(response, response_size, "Error: Binary string must contain only 0 and 1");
+            return CMD_ERROR_INVALID;
+        }
+    }
+
+    // 바이너리 문자열을 uint16_t로 변환
+    uint16_t gpio_value = 0;
+    for (size_t i = 0; i < 16; i++) {
+        if (binary_str[i] == '1') {
+            gpio_value |= (1 << (15 - i));  // MSB부터 시작
+        }
+    }
+
+    // GPIO 출력에 적용
+    hct595_write(gpio_value);
+    
+    snprintf(response, response_size, "OK,out,%d,0x%04X", get_gpio_device_id(), gpio_value);
     return CMD_SUCCESS;
 }
 
@@ -793,18 +805,17 @@ cmd_result_t cmd_help(char* response, size_t response_size) {
         "  getuartconfig             - Show UART configuration\r\n"
         "  setuartbaud,rate          - Set UART baud rate\r\n"
         "GPIO Control (All Channels):\r\n"
-        "  getinputs,id              - Get all 16 inputs (format: low,high)\r\n"
-        "  getinputchannel,id        - Get all 16 inputs as binary text (format: inputs_ch,id,0101010101010101)\r\n"
-        "  getoutputs,id             - Get all 16 outputs (format: low,high)\r\n"
-        "  setoutputs,id,low,high    - Set all 16 outputs (0-255,0-255)\r\n"
+        "  getins,id                 - Get all 16 inputs (format: low,high)\r\n"
+        "  getouts,id                - Get all 16 outputs (format: low,high)\r\n"
+        "  out,id,binary             - Set all 16 outputs with binary (id:0=all, e.g., out,1,1010101010101010)\r\n"
+        "  outb,id,low,high          - Set all 16 outputs with 2 bytes (id:0=all, e.g., outb,1,255,128)\r\n"
         "GPIO Control (Single Channel):\r\n"
-        "  getinput,id,ch            - Get single input (returns: true/false)\r\n"
-        "  getinputchannel,id,ch     - Get single input channel (format: input_ch,id,ch,value)\r\n"
-        "  setoutput,id,ch,val       - Set single output (id:0=all/1-254, ch:1-16, val:0/1)\r\n"
-        "  getoutput,id,ch           - Get single output (returns: true/false)\r\n"
+        "  set,id,ch,val             - Set single output (id:0=all/1-254, ch:1-16, val:0/1)\r\n"
+        "  getin,id,ch               - Get single input (returns: true/false)\r\n"
+        "  getout,id,ch              - Get single output (returns: true/false)\r\n"
         "Device Configuration:\r\n"
-        "  getgpioid                 - Get device ID\r\n"
-        "  setgpioid,id              - Set device ID (1-254)\r\n"
+        "  getid                     - Get device ID\r\n"
+        "  setid,id                  - Set device ID (1-254)\r\n"
         "  getgpioconfig             - Get all GPIO configuration\r\n"
         "  setrtmode,bytes/channel   - Set return mode (bytes=2bytes, channel=per-channel)\r\n"
         "  getrtmode                 - Get return mode\r\n"
@@ -896,10 +907,6 @@ cmd_result_t cmd_factory_reset(char* response, size_t response_size) {
 }
 
 // ID 확인 유틸리티 함수
-bool check_device_id_match(uint8_t target_id) {
-    uint8_t my_id = get_gpio_device_id();
-    return (target_id == 0 || target_id == my_id);
-}
 
 // Debug status 조회: getdebug,<category> or getdebug,all
 cmd_result_t cmd_get_debug(const char* param, char* response, size_t response_size) {

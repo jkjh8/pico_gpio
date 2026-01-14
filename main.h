@@ -14,7 +14,7 @@
 #include "semphr.h"
 #include "network/mac_utils.h"
 #include "network/network_config.h"
-#include "network/multicast.h"
+// #include "network/multicast.h"
 // #include "http/http_server.h"  // HTTP 서버 비활성화
 #include "tcp/tcp_server.h"
 #include "uart/uart_rs232.h"

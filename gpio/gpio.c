@@ -14,8 +14,106 @@ uint16_t gpio_output_data = 0x0000; // HCT595 출력 데이터
 // GPIO 설정에 대한 매크로 (시스템 설정 참조)
 #define gpio_config (*system_config_get_gpio())
 
-// Forward declaration
-static void send_gpio_response(uint16_t changed_bits, uint16_t current_data);
+// ============================================================================
+// GPIO 피드백 전송 (내부 함수)
+// ============================================================================
+
+// GPIO 입출력 피드백 전송 (통합)
+static void send_gpio_feedback(bool is_input, uint16_t data, uint16_t changed_bits) {
+    if (!gpio_config.auto_response) {
+        return;
+    }
+    
+    char feedback[GPIO_MSG_MAX_LEN];
+    int i;
+    BaseType_t result;
+    
+    // 입력일 경우 trigger_mode 처리
+    uint16_t bits_to_send = changed_bits;
+    if (is_input && gpio_config.rt_mode == GPIO_RT_MODE_CHANNEL) {
+        if (gpio_config.trigger_mode == GPIO_MODE_TRIGGER) {
+            // TRIGGER 모드: 0->1 (OFF->ON) 변화만 전송
+            bits_to_send = changed_bits & data;  // rising edge만
+            if (bits_to_send == 0) {
+                return;  // 전송할 rising edge가 없으면 리턴
+            }
+            DBG_GPIO_PRINT("Trigger mode: rising=0x%04X\n", bits_to_send);
+        }
+    }
+    
+    // 모드에 따라 피드백 형식 결정
+    if (gpio_config.rt_mode == GPIO_RT_MODE_CHANNEL) {
+        // CHANNEL 모드
+        if (is_input) {
+            // 입력: 변경된 각 채널에 대해 개별 메시지 전송
+            int channel;
+            for (channel = 1; channel <= 16; channel++) {
+                uint16_t mask = (1 << (channel - 1));
+                if (bits_to_send & mask) {
+                    bool value = (data & mask) ? true : false;
+                    
+                    snprintf(feedback, sizeof(feedback),
+                            "in,%d,%d,%s\r\n",
+                            gpio_config.device_id, channel, value ? "1" : "0");
+                    
+                    DBG_GPIO_PRINT("Queue IN CH%d: %s", channel, feedback);
+                    
+                    // 모든 활성화된 큐에 전송
+                    for (i = 0; i < MAX_GPIO_QUEUES; i++) {
+                        if (gpio_queues[i] != NULL && gpio_queues_enabled[i]) {
+                            result = xQueueSend(gpio_queues[i], feedback, 0);
+                            DBG_GPIO_PRINT("  -> Q[%d] %s\n", i, result == pdTRUE ? "OK" : "FULL");
+                        }
+                    }
+                }
+            }
+        } else {
+            // 출력: 바이너리 형식으로 전체 상태 전송
+            char binary[17];
+            for (i = 0; i < 16; i++) {
+                binary[i] = (data & (1 << i)) ? '1' : '0';
+            }
+            binary[16] = '\0';
+            
+            snprintf(feedback, sizeof(feedback),
+                    "out,%d,%s\r\n",
+                    gpio_config.device_id, binary);
+            
+            DBG_GPIO_PRINT("Output feedback: %s", feedback);
+            
+            // 모든 활성화된 큐에 전송
+            for (i = 0; i < MAX_GPIO_QUEUES; i++) {
+                if (gpio_queues[i] != NULL && gpio_queues_enabled[i]) {
+                    result = xQueueSend(gpio_queues[i], feedback, 0);
+                    DBG_GPIO_PRINT("  -> Q[%d] %s\n", i, result == pdTRUE ? "OK" : "FULL");
+                }
+            }
+        }
+    } else {
+        // BYTES 모드: 2바이트 형식
+        uint8_t low_byte = (uint8_t)(data & 0xFF);
+        uint8_t high_byte = (uint8_t)((data >> 8) & 0xFF);
+        
+        snprintf(feedback, sizeof(feedback),
+                "%s,%d,%d,%d\r\n",
+                is_input ? "inb" : "outb",
+                gpio_config.device_id, low_byte, high_byte);
+        
+        DBG_GPIO_PRINT("%s feedback: %s", is_input ? "Input" : "Output", feedback);
+        
+        // 모든 활성화된 큐에 전송
+        for (i = 0; i < MAX_GPIO_QUEUES; i++) {
+            if (gpio_queues[i] != NULL && gpio_queues_enabled[i]) {
+                result = xQueueSend(gpio_queues[i], feedback, 0);
+                DBG_GPIO_PRINT("  -> Q[%d] %s\n", i, result == pdTRUE ? "OK" : "FULL");
+            }
+        }
+    }
+}
+
+// ============================================================================
+// GPIO 초기화 및 I/O 함수
+// ============================================================================
 
 bool gpio_spi_init(void) {
     // SPI0 초기화 (Mode 0: CPOL=0, CPHA=0)
@@ -66,92 +164,8 @@ void hct595_write(uint16_t data) {
     // GPIO 출력 활동 LED 깜박임
     status_led_activity_blink();
     
-    // 출력 피드백 전송 (바이너리 형식)
-    if (gpio_config.auto_response) {
-        char feedback[GPIO_MSG_MAX_LEN];
-        char binary[17];
-        int i;
-        BaseType_t result;
-        
-        // 16비트를 바이너리 문자열로 변환 (LSB first)
-        for (i = 0; i < 16; i++) {
-            binary[i] = (gpio_output_data & (1 << i)) ? '1' : '0';
-        }
-        binary[16] = '\0';
-        
-        snprintf(feedback, sizeof(feedback),
-                "outputs,%d,%s\r\n",
-                gpio_config.device_id, binary);
-        
-        DBG_GPIO_PRINT("Output feedback: %s", feedback);
-        
-        // 모든 활성화된 큐에 전송
-        for (i = 0; i < MAX_GPIO_QUEUES; i++) {
-            if (gpio_queues[i] != NULL && gpio_queues_enabled[i]) {
-                result = xQueueSend(gpio_queues[i], feedback, 0);
-                DBG_GPIO_PRINT("  -> Q[%d] %s\n", i, result == pdTRUE ? "OK" : "FULL");
-            }
-        }
-    }
-}
-
-// GPIO 입력 변경 응답 전송 (rt_mode에 따라 포맷 결정)
-static void send_gpio_response(uint16_t changed_bits, uint16_t current_data) {
-    char feedback[GPIO_MSG_MAX_LEN];
-    BaseType_t result;
-    int i;
-    
-    DBG_GPIO_PRINT("send_gpio_response: IN changed=0x%04X, data=0x%04X, mode=%d\n", 
-                   changed_bits, current_data, gpio_config.rt_mode);
-    
-    // 입력 피드백 처리
-    if (gpio_config.rt_mode == GPIO_RT_MODE_CHANNEL) {
-        // CHANNEL 모드: 변경된 각 채널에 대해 개별 메시지 전송
-        int channel;
-        for (channel = 1; channel <= 16; channel++) {
-            uint16_t mask = (1 << (channel - 1));
-            if (changed_bits & mask) {
-                bool value = (current_data & mask) ? true : false;
-                
-                snprintf(feedback, sizeof(feedback),
-                        "input_channel,%d,%d,%s\r\n",
-                        gpio_config.device_id, channel, value ? "1" : "0");
-                
-                DBG_GPIO_PRINT("Queue IN CH%d: %s", channel, feedback);
-                
-                // 모든 활성화된 큐에 전송
-                for (i = 0; i < MAX_GPIO_QUEUES; i++) {
-                    if (gpio_queues[i] != NULL && gpio_queues_enabled[i]) {
-                        result = xQueueSend(gpio_queues[i], feedback, 0);
-                        DBG_GPIO_PRINT("  -> Q[%d] %s\n", i, result == pdTRUE ? "OK" : "FULL");
-                    }
-                }
-            }
-        }
-    } else {
-        // BYTES 모드: 변경된 각 채널에 대해 개별 메시지 전송 (CHANNEL 모드와 동일)
-        int channel;
-        for (channel = 1; channel <= 16; channel++) {
-            uint16_t mask = (1 << (channel - 1));
-            if (changed_bits & mask) {
-                bool value = (current_data & mask) ? true : false;
-                
-                snprintf(feedback, sizeof(feedback),
-                        "input_channel,%d,%d,%s\r\n",
-                        gpio_config.device_id, channel, value ? "1" : "0");
-                
-                DBG_GPIO_PRINT("Queue IN CH%d: %s", channel, feedback);
-                
-                // 모든 활성화된 큐에 전송
-                for (i = 0; i < MAX_GPIO_QUEUES; i++) {
-                    if (gpio_queues[i] != NULL && gpio_queues_enabled[i]) {
-                        result = xQueueSend(gpio_queues[i], feedback, 0);
-                        DBG_GPIO_PRINT("  -> Q[%d] %s\n", i, result == pdTRUE ? "OK" : "FULL");
-                    }
-                }
-            }
-        }
-    }
+    // 출력 피드백 전송
+    send_gpio_feedback(false, gpio_output_data, 0);
 }
 
 uint16_t hct165_read(void) {
@@ -174,26 +188,8 @@ uint16_t hct165_read(void) {
         
         DBG_GPIO_PRINT("Input: 0x%04X->0x%04X\n", gpio_input_data, current_data);
         
-        // rt_mode가 CHANNEL일 때만 trigger_mode 적용
-        if (gpio_config.rt_mode == GPIO_RT_MODE_CHANNEL) {
-            // CHANNEL 모드: trigger_mode에 따른 처리
-            if (gpio_config.trigger_mode == GPIO_MODE_TRIGGER) {
-                // TRIGGER 모드: 0->1 (OFF->ON) 변화 시 즉시 전송
-                uint16_t rising_edge = changed_channels & current_data;
-                
-                // rising edge가 있으면 즉시 전송
-                if (rising_edge != 0) {
-                    DBG_GPIO_PRINT("Rising: 0x%04X\n", rising_edge);
-                    send_gpio_response(rising_edge, current_data);
-                }
-            } else {
-                // TOGGLE 모드: 변경된 채널 즉시 응답
-                send_gpio_response(changed_channels, current_data);
-            }
-        } else {
-            // BYTES 모드: 전체 상태 변경 시 즉시 응답 (trigger_mode 무시)
-            send_gpio_response(changed_channels, current_data);
-        }
+        // 피드백 전송 (trigger_mode 처리는 send_gpio_feedback 내부에서)
+        send_gpio_feedback(true, current_data, changed_channels);
         
         gpio_input_data = current_data;
     } else if (changed_channels != 0) {
@@ -207,14 +203,16 @@ uint16_t hct165_read(void) {
     return current_data;
 }
 
-// GPIO 설정을 플래시에 저장 (시스템 설정으로 통합)
+// ============================================================================
+// GPIO 설정 저장/로드
+// ============================================================================
+
 void save_gpio_config_to_flash(void) {
     system_config_save_to_flash();
     DBG_GPIO_PRINT("[FLASH] GPIO 설정 저장 (시스템 설정): ID=0x%02X\n", 
         gpio_config.device_id);
 }
 
-// GPIO 설정을 플래시에서 로드 (시스템 설정에서 자동 로드됨)
 void load_gpio_config_from_flash(void) {
     // 시스템 설정 초기화 시 자동으로 로드됨
     DBG_GPIO_PRINT("[FLASH] GPIO 설정 로드 (시스템 설정): ID=0x%02X, RT=%s, Trigger=%s\n", 
@@ -223,7 +221,10 @@ void load_gpio_config_from_flash(void) {
         gpio_config.trigger_mode == GPIO_MODE_TRIGGER ? "TRIGGER" : "TOGGLE");
 }
 
-// GPIO 디바이스 ID 설정
+// ============================================================================
+// GPIO 설정 Getter/Setter
+// ============================================================================
+
 bool set_gpio_device_id(uint8_t new_id) {
     if (new_id == 0x00 || new_id == 0xFF) {
         return false; // 유효하지 않은 ID
@@ -234,24 +235,20 @@ bool set_gpio_device_id(uint8_t new_id) {
     return true;
 }
 
-// GPIO 디바이스 ID 반환
 uint8_t get_gpio_device_id(void) {
     return gpio_config.device_id;
 }
 
-// GPIO 자동 응답 설정
 bool set_gpio_auto_response(bool enabled) {
     gpio_config.auto_response = enabled;
     save_gpio_config_to_flash();
     return true;
 }
 
-// GPIO 자동 응답 반환
 bool get_gpio_auto_response(void) {
     return gpio_config.auto_response;
 }
 
-// GPIO RT 모드 설정
 bool set_gpio_rt_mode(gpio_rt_mode_t mode) {
     if (mode > GPIO_RT_MODE_CHANNEL) {
         return false;
@@ -262,12 +259,10 @@ bool set_gpio_rt_mode(gpio_rt_mode_t mode) {
     return true;
 }
 
-// GPIO RT 모드 반환
 gpio_rt_mode_t get_gpio_rt_mode(void) {
     return gpio_config.rt_mode;
 }
 
-// GPIO Trigger 모드 설정
 bool set_gpio_trigger_mode(gpio_trigger_mode_t mode) {
     if (mode > GPIO_MODE_TRIGGER) {
         return false;
@@ -278,12 +273,10 @@ bool set_gpio_trigger_mode(gpio_trigger_mode_t mode) {
     return true;
 }
 
-// GPIO Trigger 모드 반환
 gpio_trigger_mode_t get_gpio_trigger_mode(void) {
     return gpio_config.trigger_mode;
 }
 
-// GPIO 설정 한번에 갱신 및 저장
 bool update_gpio_config(uint8_t device_id, bool auto_response,
                         gpio_rt_mode_t rt_mode, gpio_trigger_mode_t trigger_mode) {
     // 유효성 검사

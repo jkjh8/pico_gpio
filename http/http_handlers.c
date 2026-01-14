@@ -1,10 +1,12 @@
 #include "http_handlers.h"
+#include "http_server.h"
 #include "lib/wiznet/socket.h"
 #include "lib/cjson/cJSON.h"
 #include "debug/debug.h"
 #include "gpio/gpio.h"
 #include "system/system_config.h"
 #include "network/network_config.h"
+#include "handlers/command_handler.h"
 #include "../main.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
@@ -255,6 +257,55 @@ void http_handle_post_gpio(uint8_t sock, const char* body) {
     
     free(json_str);
     cJSON_Delete(root);
+}
+
+// POST /api/command - 터미널 명령 실행
+void http_handle_post_command(uint8_t sock, const char* body) {
+    DBG_HTTP_PRINT("API: POST command\n");
+    
+    if (body == NULL) {
+        http_send_response(sock, "400 Bad Request", "application/json", "{\"error\":\"No body\"}");
+        return;
+    }
+
+    cJSON* json = cJSON_Parse(body);
+    if (json == NULL) {
+        DBG_HTTP_PRINT("JSON parse error\n");
+        http_send_response(sock, "400 Bad Request", "application/json", "{\"error\":\"Invalid JSON\"}");
+        return;
+    }
+
+    cJSON* cmd_item = cJSON_GetObjectItem(json, "command");
+    if (cmd_item == NULL || !cJSON_IsString(cmd_item)) {
+        cJSON_Delete(json);
+        http_send_response(sock, "400 Bad Request", "application/json", "{\"error\":\"Missing command\"}");
+        return;
+    }
+
+    const char* command = cmd_item->valuestring;
+    DBG_HTTP_PRINT("Executing command: %s\n", command);
+
+    // 명령 실행
+    char cmd_response[2048];
+    cmd_result_t result = process_command(command, cmd_response, sizeof(cmd_response));
+
+    cJSON_Delete(json);
+
+    // 응답 JSON 생성
+    cJSON* resp = cJSON_CreateObject();
+    cJSON_AddBoolToObject(resp, "success", result == CMD_SUCCESS);
+    cJSON_AddStringToObject(resp, "response", cmd_response);
+
+    char* response = cJSON_PrintUnformatted(resp);
+    cJSON_Delete(resp);
+
+    if (response) {
+        http_send_response(sock, "200 OK", "application/json", response);
+        cJSON_free(response);
+    } else {
+        http_send_response(sock, "500 Internal Server Error", "application/json", 
+                         "{\"success\":false,\"response\":\"Memory error\"}");
+    }
 }
 
 // GET /api/all - 모든 정보 조회

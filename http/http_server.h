@@ -9,6 +9,9 @@
 #define HTTP_MAX_CLIENTS 4
 #define HTTP_BUFFER_SIZE 2048
 
+// HTTP 응답 전송
+void http_send_response(uint8_t sock, const char* status, const char* content_type, const char* body);
+
 // HTTP 서버 초기화
 bool http_server_init(void);
 

@@ -85,14 +85,33 @@ void tcp_servers_process(void) {
     for (uint8_t i = TCP_SOCKET_START; i < TCP_SOCKET_START + TCP_SOCKET_COUNT; i++) {
         switch (getSn_SR(i)) {
             case SOCK_ESTABLISHED: {
-                // 최초 연결 시에만 환영 메시지 전송 (한 번만)
+                // 최초 연결 시 현재 출력 상태만 전송
                 if (!socket_welcome_sent[i]) {
                     socket_welcome_sent[i] = true;
-                    char welcome_text[64];
-                    snprintf(welcome_text, sizeof(welcome_text), 
-                            "Connected,%d,text\r\n", get_gpio_device_id());
-                    send(i, (uint8_t*)welcome_text, strlen(welcome_text));
-                    DBG_TCP_PRINT("TCP[%d] Welcome message sent\n", i);
+                    
+                    // 현재 출력 상태 피드백 전송
+                    char output_feedback[128];
+                    gpio_rt_mode_t rt_mode = get_gpio_rt_mode();
+                    
+                    if (rt_mode == GPIO_RT_MODE_CHANNEL) {
+                        // CHANNEL 모드: 바이너리 형식
+                        char binary[17];
+                        for (int j = 0; j < 16; j++) {
+                            binary[j] = (gpio_output_data & (1 << j)) ? '1' : '0';
+                        }
+                        binary[16] = '\0';
+                        snprintf(output_feedback, sizeof(output_feedback),
+                                "out,%d,%s\r\n", get_gpio_device_id(), binary);
+                    } else {
+                        // BYTES 모드: 2바이트 형식
+                        uint8_t low_byte = (uint8_t)(gpio_output_data & 0xFF);
+                        uint8_t high_byte = (uint8_t)((gpio_output_data >> 8) & 0xFF);
+                        snprintf(output_feedback, sizeof(output_feedback),
+                                "outb,%d,%d,%d\r\n", get_gpio_device_id(), low_byte, high_byte);
+                    }
+                    
+                    send(i, (uint8_t*)output_feedback, strlen(output_feedback));
+                    DBG_TCP_PRINT("TCP[%d] Output state sent\n", i);
                 }
                 uint16_t rx_size = getSn_RX_RSR(i);
                 if (rx_size > 0) {
@@ -106,7 +125,7 @@ void tcp_servers_process(void) {
                     DBG_TCP_PRINT("TCP[%d] 수신: %s\n", i, buf);
                     
                     // 텍스트 명령어 처리
-                    char response[2048];
+                    char response[4096];
                     cmd_result_t result;
                     
                     result = process_command((char*)buf, response, sizeof(response));
@@ -122,9 +141,11 @@ void tcp_servers_process(void) {
                             if (s <= 0) break;
                             sent += (size_t)s;
                         }
-                        // 줄바꿈 추가
-                        const char* newline = "\r\n";
-                        send(i, (uint8_t*)newline, 2);
+                        // 응답이 줄바꿈으로 끝나지 않으면 추가
+                        if (resp_len < 2 || response[resp_len-2] != '\r' || response[resp_len-1] != '\n') {
+                            const char* newline = "\r\n";
+                            send(i, (uint8_t*)newline, 2);
+                        }
                     } else {
                         char error_msg[128];
                         snprintf(error_msg, sizeof(error_msg), "Command error: %d\r\n", result);
