@@ -9,41 +9,26 @@
 #include "semphr.h"
 #include "network/mdns.h"
 
-// =============================================================================
+// Network configuration (loaded from/saved to flash)
+wiz_NetInfo g_net_info = {
+    .mac = { 0x00, 0x08, 0xDC, 0x00, 0x00, 0x00 },
+    .ip = { 192, 168, 1, 100 },
+    .sn = { 255, 255, 255, 0 },
+    .gw = { 0, 0, 0, 0 },
+    .dns = { 0, 0, 0, 0 },
+    .dhcp = NETINFO_STATIC
+};
+// Network Info Mutex (for HTTP API thread-safe access)
+SemaphoreHandle_t g_network_info_mutex = NULL;
+// DHCP State Management
+static bool dhcp_in_progress = false;
+static uint32_t dhcp_start_time = 0;
+static uint32_t dhcp_last_check = 0;
+static uint32_t dhcp_last_tick = 0; // DHCP_time_handler용
 // W5500 SPI Mutex for FreeRTOS
-// =============================================================================
 static SemaphoreHandle_t w5500_mutex = NULL;
 static bool w5500_mutex_initialized = false;
 
-// =============================================================================
-// Network Info Cache (for HTTP API)
-// =============================================================================
-wiz_NetInfo g_network_info;
-SemaphoreHandle_t g_network_info_mutex = NULL;
-
-static void w5500_critical_enter(void) {
-    if (w5500_mutex != NULL && xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
-        xSemaphoreTakeRecursive(w5500_mutex, portMAX_DELAY);  // Recursive로 변경
-    }
-}
-
-static void w5500_critical_exit(void) {
-    if (w5500_mutex != NULL && xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
-        xSemaphoreGiveRecursive(w5500_mutex);  // Recursive로 변경
-    }
-}
-
-// 뮤텍스 초기화 (스케줄러 시작 후 호출)
-void network_enable_spi_mutex(void) {
-    if (!w5500_mutex_initialized) {
-        w5500_mutex = xSemaphoreCreateRecursiveMutex();  // Recursive로 변경
-        if (w5500_mutex != NULL) {
-            w5500_mutex_initialized = true;
-            reg_wizchip_cris_cbfunc(w5500_critical_enter, w5500_critical_exit);
-            DBG_NET_PRINT("W5500 SPI recursive mutex initialized and registered\n");
-        }
-    }
-}
 
 // 네트워크 정보 캐시 초기화 (FreeRTOS 스케줄러 시작 전 호출)
 void network_cache_init(void) {
@@ -59,61 +44,21 @@ void network_cache_init(void) {
 void update_network_info_cache(void) {
     if (g_network_info_mutex != NULL) {
         if (xSemaphoreTake(g_network_info_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            wizchip_getnetinfo(&g_network_info);
+            wizchip_getnetinfo(&g_net_info);
             xSemaphoreGive(g_network_info_mutex);
             DBG_NET_PRINT("[NET] Network info cache updated\n");
         }
     }
 }
 
-// =============================================================================
-// DHCP State Management
-// =============================================================================
-static bool dhcp_in_progress = false;
-static uint32_t dhcp_start_time = 0;
-static uint32_t dhcp_last_check = 0;
-static uint32_t dhcp_last_tick = 0; // DHCP_time_handler용
-
-// =============================================================================
-// IP Address Utility Functions
-// =============================================================================
-
-// Check if IP address is all zeros (0.0.0.0)
 bool is_ip_zero(const uint8_t ip[4]) {
     return (ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0);
-}
-
-// Print IP address in dotted decimal format
-void print_ip_address(const char* label, const uint8_t ip[4]) {
-    DBG_NET_PRINT("%s: %d.%d.%d.%d\n", label, ip[0], ip[1], ip[2], ip[3]);
 }
 
 // Set default IP address values
 void set_default_ip(uint8_t ip[4], uint8_t default_ip[4]) {
     memcpy(ip, default_ip, 4);
 }
-
-// Print MAC address in colon-separated format
-void print_network_mac_address(const char* label, const uint8_t mac[6]) {
-    DBG_NET_PRINT("%s: %02X:%02X:%02X:%02X:%02X:%02X\n", label,
-           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-}
-
-// Print DHCP mode status
-void print_dhcp_mode(void) {
-    DBG_NET_PRINT("DHCP Mode       : %s\n",
-           g_net_info.dhcp == NETINFO_DHCP ? "DHCP" : "Static");
-}
-
-// Print link status
-void print_link_status(void) {
-    DBG_NET_PRINT("Link Status     : %s\n",
-           w5500_check_link_status() ? "UP" : "DOWN");
-}
-
-// =============================================================================
-// Network Configuration Application Functions
-// =============================================================================
 
 // Check if MAC address is all 0xFF (invalid)
 bool is_mac_invalid(const uint8_t mac[6]) {
@@ -127,13 +72,11 @@ bool is_mac_invalid(const uint8_t mac[6]) {
 
 // Apply network configuration to W5500 chip
 void apply_network_config(const wiz_NetInfo* config) {
-    // WIZnet 라이브러리 함수를 사용하여 설정 (내부 상태 업데이트 포함)
+    // W5500에 설정 적용
     wizchip_setnetinfo((wiz_NetInfo*)config);
-    
+    update_network_info_cache();
     DBG_NET_PRINT("Network configuration applied to W5500\n");
-    DBG_NET_PRINT("IP: %d.%d.%d.%d, DHCP: %s\n", 
-        config->ip[0], config->ip[1], config->ip[2], config->ip[3],
-        config->dhcp == NETINFO_DHCP ? "DHCP" : "Static");
+    w5500_print_network_status();
 }
 
 // Apply network configuration with status message
@@ -142,19 +85,9 @@ void apply_network_config_with_status(const wiz_NetInfo* config, const char* sta
     DBG_NET_PRINT("%s\n", status_message);
 }
 
-// =============================================================================
 // Global Variables
-// =============================================================================
 
-// Network configuration (loaded from/saved to flash)
-wiz_NetInfo g_net_info = {
-    .mac = { 0x00, 0x08, 0xDC, 0x00, 0x00, 0x00 },
-    .ip = { 192, 168, 1, 100 },
-    .sn = { 255, 255, 255, 0 },
-    .gw = { 0, 0, 0, 0 },
-    .dns = { 0, 0, 0, 0 },
-    .dhcp = NETINFO_STATIC
-};
+
 
 // DHCP configuration flag
 bool dhcp_configured = false;
@@ -408,18 +341,7 @@ w5500_init_result_t w5500_initialize(void) {
 bool w5500_set_static_ip(wiz_NetInfo *net_info) {
     // DHCP 모드를 Static으로 변경
     net_info->dhcp = NETINFO_STATIC;
-    
-    // 네트워크 정보를 W5500에 설정
     apply_network_config(net_info);
-    
-    // 네트워크 정보 캐시 업데이트
-    update_network_info_cache();
-
-    // 네트워크가 준비되었으면 mDNS 초기화 시도
-    if (network_is_connected()) {
-        DBG_NET_PRINT("[NET] Network ready after static IP, initializing mDNS\n");
-        mdns_init();
-    }
     
     return true;
 }
@@ -552,9 +474,6 @@ bool dhcp_process_check(wiz_NetInfo *net_info) {
             dhcp_in_progress = false;
             status_led_set_mode(LED_MODE_CONNECTED);  // 연결 모드: 녹색 고정
             
-            // 네트워크 정보 캠시 업데이트
-            update_network_info_cache();
-            
             return true;
             
         case DHCP_FAILED:
@@ -578,16 +497,16 @@ bool dhcp_process_check(wiz_NetInfo *net_info) {
 
 // 네트워크 상태 출력
 void w5500_print_network_status(void) {
-    wiz_NetInfo current_info;
-    wizchip_getnetinfo(&current_info);
-
-    print_ip_address("IP Address", current_info.ip);
-    print_ip_address("Subnet Mask", current_info.sn);
-    print_ip_address("Gateway", current_info.gw);
-    print_ip_address("DNS Server", current_info.dns);
-    print_network_mac_address("MAC Address", current_info.mac);
-    print_dhcp_mode();
-    print_link_status();
+    DBG_NET_PRINT("IP Address: %d.%d.%d.%d\n", g_net_info.ip[0], g_net_info.ip[1], g_net_info.ip[2], g_net_info.ip[3]);
+    DBG_NET_PRINT("Subnet Mask: %d.%d.%d.%d\n", g_net_info.sn[0], g_net_info.sn[1], g_net_info.sn[2], g_net_info.sn[3]);
+    DBG_NET_PRINT("Gateway: %d.%d.%d.%d\n", g_net_info.gw[0], g_net_info.gw[1], g_net_info.gw[2], g_net_info.gw[3]);
+    DBG_NET_PRINT("DNS Server: %d.%d.%d.%d\n", g_net_info.dns[0], g_net_info.dns[1], g_net_info.dns[2], g_net_info.dns[3]);
+    DBG_NET_PRINT("MAC Address: %02X:%02X:%02X:%02X:%02X:%02X\n", 
+           g_net_info.mac[0], g_net_info.mac[1], g_net_info.mac[2], g_net_info.mac[3], g_net_info.mac[4], g_net_info.mac[5]);
+    DBG_NET_PRINT("DHCP Mode       : %s\n",
+           g_net_info.dhcp == NETINFO_DHCP ? "DHCP" : "Static");
+    DBG_NET_PRINT("Link Status     : %s\n",
+           w5500_check_link_status() ? "UP" : "DOWN");
 }
 
 // 링크 상태 확인
@@ -649,9 +568,9 @@ void network_init(void) {
             w5500_set_static_ip(&g_net_info);
         }
         
-        // 네트워크 정보 캐시 직접 업데이트 (스케줄러 시작 전이므로 mutex 없이)
-        wizchip_getnetinfo(&g_network_info);
-        DBG_NET_PRINT("[NET] Network info cache initialized\n");
+        // 네트워크 정보 직접 업데이트 (스케줄러 시작 전이므로 mutex 없이)
+        wizchip_getnetinfo(&g_net_info);
+        DBG_NET_PRINT("[NET] Network info initialized\n");
     } else {
         DBG_WIZNET_PRINT("ERROR: W5500 initialization failed\n");
     }
@@ -661,75 +580,159 @@ void network_init(void) {
     w5500_print_network_status();
 }
 
-// 네트워크 처리 함수 (메인 루프에서 호출)
-void network_process(void) {
-    // 케이블 연결 상태 모니터링
-    bool cable_connected = network_is_cable_connected();
+// 네트워크 처리 헬퍼 함수들
+
+// 네트워크 상태 업데이트
+static void network_update_status(network_status_t* status) {
     static bool last_cable_state = false;
+    static bool last_connected_state = false;
     
-    // 케이블 연결 상태 변경 감지
+    bool cable_connected = network_is_cable_connected();
+    status->current_link_up = cable_connected;
+    status->current_connected = network_is_connected();
+    
+    // 케이블 상태 변경 감지
     if (cable_connected != last_cable_state) {
-        if (cable_connected) {
-            const char *conn_msg = "Ethernet cable connected\r\n";
-            printf("%s", conn_msg);
-            DBG_WIZNET_PRINT("%s", conn_msg);
-            // uart_rs232_write(RS232_PORT_1, (const uint8_t*)conn_msg, (uint32_t)strlen(conn_msg));
-            // tcp_servers_broadcast((const uint8_t*)conn_msg, (uint16_t)strlen(conn_msg));
-            // 케이블이 연결되면 DHCP 플래그 리셋하여 IP 배분 재시도 가능하도록 함
-            dhcp_configured = false;
-        } else {
-            const char *disc_msg = "Ethernet cable disconnected\r\n";
-            printf("%s", disc_msg);
-            DBG_WIZNET_PRINT("%s", disc_msg);
-            // uart_rs232_write(RS232_PORT_1, (const uint8_t*)disc_msg, (uint32_t)strlen(disc_msg));
-            // tcp_servers_broadcast((const uint8_t*)disc_msg, (uint16_t)strlen(disc_msg));
-            // 케이블이 연결 해제되면 DHCP 플래그 리셋
-            dhcp_configured = false;
-        }
+        status->link_changed = true;
+        DBG_NET_PRINT("[NETWORK] Link %s detected\n", cable_connected ? "up" : "down");
+        dhcp_configured = false;
         last_cable_state = cable_connected;
     }
     
-    // 케이블이 연결되어 있고 IP가 배분되지 않은 경우 IP 배분 시도
+    // 연결 상태 변경 감지
+    if (status->current_connected != last_connected_state) {
+        status->connection_changed = true;
+        last_connected_state = status->current_connected;
+    }
+    
+    // 전역 상태 업데이트
+    g_network_connected = status->current_connected;
+    status_led_set_network_connected(status->current_connected);
+}
+
+// IP 할당 처리
+static void network_handle_ip_assignment(bool cable_connected, network_status_t* status) {
     static uint32_t dhcp_retry_time = 0;
     uint32_t current_time = to_ms_since_boot(get_absolute_time());
     
-    // DHCP가 진행 중이면 상태 체크
+    // DHCP 진행 중이면 체크
     if (dhcp_in_progress) {
         static uint32_t last_debug = 0;
-        uint32_t now = to_ms_since_boot(get_absolute_time());
-        if (now - last_debug >= 5000) {  // 5초마다 체크 메시지
-            DBG_DHCP_PRINT("network_process: calling dhcp_process_check (dhcp_in_progress=true)\n");
-            last_debug = now;
+        if (current_time - last_debug >= 5000) {
+            DBG_DHCP_PRINT("DHCP in progress...\n");
+            last_debug = current_time;
         }
         
         if (dhcp_process_check(&g_net_info)) {
             printf("DHCP successful, IP assigned\n");
             dhcp_configured = true;
             w5500_print_network_status();
+            status->connection_changed = true;
         }
-        return; // DHCP 진행 중이면 다른 처리 건너뛰기
+        return;
     }
     
+    // IP가 없으면 할당 시도
     if (cable_connected && !network_is_connected()) {
         if (g_net_info.dhcp == NETINFO_DHCP && !dhcp_configured) {
-            // DHCP 재시도 간격 체크 (1초)
             if (dhcp_retry_time == 0 || (current_time - dhcp_retry_time) >= 1000) {
                 printf("Attempting DHCP for IP assignment...\n");
-                
-                // DHCP 시작 (non-blocking)
                 w5500_set_dhcp_mode(&g_net_info);
                 dhcp_retry_time = current_time;
             }
         } else if (g_net_info.dhcp == NETINFO_STATIC) {
-            // 고정 IP 모드: 설정된 고정 IP 적용
             printf("Applying static IP configuration...\n");
-            
             if (w5500_set_static_ip(&g_net_info)) {
                 printf("Static IP applied successfully\n");
                 w5500_print_network_status();
-            } else {
-                printf("Failed to apply static IP\n");
+                status->connection_changed = true;
             }
         }
     }
+}
+
+// LED 제어 처리
+static void network_handle_led(const network_status_t* status) {
+    if (status->link_changed && !status->current_link_up) {
+        status_led_set_mode(LED_MODE_BOOT);
+    }
+    
+    if (status->connection_changed && status->current_connected) {
+        status_led_set_mode(LED_MODE_CONNECTED);
+        
+        // TCP 큐 초기화
+        if (gpio_queues[GPIO_QUEUE_TCP] != NULL) {
+            xQueueReset(gpio_queues[GPIO_QUEUE_TCP]);
+            DBG_NET_PRINT("[TCP] Queue reset on network connect\n");
+        }
+    }
+}
+
+// TCP 큐 처리
+static void network_handle_tcp_queue(bool connected) {
+    if (connected && tcp_servers_initialized && 
+        tcp_servers_has_clients() && gpio_queues[GPIO_QUEUE_TCP] != NULL) {
+        gpio_queues_enabled[GPIO_QUEUE_TCP] = true;
+        char msg_buffer[GPIO_MSG_MAX_LEN];
+        while (xQueueReceive(gpio_queues[GPIO_QUEUE_TCP], msg_buffer, 0) == pdTRUE) {
+            tcp_servers_broadcast((uint8_t*)msg_buffer, strlen(msg_buffer));
+        }
+    } else {
+        gpio_queues_enabled[GPIO_QUEUE_TCP] = false;
+    }
+}
+
+// 서버 초기화 및 처리
+static void network_handle_servers(bool connected) {
+    // TCP/HTTP 서버 초기화 (한 번만)
+    if (!tcp_servers_initialized && connected && !is_system_restart_requested()) {
+        tcp_servers_init(tcp_port);
+        tcp_servers_initialized = true;
+        http_server_init();
+        printf("[TCP] TCP servers initialized\n");
+        printf("[HTTP] HTTP server started on port 80\n");
+        fflush(stdout);
+    }
+    
+    // 서버 처리
+    if (connected && !is_system_restart_requested()) {
+        // mDNS는 network_is_connected() 상태에서만 동작
+        if (network_is_connected()) {
+            // mDNS가 초기화되지 않았으면 초기화
+            if (!mdns_is_initialized()) {
+                mdns_init();
+            }
+            mdns_process();
+        }
+        tcp_servers_process();
+        http_server_process();
+    }
+}
+
+// 네트워크 처리 메인 함수
+
+network_status_t network_process(void) {
+    network_status_t status = {
+        .link_changed = false,
+        .connection_changed = false,
+        .current_link_up = false,
+        .current_connected = false
+    };
+    
+    // 1. 상태 업데이트
+    network_update_status(&status);
+    
+    // 2. IP 할당 처리
+    network_handle_ip_assignment(status.current_link_up, &status);
+    
+    // 3. LED 제어
+    network_handle_led(&status);
+    
+    // 4. TCP 큐 처리
+    network_handle_tcp_queue(status.current_connected);
+    
+    // 5. 서버 초기화 및 처리
+    network_handle_servers(status.current_connected);
+    
+    return status;
 }

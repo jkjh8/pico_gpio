@@ -64,13 +64,7 @@ bool network_is_connected(void);
 
 // IP Address Utility Functions
 bool is_ip_zero(const uint8_t ip[4]);
-void print_ip_address(const char* label, const uint8_t ip[4]);
 void set_default_ip(uint8_t ip[4], uint8_t default_ip[4]);
-
-// Network Status Printing Functions
-void print_network_mac_address(const char* label, const uint8_t mac[6]);
-void print_dhcp_mode(void);
-void print_link_status(void);
 
 // Network Configuration Application Functions
 bool is_mac_invalid(const uint8_t mac[6]);
@@ -80,7 +74,35 @@ void apply_network_config(const wiz_NetInfo* config);
 void network_init(void);
 void network_cache_init(void);
 void update_network_info_cache(void);
-void network_enable_spi_mutex(void);  // FreeRTOS 스케줄러 시작 후 호출
-void network_process(void);
+
+// 네트워크 상태 구조체
+typedef struct {
+    bool link_changed;         // 링크 상태 변경 여부
+    bool connection_changed;   // 연결 상태 변경 여부
+    bool current_link_up;      // 현재 링크 상태
+    bool current_connected;    // 현재 연결 상태
+} network_status_t;
+
+// 외부 참조 선언
+extern bool tcp_servers_initialized;
+extern uint16_t tcp_port;
+extern volatile bool g_network_connected;
+extern QueueHandle_t gpio_queues[];
+extern bool gpio_queues_enabled[];
+
+// 외부 함수 선언
+extern bool is_system_restart_requested(void);
+extern void tcp_servers_init(uint16_t port);
+extern void tcp_servers_process(void);
+extern bool tcp_servers_has_clients(void);
+extern void tcp_servers_broadcast(const uint8_t* data, uint16_t len);
+extern bool http_server_init(void);
+extern void http_server_process(void);
+extern void mdns_process(void);
+extern void status_led_set_network_connected(bool connected);
+extern void status_led_set_mode(uint8_t mode);
+
+// 네트워크 처리 함수 (네트워크 상태 반환)
+network_status_t network_process(void);
 
 #endif // NETWORK_CONFIG_H

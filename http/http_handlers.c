@@ -324,7 +324,7 @@ void http_handle_get_all(uint8_t sock) {
     wiz_NetInfo net_info;
     if (g_network_info_mutex != NULL && 
         xSemaphoreTake(g_network_info_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-        memcpy(&net_info, &g_network_info, sizeof(wiz_NetInfo));
+        memcpy(&net_info, &g_net_info, sizeof(wiz_NetInfo));
         xSemaphoreGive(g_network_info_mutex);
         DBG_HTTP_PRINT("[API] Network info from cache: %d.%d.%d.%d\n", 
                        net_info.ip[0], net_info.ip[1], net_info.ip[2], net_info.ip[3]);

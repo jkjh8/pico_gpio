@@ -22,12 +22,6 @@
 
 // 전역 상태 변수
 extern volatile bool g_network_connected;
-extern wiz_NetInfo g_network_info;
-extern SemaphoreHandle_t g_network_info_mutex;
-
-// 네트워크 정보 업데이트 함수
-// 네트워크 정보 캐시 (HTTP API에서 사용)
-extern wiz_NetInfo g_network_info;
 extern SemaphoreHandle_t g_network_info_mutex;
 
 // GPIO 응답 메시지 큐 (통합 큐 구조)
@@ -66,6 +60,7 @@ extern bool gpio_queues_enabled[MAX_GPIO_QUEUES];
 
 // tcp port
 extern uint16_t tcp_port;
+extern bool tcp_servers_initialized;
 
 // ipaddress (외부 선언)
 extern wiz_NetInfo g_net_info;

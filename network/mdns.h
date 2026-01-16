@@ -10,7 +10,7 @@ extern "C"
 #endif
 
 // mDNS 설정
-#define MDNS_SOCKET 0              // 소켓 0 사용
+#define MDNS_SOCKET 1              // 소켓 1 사용 (DHCP는 0, TCP는 2-5)
 #define MDNS_PORT 5353             // mDNS 표준 포트
 #define MDNS_MULTICAST_IP {224, 0, 0, 251}  // 224.0.0.251
 #define MDNS_TTL 300               // TTL 300초 (5분)

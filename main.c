@@ -31,7 +31,7 @@ bool gpio_queues_enabled[MAX_GPIO_QUEUES] = {false};
 static volatile bool restart_requested = false;
 static volatile bool restart_in_progress = false;
 static uint32_t restart_request_time = 0;
-static bool tcp_servers_initialized = false;
+bool tcp_servers_initialized = false;  // extern으로 선언되어 network_process에서 사용
 volatile bool g_network_connected = false;  // 네트워크 연결 상태 (다른 태스크에서 읽기 전용)
 
 void system_restart_request(void) {
@@ -136,95 +136,20 @@ void vApplicationMallocFailedHook(void) {
 
 void network_task(void *pvParameters)
 {
-    char msg_buffer[GPIO_MSG_MAX_LEN];
-    bool prev_connected = false;
-    bool prev_link_up = false;
     DBG_MAIN_PRINT("[TASK] network_task started\n");
     fflush(stdout);
     
     while (true) {
-        // 시스템 재시작 체크 (최우선 처리)
+        // 시스템 재시작 체크
         if (is_system_restart_requested()) {
             DBG_MAIN_PRINT("[RESTART] Network task detected restart request\n");
             system_restart();
         }
         
+        // network_process가 모든 네트워크 처리를 담당
+        // (케이블 감지, IP 할당, 서버 초기화/처리, LED, TCP 큐)
         network_process();
-        bool current_connected = network_is_connected();
         
-        // W5500 물리적 링크 상태 확인
-        int8_t link_status = PHY_LINK_OFF;
-        ctlwizchip(CW_GET_PHYLINK, (void*)&link_status);
-        bool current_link_up = (link_status == PHY_LINK_ON);
-        
-        g_network_connected = current_connected;
-        status_led_set_network_connected(current_connected);
-        
-        // 링크 상태 변경 감지 (케이블 빠짐/꽂힘)
-        if (!current_link_up && prev_link_up) {
-            // 케이블이 빠짐 -> 부팅 모드로 전환 (5초간 깜박임)
-            DBG_MAIN_PRINT("[NETWORK] Link down detected\n");
-            status_led_set_mode(LED_MODE_BOOT);
-        } else if (current_link_up && !prev_link_up) {
-            // 케이블이 꽂힘 -> 연결 상태 확인 후 LED 모드 설정
-            DBG_MAIN_PRINT("[NETWORK] Link up detected\n");
-        }
-        
-        // 네트워크 연결 상태 변경 감지
-        if (current_connected && !prev_connected) {
-            // 네트워크가 새로 연결됨 -> LED 모드 변경
-            status_led_set_mode(LED_MODE_CONNECTED);
-            
-            // TCP 큐 초기화
-            if (gpio_queues[GPIO_QUEUE_TCP] != NULL) {
-                xQueueReset(gpio_queues[GPIO_QUEUE_TCP]);
-                DBG_MAIN_PRINT("[TCP] Queue reset on network connect\n");
-            }
-        }
-        
-        // TCP GPIO 메시지 큐 처리 (통합 큐 → broadcast)
-        if (current_connected && tcp_servers_initialized && 
-            tcp_servers_has_clients() && gpio_queues[GPIO_QUEUE_TCP] != NULL) {
-            gpio_queues_enabled[GPIO_QUEUE_TCP] = true;
-            while (xQueueReceive(gpio_queues[GPIO_QUEUE_TCP], msg_buffer, 0) == pdTRUE) {
-                tcp_servers_broadcast((uint8_t*)msg_buffer, strlen(msg_buffer));
-            }
-        } else {
-            gpio_queues_enabled[GPIO_QUEUE_TCP] = false;
-        }
-        
-        if (!tcp_servers_initialized && current_connected) {
-            // 재부팅 요청 시 초기화 건너뛰기
-            if (!is_system_restart_requested()) {
-                tcp_servers_init(tcp_port);
-                tcp_servers_initialized = true;
-                // mDNS는 IP가 유효하게 할당된 경우 초기화 (DHCP 또는 Static)
-                if (network_is_connected()) {
-                    mdns_init();  // mDNS 초기화
-                } else {
-                    DBG_NET_PRINT("[MAIN] Network not ready - delaying mDNS init\n");
-                }
-                http_server_init();  // HTTP 서버 초기화
-                printf("[TCP] TCP servers initialized\n");
-                printf("[HTTP] HTTP server started on port 80\n");
-                fflush(stdout);
-            }
-        }
-        
-        if (current_connected) {
-            // 재부팅 요청 시 네트워크 처리 중단
-            if (!is_system_restart_requested()) {
-                // mDNS 처리: 네트워크에 IP가 있으면 실행 (DHCP 또는 Static)
-                if (network_is_connected()) {
-                    mdns_process();  // mDNS 처리
-                }
-                tcp_servers_process();
-                http_server_process();  // HTTP 서버 처리
-            }
-        }
-        
-        prev_connected = current_connected;
-        prev_link_up = current_link_up;
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
@@ -289,36 +214,16 @@ int main()
 {
     // 1. 기본 초기화
     stdio_init_all();
-    
-    // USB CDC 준비 대기 (최대 2초)
-    // bool usb_connected = false;
-    // for (int i = 0; i < 20; i++) {
-    //     if (stdio_usb_connected()) {
-    //         usb_connected = true;
-    //         break;
-    //     }
-    //     sleep_ms(100);
-    // }
-    
-    // // USB 연결 상태 확인 (시리얼로만 출력)
-    // if (usb_connected) {
-    //     sleep_ms(800); // USB 안정화 대기 (리부팅 후 안정성 확보)
-    // }
-
     printf("System Starting...\n");
-    
     // 2. 상태 표시 LED 초기화 (녹색 켜짐)
     status_led_init();
     printf("LED initialized (Green ON)\n");
-    
     // 3. 시스템 설정 로드 (통합 Flash 설정)
     system_config_init();
     debug_init();
     printf("System config loaded\n");
-    
     DBG_MAIN_PRINT("=== Pico GPIO Server v%s ===\n", PICO_PROGRAM_VERSION_STRING);
     DBG_MAIN_PRINT("Board: %s\n", PICO_BOARD);
-    
     // 4. 설정 적용
     tcp_port = system_config_get_tcp_port();
     uart_rs232_1_baud = system_config_get_uart_baud();
@@ -331,13 +236,6 @@ int main()
     printf("Initializing network...\n");
     network_init();
     printf("Network initialized\n");
-    
-    // 6. HTTP 서버 시작 - 비활성화 (재구성 예정)
-    // if (http_server_init(80)) {
-    //     DBG_MAIN_PRINT("HTTP server started on port 80\n");
-    // } else {
-    //     DBG_MAIN_PRINT("ERROR: HTTP server failed to start\n");
-    // }
     
     // 7. UART 초기화
     printf("Initializing UART...\n");
