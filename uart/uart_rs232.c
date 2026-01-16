@@ -23,25 +23,23 @@ uint32_t uart_rs232_1_baud = UART_RS232_1_BAUD;
 bool uart_rs232_init(rs232_port_t port, uint32_t baudrate) {
     if (port == RS232_PORT_1) {
         uart_init(uart0, baudrate);
-        
         // FIFO 활성화 및 임계값 설정 (더 많은 데이터를 버퍼링)
         uart_set_fifo_enabled(uart0, true);
-        
         // 하드웨어 플로우 컨트롤 비활성화
         uart_set_hw_flow(uart0, false, false);
-        
         // 데이터 형식: 8비트, 패리티 없음, 1 스톱비트
         uart_set_format(uart0, 8, 1, UART_PARITY_NONE);
-        
+        // TX/RX 핀을 UART 기능으로 설정
         gpio_set_function(RS232_1_TX_PIN, GPIO_FUNC_UART);
         gpio_set_function(RS232_1_RX_PIN, GPIO_FUNC_UART);
-        
-        DBG_UART_PRINT("UART RS232 Port 1 initialized at %u baud (FIFO enabled)\n", baudrate);
+        // UART 전송 및 수신 활성화 (필수 for output)
+        DBG_UART_PRINT("UART RS232 Port 1 initialized at %u baud (FIFO enabled, TX/RX enabled)\n", baudrate);
         return true;
     }
     return false;
 }
 
+// UART RS232 데이터 전송 및 수신 함수
 bool uart_rs232_write(rs232_port_t port, const uint8_t* data, uint32_t len) {
     if (port == RS232_PORT_1) {
         uart_write_blocking(uart0, data, len);
@@ -50,6 +48,7 @@ bool uart_rs232_write(rs232_port_t port, const uint8_t* data, uint32_t len) {
     return false;
 }
 
+// UART RS232 데이터 수신 함수
 int uart_rs232_read(rs232_port_t port, uint8_t* buf, uint32_t maxlen) {
     if (port != RS232_PORT_1) return 0;
     uart_inst_t *uart = uart0;
@@ -59,11 +58,11 @@ int uart_rs232_read(rs232_port_t port, uint8_t* buf, uint32_t maxlen) {
     }
     return count;
 }
-
-bool uart_rs232_available(rs232_port_t port) {
-    if (port == RS232_PORT_1) return uart_is_readable(uart0);
-    return false;
-}
+// // UART RS232 수신 가능 여부 확인 함수
+// bool uart_rs232_available(rs232_port_t port) {
+//     if (port == RS232_PORT_1) return uart_is_readable(uart0);
+//     return false;
+// }
 
 // UART RS232 명령어 처리 함수
 void uart_rs232_process(void) {

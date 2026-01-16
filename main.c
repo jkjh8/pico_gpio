@@ -59,53 +59,9 @@ bool is_system_restart_requested(void) {
 }
 
 void system_restart(void) {
-    // 이미 다른 태스크에서 실행 중이면 무한 대기
-    if (restart_in_progress) {
-        DBG_MAIN_PRINT("[RESTART] Already in progress, waiting...\n");
-        while(1) {
-            vTaskDelay(pdMS_TO_TICKS(1000));
-        }
-    }
-    restart_in_progress = true;
-    restart_requested = false;  // 플래그 리셋하여 중복 처리 방지
-    
-    DBG_MAIN_PRINT("[RESTART] System restarting...\n");
-    fflush(stdout);
-    
-    // W5500 소켓 전부 닫기 (인터럽트 비활성화 전에)
-    DBG_MAIN_PRINT("[RESTART] Closing W5500 sockets...\n");
-    fflush(stdout);
-    for (int i = 0; i < 8; i++) {
-        close(i);
-    }
-    
-    // 플래시 쓰기 완료 대기 (단축)
-    DBG_MAIN_PRINT("[RESTART] Waiting for flash write completion...\n");
-    fflush(stdout);
-    sleep_ms(50);
-    
-    // USB 시리얼 버퍼 완전 플러시를 위한 추가 지연
-    DBG_MAIN_PRINT("[RESTART] Flushing USB serial buffer...\n");
-    fflush(stdout);
-    sleep_ms(1500);  // USB CDC 버퍼 플러시 시간 충분히 확보
-    
-    DBG_MAIN_PRINT("[RESTART] Disabling interrupts...\n");
-    fflush(stdout);
-    sleep_ms(200);  // 마지막 메시지 전송 시간
-    
     // 모든 인터럽트 비활성화
     taskENTER_CRITICAL();
-    
-    // Watchdog을 통한 리부팅 (1초 후 - USB 초기화 시간 확보)
-    watchdog_enable(1000, 1);
-    
-    DBG_MAIN_PRINT("[RESTART] Waiting for watchdog reset...\n");
-    fflush(stdout);
-    
-    // 무한 루프 (리셋 대기)
-    while(1) {
-        tight_loop_contents();
-    }
+    watchdog_reboot(0, 0, 0);
 }
 
 // =============================================================================
@@ -167,13 +123,13 @@ void process_usb_cdc_commands(void)
 
 // FreeRTOS Hook Functions
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
-    printf("\n[FATAL] Stack overflow in task: %s\n", pcTaskName);
+    DBG_MAIN_PRINT("\n[FATAL] Stack overflow in task: %s\n", pcTaskName);
     portDISABLE_INTERRUPTS();
     for( ;; );
 }
 
 void vApplicationMallocFailedHook(void) {
-    printf("\n[FATAL] Malloc failed - out of heap memory\n");
+    DBG_MAIN_PRINT("\n[FATAL] Malloc failed - out of heap memory\n");
     portDISABLE_INTERRUPTS();
     for( ;; );
 }
@@ -183,7 +139,7 @@ void network_task(void *pvParameters)
     char msg_buffer[GPIO_MSG_MAX_LEN];
     bool prev_connected = false;
     bool prev_link_up = false;
-    printf("[TASK] network_task started\n");
+    DBG_MAIN_PRINT("[TASK] network_task started\n");
     fflush(stdout);
     
     while (true) {
@@ -335,36 +291,30 @@ int main()
     stdio_init_all();
     
     // USB CDC 준비 대기 (최대 2초)
-    bool usb_connected = false;
-    for (int i = 0; i < 20; i++) {
-        if (stdio_usb_connected()) {
-            usb_connected = true;
-            break;
-        }
-        sleep_ms(100);
-    }
+    // bool usb_connected = false;
+    // for (int i = 0; i < 20; i++) {
+    //     if (stdio_usb_connected()) {
+    //         usb_connected = true;
+    //         break;
+    //     }
+    //     sleep_ms(100);
+    // }
     
-    // USB 연결 상태 확인 (시리얼로만 출력)
-    if (usb_connected) {
-        sleep_ms(800); // USB 안정화 대기 (리부팅 후 안정성 확보)
-    }
-    
-    printf("\n\n");
-    printf("=================================\n");
+    // // USB 연결 상태 확인 (시리얼로만 출력)
+    // if (usb_connected) {
+    //     sleep_ms(800); // USB 안정화 대기 (리부팅 후 안정성 확보)
+    // }
+
     printf("System Starting...\n");
-    printf("=================================\n");
-    fflush(stdout);
     
     // 2. 상태 표시 LED 초기화 (녹색 켜짐)
     status_led_init();
     printf("LED initialized (Green ON)\n");
-    fflush(stdout);
     
     // 3. 시스템 설정 로드 (통합 Flash 설정)
     system_config_init();
     debug_init();
     printf("System config loaded\n");
-    fflush(stdout);
     
     DBG_MAIN_PRINT("=== Pico GPIO Server v%s ===\n", PICO_PROGRAM_VERSION_STRING);
     DBG_MAIN_PRINT("Board: %s\n", PICO_BOARD);
@@ -376,14 +326,11 @@ int main()
     DBG_MAIN_PRINT("TCP port: %u\n", tcp_port);
     DBG_MAIN_PRINT("UART baud: %u\n", uart_rs232_1_baud);
     DBG_MAIN_PRINT("GPIO Device ID: 0x%02X\n", get_gpio_device_id());
-    fflush(stdout);
     
     // 5. 네트워크 초기화
     printf("Initializing network...\n");
-    fflush(stdout);
     network_init();
     printf("Network initialized\n");
-    fflush(stdout);
     
     // 6. HTTP 서버 시작 - 비활성화 (재구성 예정)
     // if (http_server_init(80)) {
@@ -394,45 +341,21 @@ int main()
     
     // 7. UART 초기화
     printf("Initializing UART...\n");
-    fflush(stdout);
     uart_rs232_init(RS232_PORT_1, uart_rs232_1_baud);
     DBG_MAIN_PRINT("UART RS232 initialized at %u baud\n", uart_rs232_1_baud);
-    fflush(stdout);
     
     // 8. GPIO 초기화
-    printf("Initializing GPIO...\n");
-    fflush(stdout);
+    DBG_MAIN_PRINT("Initializing GPIO...\n");
     gpio_spi_init();
     DBG_MAIN_PRINT("GPIO SPI initialized\n");
-    
     // GPIO 출력 모두 끄기 (초기 상태)
     hct595_write(0x0000);
     DBG_MAIN_PRINT("GPIO outputs initialized (all OFF)\n");
-    fflush(stdout);
-    
-    // 네트워크 연결 확인
-    int8_t link_status = PHY_LINK_OFF;
-    ctlwizchip(CW_GET_PHYLINK, (void*)&link_status);
-    if (link_status == PHY_LINK_OFF) {
-        DBG_MAIN_PRINT("Network cable not connected - Blinking for 5 seconds\n");
-        status_led_set_mode(LED_MODE_BOOT);  // 5초간 깜박임
-        sleep_ms(5000);
-    }
-    
     // 시스템 준비 완료: 녹색 LED 고정
     status_led_set_state(STATUS_LED_GREEN_ON);
     DBG_MAIN_PRINT("System ready - Status LED green\n");
-    fflush(stdout);
-
     // =============================================================================
     // FreeRTOS 태스크 생성 및 스케줄러 시작
-    // =============================================================================
-    
-    printf("\n=================================\n");
-    printf("Creating FreeRTOS tasks...\n");
-    printf("=================================\n");
-    fflush(stdout);
-    
     DBG_MAIN_PRINT("Creating FreeRTOS tasks...\n");
     
     // GPIO 응답 메시지 큐 생성 (통합 큐)

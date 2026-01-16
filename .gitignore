@@ -1,6 +1,9 @@
 build
 !.vscode/*
 .vscode
-
+.idea
+.cache
+/build
+/bin
 /cJSON
 /ioLibrary_Driver

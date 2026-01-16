@@ -69,7 +69,7 @@ target_compile_definitions(main PRIVATE
     DBG_NET=1
     DBG_TCP=1
     DBG_HTTP=1
-    DBG_UART=1
+    DBG_UART=0
     DBG_JSON=1
     DBG_GPIO=1
     DBG_DHCP=1

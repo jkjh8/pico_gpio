@@ -17,7 +17,14 @@
 static bool mdns_initialized = false;
 static char mdns_hostname[32] = {0};  // "pico-gpio-XX.local"
 static uint32_t last_announce_time = 0;
-#define MDNS_ANNOUNCE_INTERVAL_MS 10000  // 10초마다 자발적 응답
+#define MDNS_ANNOUNCE_INTERVAL_MS 120000  // 2분마다 자발적 응답
+// 초기(부팅시) 아나운스 스케줄링 (블로킹 sleep 사용 금지)
+static int mdns_initial_announces = 0;
+static uint32_t mdns_next_initial_announce = 0;
+// 빈/잘못된 질의 로깅 제한
+static uint32_t mdns_ignore_last_log_ts = 0;
+static int mdns_ignore_log_count = 0;
+static int mdns_ignore_log_limit = 5; // 초당 최대 로그 수
 
 // DNS 이름 압축 해제 (라벨 형식 → 문자열)
 static int dns_decode_name(const uint8_t* packet, const uint8_t* name_ptr, char* output, int max_len) {
@@ -103,6 +110,35 @@ static bool hostname_match(const char* query, const char* hostname) {
         i++;
     }
     return query[i] == hostname[i];  // 둘 다 '\0'이어야 함
+}
+
+// 로그용으로 qname을 사람이 읽을 수 있게 변환
+static void make_printable_for_log(const char* src, char* dst, int max_len) {
+    if (!src || !dst || max_len <= 0) return;
+    int i = 0;
+    while (src[i] && i < max_len - 1) {
+        unsigned char c = (unsigned char)src[i];
+        if (c >= 32 && c <= 126) dst[i] = (char)c;
+        else dst[i] = '.';
+        i++;
+    }
+    dst[i] = '\0';
+}
+
+// 헥사 덤프 생성 (최대 출력 길이 제한)
+static void hex_dump(const uint8_t* data, int len, char* out, int out_len) {
+    if (!data || !out || out_len <= 0) return;
+    int pos = 0;
+    int max_bytes = (out_len - 1) / 3; // "AA " per byte
+    if (max_bytes <= 0) { out[0] = '\0'; return; }
+    int bytes = len < max_bytes ? len : max_bytes;
+    for (int i = 0; i < bytes; i++) {
+        int n = snprintf(out + pos, out_len - pos, "%02X ", data[i]);
+        if (n <= 0 || n >= out_len - pos) break;
+        pos += n;
+    }
+    if (pos > 0 && pos < out_len) out[pos - 1] = '\0';
+    else out[0] = '\0';
 }
 
 // A 레코드 응답 생성
@@ -234,59 +270,16 @@ static int build_txt_record_response(uint8_t* response, const char* hostname) {
     return pos;
 }
 
-// PTR 레코드 생성 (service_type -> instance_name)
-static int build_ptr_record(uint8_t* response, const char* service_type, const char* instance_full) {
-    int pos = 0;
-    // name: service type (eg. _micctrl._tcp.local)
-    pos += dns_encode_name(response + pos, service_type);
-    // TYPE PTR
-    response[pos++] = 0; response[pos++] = DNS_TYPE_PTR;
-    // CLASS IN
-    response[pos++] = (DNS_CLASS_IN >> 8) & 0xFF; response[pos++] = DNS_CLASS_IN & 0xFF;
-    // TTL
-    uint32_t ttl = MDNS_TTL;
-    response[pos++] = (ttl >> 24) & 0xFF; response[pos++] = (ttl >> 16) & 0xFF;
-    response[pos++] = (ttl >> 8) & 0xFF; response[pos++] = ttl & 0xFF;
-    // RDLENGTH 자리 예약
-    int rdlen_pos = pos; pos += 2;
-    int rstart = pos;
-    // RDATA: instance full name
-    pos += dns_encode_name(response + pos, instance_full);
-    int rdlen = pos - rstart;
-    response[rdlen_pos] = (rdlen >> 8) & 0xFF; response[rdlen_pos + 1] = rdlen & 0xFF;
-    return pos;
-}
-
-// SRV 레코드 생성 (instance -> target host + port)
-static int build_srv_record(uint8_t* response, const char* instance_full, uint16_t port, const char* target_host) {
-    int pos = 0;
-    // name: instance_full
-    pos += dns_encode_name(response + pos, instance_full);
-    // TYPE SRV
-    response[pos++] = 0; response[pos++] = DNS_TYPE_SRV;
-    // CLASS IN with flush
-    uint16_t cls = (DNS_CLASS_IN | DNS_CLASS_FLUSH);
-    response[pos++] = (cls >> 8) & 0xFF; response[pos++] = cls & 0xFF;
-    // TTL
-    uint32_t ttl = MDNS_TTL;
-    response[pos++] = (ttl >> 24) & 0xFF; response[pos++] = (ttl >> 16) & 0xFF;
-    response[pos++] = (ttl >> 8) & 0xFF; response[pos++] = ttl & 0xFF;
-    // RDLENGTH 자리
-    int rdlen_pos = pos; pos += 2;
-    int rstart = pos;
-    // priority(2), weight(2)
-    response[pos++] = 0; response[pos++] = 0;
-    response[pos++] = 0; response[pos++] = 0;
-    // port
-    response[pos++] = (port >> 8) & 0xFF; response[pos++] = port & 0xFF;
-    // target (hostname)
-    pos += dns_encode_name(response + pos, target_host);
-    int rdlen = pos - rstart;
-    response[rdlen_pos] = (rdlen >> 8) & 0xFF; response[rdlen_pos + 1] = rdlen & 0xFF;
-    return pos;
-}
+// PTR/SRV 관련 서비스 탐색 응답은 더 이상 제공하지 않습니다.
 // mDNS 초기화
 void mdns_init(void) {
+    // 이미 초기화된 경우 재초기화하지 말고 아나운스만 실행
+    if (mdns_initialized) {
+        DBG_NET_PRINT("[mDNS] Already initialized, sending mdns_announce only\n");
+        mdns_announce();
+        return;
+    }
+
     // 호스트 이름 생성: mic-control-XX.local (XX = device_id)
     uint8_t device_id = get_gpio_device_id();
     snprintf(mdns_hostname, sizeof(mdns_hostname), "mic-control-%02x.local", device_id);
@@ -320,11 +313,10 @@ void mdns_init(void) {
     DBG_NET_PRINT("[mDNS] Initialized on socket %d, port %d\n", MDNS_SOCKET, MDNS_PORT);
     DBG_NET_PRINT("[mDNS] Multicast group: 224.0.0.251\n");
     
-    // 초기 공지 (3회)
-    for (int i = 0; i < 3; i++) {
-        mdns_announce();
-        sleep_ms(250);
-    }
+    // 초기 공지: 첫 회는 즉시 전송하고, 나머지는 mdns_process에서 비블로킹으로 스케줄
+    mdns_announce();
+    mdns_initial_announces = 2; // 남은 전송 횟수
+    mdns_next_initial_announce = last_announce_time + 250; // ms
 }
 
 // mDNS 자발적 응답 (Unsolicited Response)
@@ -388,6 +380,14 @@ void mdns_process(void) {
         mdns_announce();
         last_announce_time = current_time;
     }
+
+    // 초기 아나운스(부팅시 다중 전송)를 블로킹 없이 스케줄링
+    if (mdns_initial_announces > 0 && current_time >= mdns_next_initial_announce) {
+        mdns_announce();
+        mdns_initial_announces--;
+        mdns_next_initial_announce = current_time + 250;
+        last_announce_time = current_time;
+    }
     
     // 수신 데이터 확인
     uint16_t len = getSn_RX_RSR(MDNS_SOCKET);
@@ -411,72 +411,31 @@ void mdns_process(void) {
     // 질의 파싱
     const uint8_t* ptr = buf + sizeof(dns_header_t);
     char qname[128];
+    char qname_print[256];
     
     for (int i = 0; i < qdcount; i++) {
         int name_len = dns_decode_name(buf, ptr, qname, sizeof(qname));
+        // 로그용 안전 문자열 생성
+        make_printable_for_log(qname, qname_print, sizeof(qname_print));
         ptr += name_len;
         
         uint16_t qtype = (ptr[0] << 8) | ptr[1];
         ptr += 4;  // TYPE + CLASS
-        
-        DBG_NET_PRINT("[mDNS] Query: %s (type=%d)\n", qname, qtype);
-        DBG_NET_PRINT("[mDNS] Hostname match check: query='%s' vs hostname='%s'\n", qname, mdns_hostname);
 
-        // PTR (서비스 탐색) 처리: _micctrl._tcp.local
-        if (qtype == DNS_TYPE_PTR) {
-            const char* service_type = "_micctrl._tcp.local";
-            if (strcasecmp(qname, service_type) == 0) {
-                DBG_NET_PRINT("[mDNS] PTR query for service %s\n", service_type);
-                // 인스턴스 이름 생성: mic-control-{id}._micctrl._tcp.local
-                uint8_t device_id = get_gpio_device_id();
-                char instance_label[32];
-                char instance_full[128];
-                snprintf(instance_label, sizeof(instance_label), "mic-control-%02x", device_id);
-                snprintf(instance_full, sizeof(instance_full), "%s._micctrl._tcp.local", instance_label);
-
-                wiz_NetInfo net_info;
-                wizchip_getnetinfo(&net_info);
-
-                uint8_t response[512];
-                int pos = 0;
-
-                // DNS 헤더 복사
-                dns_header_t* resp_header = (dns_header_t*)response;
-                memcpy(resp_header, header, sizeof(dns_header_t));
-                resp_header->flags = htons(DNS_FLAG_RESPONSE | DNS_FLAG_AUTHORITATIVE);
-                resp_header->ancount = htons(1); // PTR
-                resp_header->nscount = 0;
-                resp_header->arcount = htons(3); // SRV, TXT, A as additional
-                pos += sizeof(dns_header_t);
-
-                // 원본 질의 복사
-                memcpy(response + pos, buf + sizeof(dns_header_t), name_len + 4);
-                pos += name_len + 4;
-
-                // PTR 레코드 (service_type -> instance_full)
-                pos += build_ptr_record(response + pos, service_type, instance_full);
-
-                // SRV (instance -> host + port)
-                pos += build_srv_record(response + pos, instance_full, tcp_port, mdns_hostname);
-
-                // TXT for instance
-                pos += build_txt_record_response(response + pos, instance_full);
-
-                // A record for host
-                pos += build_a_record_response(response + pos, mdns_hostname, net_info.ip);
-
-                // 멀티캐스트로 전송
-                uint8_t mdns_ip[] = MDNS_MULTICAST_IP;
-                int32_t sent = sendto(MDNS_SOCKET, response, pos, mdns_ip, MDNS_PORT);
-                if (sent > 0) {
-                    DBG_NET_PRINT("[mDNS] Service PTR response sent (instance=%s) (%d bytes)\n", instance_full, sent);
-                } else {
-                    DBG_NET_PRINT("[mDNS] Failed to send PTR response: %d\n", sent);
-                }
-
-                // PTR 처리 후 다음 질의로 넘어감
-                continue;
+        // 빈 질의는 로그 없이 무시; qtype==0은 rate-limited 로그
+        if (qname[0] == '\0') {
+            continue;
+        }
+        if (qtype == 0) {
+            uint32_t now = to_ms_since_boot(get_absolute_time());
+            if (now - mdns_ignore_last_log_ts > 1000) {
+                mdns_ignore_last_log_ts = now;
+                mdns_ignore_log_count = 0;
             }
+            if (mdns_ignore_log_count < mdns_ignore_log_limit) {
+                mdns_ignore_log_count++;
+            }
+            continue;
         }
 
         // A 레코드 질의이고 호스트 이름이 일치하면 응답
