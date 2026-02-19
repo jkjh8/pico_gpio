@@ -80,17 +80,15 @@ void http_handle_post_network(uint8_t sock, const char* body) {
         return;
     }
     
-    wiz_NetInfo* net_cfg = system_config_get_network();
-    
     // DHCP 설정
     cJSON* dhcp = cJSON_GetObjectItem(json, "dhcp_enabled");
     if (dhcp && cJSON_IsBool(dhcp)) {
-        net_cfg->dhcp = cJSON_IsTrue(dhcp) ? NETINFO_DHCP : NETINFO_STATIC;
-        DBG_HTTP_PRINT("[API] DHCP mode: %s\n", net_cfg->dhcp == NETINFO_DHCP ? "DHCP" : "Static");
+        g_net_info->dhcp = cJSON_IsTrue(dhcp) ? NETINFO_DHCP : NETINFO_STATIC;
+        DBG_HTTP_PRINT("[API] DHCP mode: %s\n", g_net_info->dhcp == NETINFO_DHCP ? "DHCP" : "Static");
     }
     
     // Static IP 설정
-    if (net_cfg->dhcp == NETINFO_STATIC) {
+    if (g_net_info->dhcp == NETINFO_STATIC) {
         cJSON* ip = cJSON_GetObjectItem(json, "ip");
         cJSON* subnet = cJSON_GetObjectItem(json, "subnet");
         cJSON* gateway = cJSON_GetObjectItem(json, "gateway");
@@ -99,24 +97,24 @@ void http_handle_post_network(uint8_t sock, const char* body) {
         if (ip && cJSON_IsString(ip)) {
             DBG_HTTP_PRINT("[API] Parsing IP: %s\n", ip->valuestring);
             sscanf(ip->valuestring, "%hhu.%hhu.%hhu.%hhu",
-                   &net_cfg->ip[0], &net_cfg->ip[1], &net_cfg->ip[2], &net_cfg->ip[3]);
+                   &g_net_info->ip[0], &g_net_info->ip[1], &g_net_info->ip[2], &g_net_info->ip[3]);
             DBG_HTTP_PRINT("[API] Parsed IP: %d.%d.%d.%d\n", 
-                   net_cfg->ip[0], net_cfg->ip[1], net_cfg->ip[2], net_cfg->ip[3]);
+                   g_net_info->ip[0], g_net_info->ip[1], g_net_info->ip[2], g_net_info->ip[3]);
         }
         if (subnet && cJSON_IsString(subnet)) {
             DBG_HTTP_PRINT("[API] Parsing Subnet: %s\n", subnet->valuestring);
             sscanf(subnet->valuestring, "%hhu.%hhu.%hhu.%hhu",
-                   &net_cfg->sn[0], &net_cfg->sn[1], &net_cfg->sn[2], &net_cfg->sn[3]);
+                   &g_net_info->sn[0], &g_net_info->sn[1], &g_net_info->sn[2], &g_net_info->sn[3]);
         }
         if (gateway && cJSON_IsString(gateway)) {
             DBG_HTTP_PRINT("[API] Parsing Gateway: %s\n", gateway->valuestring);
             sscanf(gateway->valuestring, "%hhu.%hhu.%hhu.%hhu",
-                   &net_cfg->gw[0], &net_cfg->gw[1], &net_cfg->gw[2], &net_cfg->gw[3]);
+                   &g_net_info->gw[0], &g_net_info->gw[1], &g_net_info->gw[2], &g_net_info->gw[3]);
         }
         if (dns && cJSON_IsString(dns)) {
             DBG_HTTP_PRINT("[API] Parsing DNS: %s\n", dns->valuestring);
             sscanf(dns->valuestring, "%hhu.%hhu.%hhu.%hhu",
-                   &net_cfg->dns[0], &net_cfg->dns[1], &net_cfg->dns[2], &net_cfg->dns[3]);
+                   &g_net_info->dns[0], &g_net_info->dns[1], &g_net_info->dns[2], &g_net_info->dns[3]);
         }
     }
     
@@ -320,21 +318,9 @@ void http_handle_get_all(uint8_t sock) {
     uint16_t tcp_port = system_config_get_tcp_port();
     uint32_t uart_baud = system_config_get_uart_baud();
     
-    // 글로벌 변수에서 네트워크 정보 불러오기
+    // 글로벌 변수에서 네트워크 정보 불러오기 (포인터이므로 역참조)
     wiz_NetInfo net_info;
-    if (g_network_info_mutex != NULL && 
-        xSemaphoreTake(g_network_info_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-        memcpy(&net_info, &g_net_info, sizeof(wiz_NetInfo));
-        xSemaphoreGive(g_network_info_mutex);
-        DBG_HTTP_PRINT("[API] Network info from cache: %d.%d.%d.%d\n", 
-                       net_info.ip[0], net_info.ip[1], net_info.ip[2], net_info.ip[3]);
-    } else {
-        // mutex를 얻지 못하면 W5500에서 직접 읽기
-        DBG_HTTP_PRINT("[API] Mutex failed, reading directly from W5500\n");
-        wizchip_getnetinfo(&net_info);
-        DBG_HTTP_PRINT("[API] Direct read: %d.%d.%d.%d\n", 
-                       net_info.ip[0], net_info.ip[1], net_info.ip[2], net_info.ip[3]);
-    }
+    memcpy(&net_info, g_net_info, sizeof(wiz_NetInfo));
     
     cJSON* root = cJSON_CreateObject();
     

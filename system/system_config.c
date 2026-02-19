@@ -53,7 +53,7 @@ void system_config_reset_to_defaults(void) {
     g_system_config.gpio.device_id = 0x01;
     g_system_config.gpio.auto_response = true;
     g_system_config.gpio.rt_mode = GPIO_RT_MODE_CHANNEL;
-    g_system_config.gpio.trigger_mode = GPIO_MODE_TOGGLE;
+    g_system_config.gpio.trigger_mode = GPIO_MODE_TRIGGER;
     g_system_config.gpio.reserved = 0;
     
     // 네트워크 기본값 (DHCP 활성화)

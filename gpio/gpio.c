@@ -129,9 +129,9 @@ bool gpio_spi_init(void) {
     gpio_put(HCT595_LATCH_PIN, 1); // 초기 high
 
     // 595 클리어 핀 (SRCLR) - GP10
-    gpio_init(HCT595_CLEAR_PIN);
-    gpio_set_dir(HCT595_CLEAR_PIN, GPIO_OUT);
-    gpio_put(HCT595_CLEAR_PIN, 1); // 클리어 해제 (HIGH)
+    // gpio_init(HCT595_CLEAR_PIN);
+    // gpio_set_dir(HCT595_CLEAR_PIN, GPIO_OUT);
+    // gpio_put(HCT595_CLEAR_PIN, 1); // 클리어 해제 (HIGH)
 
     // 165 로드 핀 (SH/LD) - GP9
     gpio_init(HCT165_LOAD_PIN);
@@ -155,7 +155,7 @@ void hct595_write(uint16_t data) {
     
     // 데이터를 출력 레지스터로 래치 (STCP 펄스: HIGH -> LOW)
     gpio_put(HCT595_LATCH_PIN, 0); // STCP low - 데이터 래치
-    busy_wait_us(1);
+    // busy_wait_us(1);/
     gpio_put(HCT595_LATCH_PIN, 1); // STCP high - 준비 상태
     
     // 전역 변수 업데이트
@@ -170,7 +170,7 @@ void hct595_write(uint16_t data) {
 
 uint16_t hct165_read(void) {
     gpio_put(HCT165_LOAD_PIN, 0); // SH/LD low (load)
-    busy_wait_us(1);
+    //busy_wait_us(1);
     gpio_put(HCT165_LOAD_PIN, 1); // SH/LD high (shift)
     
     // 바이트 순서를 맞춰서 읽기

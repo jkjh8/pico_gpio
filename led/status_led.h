@@ -5,8 +5,8 @@
 #include <stdbool.h>
 
 // GPIO 핀 정의
-#define STATUS_LED_GREEN_PIN 25  // 상태 표시 LED - 녹색
-#define STATUS_LED_RED_PIN   24  // 상태 표시 LED - 빨강색
+#define STATUS_LED_GREEN_PIN 24  // 상태 표시 LED - 녹색
+#define STATUS_LED_RED_PIN   25  // 상태 표시 LED - 빨강색
 
 // 상태 LED 상태 정의
 typedef enum {

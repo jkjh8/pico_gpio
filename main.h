@@ -20,10 +20,6 @@
 #include "uart/uart_rs232.h"
 #include "gpio/gpio.h"
 
-// 전역 상태 변수
-extern volatile bool g_network_connected;
-extern SemaphoreHandle_t g_network_info_mutex;
-
 // GPIO 응답 메시지 큐 (통합 큐 구조)
 #include "queue.h"
 #define GPIO_QUEUE_SIZE 20       // 큐 크기 증가 (16채널 동시 변경 대응)
@@ -61,9 +57,6 @@ extern bool gpio_queues_enabled[MAX_GPIO_QUEUES];
 // tcp port
 extern uint16_t tcp_port;
 extern bool tcp_servers_initialized;
-
-// ipaddress (외부 선언)
-extern wiz_NetInfo g_net_info;
 
 // 시스템 재시작 함수
 void system_restart_request(void);

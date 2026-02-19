@@ -1,6 +1,6 @@
 <!-- @format -->
 
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -496,7 +496,9 @@
         align-items: center;
         gap: 10px;
         box-shadow: 0 3px 5px rgba(0, 0, 0, 0.2);
-        animation: fadeIn 0.3s, fadeOut 0.3s 2.7s forwards;
+        animation:
+          fadeIn 0.3s,
+          fadeOut 0.3s 2.7s forwards;
       }
       .toast.positive {
         background-color: var(--positive);
@@ -1861,7 +1863,7 @@
         const iconId = type === 'positive' ? 'check_circle' : 'cancel'
         toast.innerHTML = `<svg class="icon-sm" style="fill:white"><use href="#${iconId}"></use></svg><span>${message}</span>`
         container.appendChild(toast)
-        setTimeout(() => toast.remove(), 3000)
+        setTimeout(() => toast.remove(), 1000)
       }
       function showConfirmModal() {
         const modal = document.getElementById('confirm-modal')
@@ -1883,7 +1885,7 @@
             setTimeout(async () => {
               await fetchAll()
               hideLoading()
-            }, 5000)
+            }, 1000)
           } catch (err) {
             showToast('Failed to reboot', 'negative')
             hideLoading()
@@ -2090,7 +2092,7 @@
             setTimeout(async () => {
               await fetchAll()
               hideLoading()
-            }, 5000)
+            }, 1000)
           } catch (err) {
             showToast('Failed to update network', 'negative')
             hideLoading()
@@ -2122,7 +2124,7 @@
             setTimeout(async () => {
               await fetchAll()
               hideLoading()
-            }, 5000)
+            }, 1000)
           } catch (err) {
             showToast('Failed to update control', 'negative')
             hideLoading()

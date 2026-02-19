@@ -17,7 +17,7 @@
 static bool mdns_initialized = false;
 static char mdns_hostname[32] = {0};  // "pico-gpio-XX.local"
 static uint32_t last_announce_time = 0;
-#define MDNS_ANNOUNCE_INTERVAL_MS 120000  // 2분마다 자발적 응답
+#define MDNS_ANNOUNCE_INTERVAL_MS 300000  // 300초마다 자발적 응답
 // 초기(부팅시) 아나운스 스케줄링 (블로킹 sleep 사용 금지)
 static int mdns_initial_announces = 0;
 static uint32_t mdns_next_initial_announce = 0;
@@ -290,8 +290,22 @@ void mdns_init(void) {
     uint8_t status = getSn_SR(MDNS_SOCKET);
     if (status != SOCK_CLOSED) {
         close(MDNS_SOCKET);
+        sleep_ms(10);  // 소켓이 완전히 닫힐 때까지 대기
     }
     
+    // 멀티캐스트 MAC 주소 설정 (소켓 열기 전에 설정)
+    uint8_t mdns_mac[6] = {0x01, 0x00, 0x5E, 0x00, 0x00, 0xFB};
+    DBG_NET_PRINT("[mDNS] Setting multicast MAC before socket open...\n");
+    setSn_DHAR(MDNS_SOCKET, mdns_mac);
+    
+    // 멀티캐스트 그룹 IP 설정 (소켓 열기 전에 설정)
+    uint8_t mdns_ip[] = MDNS_MULTICAST_IP;
+    DBG_NET_PRINT("[mDNS] Setting multicast IP before socket open...\n");
+    setSn_DIPR(MDNS_SOCKET, mdns_ip);
+    
+    // 멀티캐스트 포트 설정
+    setSn_DPORT(MDNS_SOCKET, MDNS_PORT);
+
     // UDP 멀티캐스트 소켓 열기
     int8_t ret = socket(MDNS_SOCKET, Sn_MR_UDP | Sn_MR_MULTI, MDNS_PORT, SF_IO_NONBLOCK);
     if (ret != MDNS_SOCKET) {
@@ -299,23 +313,20 @@ void mdns_init(void) {
         return;
     }
     
-    // 멀티캐스트 MAC 주소 설정 (224.0.0.251 -> 01:00:5E:00:00:FB)
-    uint8_t mdns_mac[6] = {0x01, 0x00, 0x5E, 0x00, 0x00, 0xFB};
-    setSn_DHAR(MDNS_SOCKET, mdns_mac);
-    
-    // 멀티캐스트 그룹 IP 설정
-    uint8_t mdns_ip[] = MDNS_MULTICAST_IP;
-    setSn_DIPR(MDNS_SOCKET, mdns_ip);
-    
+    // 소켓 상태 확인
+    status = getSn_SR(MDNS_SOCKET);
+    DBG_NET_PRINT("[mDNS] Socket status after open: 0x%02X (expected 0x22 for UDP)\n", status);
+
     mdns_initialized = true;
     last_announce_time = to_ms_since_boot(get_absolute_time());
     
     DBG_NET_PRINT("[mDNS] Initialized on socket %d, port %d\n", MDNS_SOCKET, MDNS_PORT);
+    DBG_NET_PRINT("[mDNS] Hostname: %s\n", mdns_hostname);
     DBG_NET_PRINT("[mDNS] Multicast group: 224.0.0.251\n");
     
     // 초기 공지: 첫 회는 즉시 전송하고, 나머지는 mdns_process에서 비블로킹으로 스케줄
     mdns_announce();
-    mdns_initial_announces = 2; // 남은 전송 횟수
+    mdns_initial_announces = 3; // 남은 전송 횟수 (총 3회)
     mdns_next_initial_announce = last_announce_time + 250; // ms
 }
 
@@ -369,24 +380,28 @@ void mdns_process(void) {
     // 소켓 상태 확인
     uint8_t status = getSn_SR(MDNS_SOCKET);
     if (status != SOCK_UDP) {
+        DBG_NET_PRINT("[mDNS] Socket not UDP (status: 0x%02X), reinitializing\n", status);
         mdns_initialized = false;
         mdns_init();
         return;
     }
     
-    // 주기적 공지 (10초마다)
+    // 주기적 공지 (300초마다)
     uint32_t current_time = to_ms_since_boot(get_absolute_time());
     if (current_time - last_announce_time >= MDNS_ANNOUNCE_INTERVAL_MS) {
         mdns_announce();
         last_announce_time = current_time;
+        // 수신 대기 중임을 알림
+        DBG_NET_PRINT("[mDNS] Listening on port %d, waiting for queries...\n", MDNS_PORT);
     }
 
     // 초기 아나운스(부팅시 다중 전송)를 블로킹 없이 스케줄링
     if (mdns_initial_announces > 0 && current_time >= mdns_next_initial_announce) {
         mdns_announce();
         mdns_initial_announces--;
-        mdns_next_initial_announce = current_time + 250;
+        mdns_next_initial_announce = current_time + 500;  // 500ms 간격
         last_announce_time = current_time;
+        DBG_NET_PRINT("[mDNS] Initial announce sent, %d remaining\n", mdns_initial_announces);
     }
     
     // 수신 데이터 확인
@@ -407,7 +422,6 @@ void mdns_process(void) {
     
     uint16_t qdcount = ntohs(header->qdcount);
     if (qdcount == 0) return;
-    
     // 질의 파싱
     const uint8_t* ptr = buf + sizeof(dns_header_t);
     char qname[128];
@@ -441,7 +455,6 @@ void mdns_process(void) {
         // A 레코드 질의이고 호스트 이름이 일치하면 응답
         if (qtype == DNS_TYPE_A) {
             bool match = hostname_match(qname, mdns_hostname);
-            DBG_NET_PRINT("[mDNS] Match result: %d\n", match);
             if (match) {
             wiz_NetInfo net_info;
             wizchip_getnetinfo(&net_info);
@@ -470,14 +483,6 @@ void mdns_process(void) {
             
             // 유니캐스트 응답 (질의자에게 직접)
             int32_t sent = sendto(MDNS_SOCKET, response, pos, remote_ip, remote_port);
-            
-            if (sent > 0) {
-                DBG_NET_PRINT("[mDNS] Responded to %d.%d.%d.%d:%d (%d bytes)\n",
-                             remote_ip[0], remote_ip[1], remote_ip[2], remote_ip[3],
-                             remote_port, sent);
-            } else {
-                DBG_NET_PRINT("[mDNS] Failed to send response: %d\n", sent);
-            }
             
             break;
             }

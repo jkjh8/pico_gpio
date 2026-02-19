@@ -16,6 +16,7 @@
 #include "pico/stdlib.h"
 #include "main.h"
 #include "network/mac_utils.h"
+#include "FreeRTOS.h"
 
 #define NETWORK_CONFIG_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - 4096)
 
@@ -25,8 +26,8 @@ void wizchip_deselect(void);
 uint8_t wizchip_read(void);
 void wizchip_write(uint8_t wb);
 
-// Global network information
-extern wiz_NetInfo g_net_info;
+// Global network information (pointer to system_config network)
+extern wiz_NetInfo* g_net_info;
 
 // DHCP configuration flag
 extern bool dhcp_configured;
@@ -48,8 +49,7 @@ typedef enum {
     NETWORK_MODE_STATIC = 0,
     NETWORK_MODE_DHCP
 } network_mode_t;
-// 플래시 저장 함수
-void network_config_save_to_flash(const wiz_NetInfo* config);
+// 플래시 로드 함수
 void network_config_load_from_flash(wiz_NetInfo* config);
 // Function declarations
 w5500_init_result_t w5500_initialize(void);
@@ -72,8 +72,6 @@ void apply_network_config(const wiz_NetInfo* config);
 
 // Network initialization and processing functions
 void network_init(void);
-void network_cache_init(void);
-void update_network_info_cache(void);
 
 // 네트워크 상태 구조체
 typedef struct {
@@ -86,7 +84,6 @@ typedef struct {
 // 외부 참조 선언
 extern bool tcp_servers_initialized;
 extern uint16_t tcp_port;
-extern volatile bool g_network_connected;
 extern QueueHandle_t gpio_queues[];
 extern bool gpio_queues_enabled[];
 

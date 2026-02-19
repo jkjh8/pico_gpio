@@ -29,29 +29,16 @@ bool gpio_queues_enabled[MAX_GPIO_QUEUES] = {false};
 // =============================================================================
 
 static volatile bool restart_requested = false;
-static volatile bool restart_in_progress = false;
-static uint32_t restart_request_time = 0;
 bool tcp_servers_initialized = false;  // extern으로 선언되어 network_process에서 사용
-volatile bool g_network_connected = false;  // 네트워크 연결 상태 (다른 태스크에서 읽기 전용)
 
 void system_restart_request(void) {
     // 이미 재부팅 진행 중이면 무시
-    if (restart_in_progress) {
+    if (restart_requested) {
         DBG_MAIN_PRINT("[RESTART] Already in progress, ignoring new request\n");
         return;
     }
-    
-    // 중복 요청 방지 (1초 내 중복 요청 무시)
-    uint32_t now = to_ms_since_boot(get_absolute_time());
-    if (restart_requested && (now - restart_request_time) < 1000) {
-        DBG_MAIN_PRINT("[RESTART] Duplicate request ignored (within 1 second)\n");
-        return;
-    }
-    
-    DBG_MAIN_PRINT("[RESTART] Request received, setting flag\n");
     restart_requested = true;
-    restart_request_time = now;
-    DBG_MAIN_PRINT("[RESTART] Flag set: %d\n", restart_requested);
+    DBG_MAIN_PRINT("[RESTART] Request received, setting flag\n");
 }
 
 bool is_system_restart_requested(void) {
@@ -142,10 +129,9 @@ void network_task(void *pvParameters)
     while (true) {
         // 시스템 재시작 체크
         if (is_system_restart_requested()) {
-            DBG_MAIN_PRINT("[RESTART] Network task detected restart request\n");
+            DBG_MAIN_PRINT("[RESTART] System monitor task detected restart request\n");
             system_restart();
         }
-        
         // network_process가 모든 네트워크 처리를 담당
         // (케이블 감지, IP 할당, 서버 초기화/처리, LED, TCP 큐)
         network_process();
@@ -157,6 +143,9 @@ void network_task(void *pvParameters)
 void gpio_task(void *pvParameters)
 {
     while (true) {
+        if (is_system_restart_requested()) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
         hct165_read();
         vTaskDelay(pdMS_TO_TICKS(10));
     }
@@ -166,6 +155,9 @@ void uart_task(void *pvParameters)
 {
     char msg_buffer[GPIO_MSG_MAX_LEN];
     while (true) {
+        if (is_system_restart_requested()) {
+             vTaskDelay(pdMS_TO_TICKS(100));
+        }
         uart_rs232_process();
         
         // UART GPIO 메시지 큐 처리
@@ -182,6 +174,9 @@ void uart_task(void *pvParameters)
 void usb_task(void *pvParameters)
 {
     while (true) {
+        if (is_system_restart_requested()) {
+             vTaskDelay(pdMS_TO_TICKS(100));
+        }
         process_usb_cdc_commands();
         vTaskDelay(pdMS_TO_TICKS(1));
     }
@@ -190,19 +185,11 @@ void usb_task(void *pvParameters)
 void led_task(void *pvParameters)
 {
     while (true) {
+        if (is_system_restart_requested()) {
+             vTaskDelay(pdMS_TO_TICKS(100));
+        }
         status_led_process();
         vTaskDelay(pdMS_TO_TICKS(10));
-    }
-}
-
-void system_monitor_task(void *pvParameters)
-{
-    while (true) {
-        if (is_system_restart_requested()) {
-            DBG_MAIN_PRINT("[RESTART] System monitor task detected restart request\n");
-            system_restart();
-        }
-        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -214,49 +201,28 @@ int main()
 {
     // 1. 기본 초기화
     stdio_init_all();
-    printf("System Starting...\n");
-    // 2. 상태 표시 LED 초기화 (녹색 켜짐)
-    status_led_init();
-    printf("LED initialized (Green ON)\n");
-    // 3. 시스템 설정 로드 (통합 Flash 설정)
     system_config_init();
     debug_init();
-    printf("System config loaded\n");
-    DBG_MAIN_PRINT("=== Pico GPIO Server v%s ===\n", PICO_PROGRAM_VERSION_STRING);
-    DBG_MAIN_PRINT("Board: %s\n", PICO_BOARD);
-    // 4. 설정 적용
+    DBG_MAIN_PRINT("System Starting...\n");
+    status_led_init();
     tcp_port = system_config_get_tcp_port();
     uart_rs232_1_baud = system_config_get_uart_baud();
-    
+    DBG_MAIN_PRINT("=== Pico GPIO Server v%s ===\n", PICO_PROGRAM_VERSION_STRING);
+    DBG_MAIN_PRINT("Board: %s\n", PICO_BOARD);
     DBG_MAIN_PRINT("TCP port: %u\n", tcp_port);
     DBG_MAIN_PRINT("UART baud: %u\n", uart_rs232_1_baud);
     DBG_MAIN_PRINT("GPIO Device ID: 0x%02X\n", get_gpio_device_id());
-    
-    // 5. 네트워크 초기화
-    printf("Initializing network...\n");
+
     network_init();
-    printf("Network initialized\n");
-    
-    // 7. UART 초기화
-    printf("Initializing UART...\n");
+    DBG_MAIN_PRINT("Network initialized\n");
     uart_rs232_init(RS232_PORT_1, uart_rs232_1_baud);
     DBG_MAIN_PRINT("UART RS232 initialized at %u baud\n", uart_rs232_1_baud);
-    
-    // 8. GPIO 초기화
-    DBG_MAIN_PRINT("Initializing GPIO...\n");
     gpio_spi_init();
     DBG_MAIN_PRINT("GPIO SPI initialized\n");
-    // GPIO 출력 모두 끄기 (초기 상태)
     hct595_write(0x0000);
-    DBG_MAIN_PRINT("GPIO outputs initialized (all OFF)\n");
-    // 시스템 준비 완료: 녹색 LED 고정
     status_led_set_state(STATUS_LED_GREEN_ON);
     DBG_MAIN_PRINT("System ready - Status LED green\n");
-    // =============================================================================
-    // FreeRTOS 태스크 생성 및 스케줄러 시작
-    DBG_MAIN_PRINT("Creating FreeRTOS tasks...\n");
-    
-    // GPIO 응답 메시지 큐 생성 (통합 큐)
+
     gpio_queues[GPIO_QUEUE_UART] = xQueueCreate(GPIO_QUEUE_SIZE, GPIO_MSG_MAX_LEN);
     gpio_queues[GPIO_QUEUE_TCP] = xQueueCreate(GPIO_QUEUE_SIZE, GPIO_MSG_MAX_LEN);
     
@@ -269,15 +235,11 @@ int main()
         DBG_MAIN_PRINT("GPIO message queues created (UART + TCP broadcast, size=%d)\n", GPIO_QUEUE_SIZE);
     }
     
-    // 네트워크 정보 캐시 초기화 (뮤텍스 생성)
-    network_cache_init();
-    
     xTaskCreate(network_task, "Network", 2048, NULL, 4, NULL);
     xTaskCreate(gpio_task, "GPIO", 1024, NULL, 3, NULL);
     xTaskCreate(uart_task, "UART", 1024, NULL, 3, NULL);
     xTaskCreate(usb_task, "USB", 1024, NULL, 3, NULL);
     xTaskCreate(led_task, "LED", 256, NULL, 2, NULL);
-    xTaskCreate(system_monitor_task, "SysMon", 256, NULL, 1, NULL);
     
     DBG_MAIN_PRINT("Starting FreeRTOS scheduler...\n");
     

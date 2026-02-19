@@ -9,47 +9,14 @@
 #include "semphr.h"
 #include "network/mdns.h"
 
-// Network configuration (loaded from/saved to flash)
-wiz_NetInfo g_net_info = {
-    .mac = { 0x00, 0x08, 0xDC, 0x00, 0x00, 0x00 },
-    .ip = { 192, 168, 1, 100 },
-    .sn = { 255, 255, 255, 0 },
-    .gw = { 0, 0, 0, 0 },
-    .dns = { 0, 0, 0, 0 },
-    .dhcp = NETINFO_STATIC
-};
-// Network Info Mutex (for HTTP API thread-safe access)
-SemaphoreHandle_t g_network_info_mutex = NULL;
+// Network configuration pointer (points to system_config network)
+wiz_NetInfo* g_net_info = NULL;
+
 // DHCP State Management
 static bool dhcp_in_progress = false;
 static uint32_t dhcp_start_time = 0;
 static uint32_t dhcp_last_check = 0;
 static uint32_t dhcp_last_tick = 0; // DHCP_time_handler용
-// W5500 SPI Mutex for FreeRTOS
-static SemaphoreHandle_t w5500_mutex = NULL;
-static bool w5500_mutex_initialized = false;
-
-
-// 네트워크 정보 캐시 초기화 (FreeRTOS 스케줄러 시작 전 호출)
-void network_cache_init(void) {
-    g_network_info_mutex = xSemaphoreCreateMutex();
-    if (g_network_info_mutex == NULL) {
-        DBG_NET_PRINT("ERROR: Failed to create network info cache mutex\n");
-    } else {
-        DBG_NET_PRINT("Network info cache mutex created\n");
-    }
-}
-
-// 네트워크 정보 캐시 업데이트 함수 (네트워크 설정 변경 시 호출)
-void update_network_info_cache(void) {
-    if (g_network_info_mutex != NULL) {
-        if (xSemaphoreTake(g_network_info_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            wizchip_getnetinfo(&g_net_info);
-            xSemaphoreGive(g_network_info_mutex);
-            DBG_NET_PRINT("[NET] Network info cache updated\n");
-        }
-    }
-}
 
 bool is_ip_zero(const uint8_t ip[4]) {
     return (ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0);
@@ -74,21 +41,12 @@ bool is_mac_invalid(const uint8_t mac[6]) {
 void apply_network_config(const wiz_NetInfo* config) {
     // W5500에 설정 적용
     wizchip_setnetinfo((wiz_NetInfo*)config);
-    update_network_info_cache();
+    
+    // W5500에서 읽어서 system_config에 저장
+    // wizchip_getnetinfo(g_net_info);/
     DBG_NET_PRINT("Network configuration applied to W5500\n");
     w5500_print_network_status();
 }
-
-// Apply network configuration with status message
-void apply_network_config_with_status(const wiz_NetInfo* config, const char* status_message) {
-    apply_network_config(config);
-    DBG_NET_PRINT("%s\n", status_message);
-}
-
-// Global Variables
-
-
-
 // DHCP configuration flag
 bool dhcp_configured = false;
 
@@ -116,82 +74,11 @@ void wizchip_write(uint8_t wb) {
     spi_write_blocking(SPI_PORT, &wb, 1);
 }
 
-void network_config_save_to_flash(const wiz_NetInfo* config) {
-    wiz_NetInfo* sys_net = system_config_get_network();
-    memcpy(sys_net, config, sizeof(wiz_NetInfo));
-    system_config_save_to_flash();
-    DBG_NET_PRINT("Network configuration saved to flash (system config).\n");
-}
-
-void network_config_load_from_flash(wiz_NetInfo* config) {
-    wiz_NetInfo* sys_net = system_config_get_network();
-    uint8_t mac[6];
-    
-    // 시스템 설정에서 복사
-    memcpy(config, sys_net, sizeof(wiz_NetInfo));
-
-    // 유효성 검사: MAC이 모두 0xFF 또는 0x00이면 기본값으로 초기화
-    if (is_mac_invalid(config->mac)) {
-        DBG_NET_PRINT("Flash config invalid, using default config\n");
-        memset(config, 0, sizeof(wiz_NetInfo));
-        config->mac[0] = 0x00; config->mac[1] = 0x08; config->mac[2] = 0xDC;
-        config->ip[0] = 192; config->ip[1] = 168; config->ip[2] = 1; config->ip[3] = 100;
-        config->sn[0] = 255; config->sn[1] = 255; config->sn[2] = 255; config->sn[3] = 0;
-        config->gw[0] = 192; config->gw[1] = 168; config->gw[2] = 1; config->gw[3] = 1;
-        config->dns[0] = 8; config->dns[1] = 8; config->dns[2] = 8; config->dns[3] = 8;
-        config->dhcp = NETINFO_STATIC;
-    }
-    // 보드 고유 ID로 MAC 생성 및 설정
-    generate_mac_from_board_id(mac);
-    memcpy(config->mac, mac, 6);
-    // 고정 IP 모드일 때, IP/GW/SN/DNS가 0.0.0.0 이면 기본값으로 보정
-    if (config->dhcp == NETINFO_STATIC) {
-        if (is_ip_zero(config->ip)) {
-            uint8_t default_ip[4] = {192, 168, 1, 100};
-            set_default_ip(config->ip, default_ip);
-            DBG_NET_PRINT("Static IP was 0.0.0.0, set to default 192.168.1.100\n");
-        }
-        if (is_ip_zero(config->gw)) {
-            uint8_t default_gw[4] = {192, 168, 1, 1};
-            set_default_ip(config->gw, default_gw);
-            DBG_NET_PRINT("Gateway was 0.0.0.0, set to default 192.168.1.1\n");
-        }
-        if (is_ip_zero(config->sn)) {
-            uint8_t default_sn[4] = {255, 255, 255, 0};
-            set_default_ip(config->sn, default_sn);
-            DBG_NET_PRINT("Subnet Mask was 0.0.0.0, set to default 255.255.255.0\n");
-        }
-        if (is_ip_zero(config->dns)) {
-            uint8_t default_dns[4] = {8, 8, 8, 8};
-            set_default_ip(config->dns, default_dns);
-            DBG_NET_PRINT("DNS was 0.0.0.0, set to default 8.8.8.8\n");
-        }
-    }
-    DBG_NET_PRINT("Network configuration loaded from flash (system config)\n");
-}
-
 w5500_init_result_t w5500_initialize(void) {
     DBG_WIZNET_PRINT("Starting W5500 initialization...\n");
-    DBG_WIZNET_PRINT("=== Hardware Pin Test ===\n");
-    
-    // MISO 핀 풀업 테스트 (W5500 연결 전)
-    gpio_init(SPI_MISO);
-    gpio_set_dir(SPI_MISO, GPIO_IN);
-    gpio_pull_up(SPI_MISO);
-    sleep_ms(10);
-    bool miso_pullup = gpio_get(SPI_MISO);
-    DBG_WIZNET_PRINT("MISO pin %d pull-up test: %s\n", SPI_MISO, miso_pullup ? "OK" : "FAIL");
-    
-    gpio_pull_down(SPI_MISO);
-    sleep_ms(10);
-    bool miso_pulldown = gpio_get(SPI_MISO);
-    DBG_WIZNET_PRINT("MISO pin %d pull-down test: %s\n", SPI_MISO, miso_pulldown ? "FAIL" : "OK");
-    gpio_disable_pulls(SPI_MISO);
-    
-    // 하드웨어 초기화 (직접 인라인)
     // SPI 속도를 5MHz로 설정
     DBG_WIZNET_PRINT("Initializing SPI at 5MHz...\n");
-    uint32_t actual_baudrate = spi_init(SPI_PORT, 5000 * 1000);
+    uint32_t actual_baudrate = spi_init(SPI_PORT, 5000 * 1000 * 4);
     DBG_WIZNET_PRINT("SPI baudrate set to: %u Hz\n", actual_baudrate);
     
     // SPI 포맷 설정: 8비트, SPI Mode 0 (CPOL=0, CPHA=0)
@@ -208,132 +95,33 @@ w5500_init_result_t w5500_initialize(void) {
     gpio_init(SPI_CS);
     gpio_set_dir(SPI_CS, GPIO_OUT);
     gpio_put(SPI_CS, 1);
-    DBG_WIZNET_PRINT("CS pin configured: CS=%d (initial HIGH)\n", SPI_CS);
-    
-    // W5500 리셋 (하드웨어 진단 포함)
-    DBG_WIZNET_PRINT("=== W5500 Reset Sequence ===\n");
     gpio_init(SPI_RST);
     gpio_set_dir(SPI_RST, GPIO_OUT);
     
     // 리셋 전 상태 확인
     gpio_put(SPI_RST, 1);
     sleep_ms(100);
-    DBG_WIZNET_PRINT("RST pin HIGH - checking MISO state...\n");
-    uint8_t miso_before = gpio_get(SPI_MISO);
-    DBG_WIZNET_PRINT("MISO state (RST=HIGH): %d\n", miso_before);
-    
     // 리셋 활성화
     gpio_put(SPI_RST, 0);
     sleep_ms(500);
-    DBG_WIZNET_PRINT("RST pin LOW - checking MISO state...\n");
-    uint8_t miso_reset = gpio_get(SPI_MISO);
-    DBG_WIZNET_PRINT("MISO state (RST=LOW): %d\n", miso_reset);
-    
     // 리셋 해제
     gpio_put(SPI_RST, 1);
     sleep_ms(500);
-    DBG_WIZNET_PRINT("W5500 reset complete\n");
-    
-    // SPI 루프백 테스트 (MISO 핀 확인)
-    DBG_WIZNET_PRINT("=== SPI Loopback Test ===\n");
-    uint8_t test_patterns[4] = {0x00, 0xFF, 0xAA, 0x55};
-    for (int i = 0; i < 4; i++) {
-        gpio_put(SPI_CS, 0);
-        sleep_us(10);
-        uint8_t rx_data = 0;
-        spi_write_read_blocking(SPI_PORT, &test_patterns[i], &rx_data, 1);
-        sleep_us(10);
-        gpio_put(SPI_CS, 1);
-        DBG_WIZNET_PRINT("Pattern 0x%02X -> Received 0x%02X\n", test_patterns[i], rx_data);
-        sleep_ms(10);
-    }
-    
-    // W5500 버전 레지스터 읽기 (여러 방법 시도)
-    DBG_WIZNET_PRINT("=== W5500 Version Register Test ===\n");
-    
-    // 방법 1: 일반 읽기
-    gpio_put(SPI_CS, 0);
-    sleep_us(10);
-    uint8_t cmd1[3] = {0x00, 0x39, 0x00};  // 주소 0x0039, 제어 바이트 0x00 (읽기)
-    spi_write_blocking(SPI_PORT, cmd1, 3);
-    uint8_t ver1 = 0xFF;
-    spi_read_blocking(SPI_PORT, 0xFF, &ver1, 1);
-    sleep_us(10);
-    gpio_put(SPI_CS, 1);
-    DBG_WIZNET_PRINT("Method 1 (addr 0x0039): 0x%02X\n", ver1);
-    sleep_ms(50);
-    
-    // 방법 2: 다른 주소 방식
-    gpio_put(SPI_CS, 0);
-    sleep_us(10);
-    uint8_t cmd2[3] = {0x00, 0x39, 0x01};  // VDM 읽기 모드
-    spi_write_blocking(SPI_PORT, cmd2, 3);
-    uint8_t ver2 = 0xFF;
-    spi_read_blocking(SPI_PORT, 0xFF, &ver2, 1);
-    sleep_us(10);
-    gpio_put(SPI_CS, 1);
-    DBG_WIZNET_PRINT("Method 2 (VDM mode): 0x%02X\n", ver2);
-    sleep_ms(50);
-    
-    // W5500 소켓 버퍼 초기화 및 설정 (최적화 - HTTP 서버에 더 많은 버퍼 할당)
+  
     uint8_t tx_sizes[8] = {2, 2, 2, 2, 2, 2, 2, 2};
     uint8_t rx_sizes[8] = {2, 2, 2, 2, 2, 2, 2, 2};
     DBG_WIZNET_PRINT("Initializing WIZchip buffers...\n");
     
     int init_result = wizchip_init(tx_sizes, rx_sizes);
-    DBG_WIZNET_PRINT("wizchip_init returned: %d\n", init_result);
-    
     if (init_result == -1) {
         DBG_WIZNET_PRINT("ERROR: wizchip_init failed\n");
         return W5500_INIT_ERROR_CHIP;
     }
-    
-    // wizchip_init 후 충분한 안정화 시간
-    sleep_ms(200);
-    
-    // 콜백 함수 재등록 (wizchip_init이 손상시켰을 수 있음)
-    DBG_WIZNET_PRINT("Re-registering WIZchip callbacks...\n");
     reg_wizchip_cs_cbfunc(wizchip_select, wizchip_deselect);
     reg_wizchip_spi_cbfunc(wizchip_read, wizchip_write);
     sleep_ms(100);
     
-    // 버전 확인 (직접 SPI로)
-    DBG_WIZNET_PRINT("=== Reading W5500 Version (after wizchip_init) ===\n");
-    uint8_t version = 0;
-    for (int retry = 0; retry < 3; retry++) {
-        gpio_put(SPI_CS, 0);
-        sleep_us(10);
-        uint8_t cmd[3] = {0x00, 0x39, 0x00};
-        spi_write_blocking(SPI_PORT, cmd, 3);
-        spi_read_blocking(SPI_PORT, 0xFF, &version, 1);
-        sleep_us(10);
-        gpio_put(SPI_CS, 1);
-        
-        DBG_WIZNET_PRINT("W5500 version read attempt %d: 0x%02X\n", retry + 1, version);
-        if (version == 0x04) {
-            DBG_WIZNET_PRINT("Version check PASSED!\n");
-            break;
-        }
-        sleep_ms(100);
-    }
-    
-    if (version != 0x04) {
-        DBG_WIZNET_PRINT("WARNING: W5500 version mismatch (expected 0x04, got 0x%02X)\n", version);
-        DBG_WIZNET_PRINT("Continuing initialization anyway...\n");
-        // 버전 불일치 시에도 계속 진행 (일부 W5500 클론 칩은 다른 버전 코드를 반환할 수 있음)
-    }
-    
-    // 링크 상태 확인 (최대 10초 대기)
-    DBG_WIZNET_PRINT("Waiting for Ethernet link...\n");
-    for (int i = 0; i < 20; i++) {
-        uint8_t phycfg = getPHYCFGR();
-        if (phycfg & PHYCFGR_LNK_ON) {
-            DBG_WIZNET_PRINT("Ethernet link detected (PHYCFGR: 0x%02X)\n", phycfg);
-            break;
-        }
-        sleep_ms(500);
-    }
-    
+    DBG_WIZNET_PRINT("W5500 initialization completed successfully\n");
     return W5500_INIT_SUCCESS;
 }
 
@@ -342,6 +130,8 @@ bool w5500_set_static_ip(wiz_NetInfo *net_info) {
     // DHCP 모드를 Static으로 변경
     net_info->dhcp = NETINFO_STATIC;
     apply_network_config(net_info);
+    system_config_save_to_flash();
+    DBG_NET_PRINT("Static IP configuration saved to flash\n");
     
     return true;
 }
@@ -349,6 +139,9 @@ bool w5500_set_static_ip(wiz_NetInfo *net_info) {
 // DHCP 설정 (W5500용 수정된 코드 - 빠른 부팅 지원)
 bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
     DBG_DHCP_PRINT("Starting DHCP process...\n");
+    
+    // DHCP 모드로 설정 (먼저 설정)
+    net_info->dhcp = NETINFO_DHCP;
     
     // 저장된 DHCP IP가 있으면 먼저 적용 (빠른 네트워크 연결)
     system_config_t *sys_cfg = system_config_get();
@@ -358,14 +151,11 @@ bool w5500_set_dhcp_mode(wiz_NetInfo *net_info) {
         memcpy(net_info->gw, sys_cfg->last_dhcp_gw, 4);
         memcpy(net_info->sn, sys_cfg->last_dhcp_sn, 4);
         memcpy(net_info->dns, sys_cfg->last_dhcp_dns, 4);
-        net_info->dhcp = NETINFO_STATIC;  // 임시로 Static으로 설정
-        apply_network_config(net_info);
+        // W5500에만 임시로 적용 (flash에 저장하지 않음)
+        wizchip_setnetinfo(net_info);
         DBG_DHCP_PRINT("Last IP applied: %d.%d.%d.%d\n", 
             net_info->ip[0], net_info->ip[1], net_info->ip[2], net_info->ip[3]);
     }
-    
-    // DHCP 모드로 변경
-    net_info->dhcp = NETINFO_DHCP;
     
     DBG_DHCP_PRINT("Closing all sockets...\n");
     for(int i = 0; i < 8; i++) close(i);
@@ -450,26 +240,26 @@ bool dhcp_process_check(wiz_NetInfo *net_info) {
     switch(dhcp_status) {
         case DHCP_IP_LEASED:
             DBG_DHCP_PRINT("DHCP SUCCESS: IP leased!\n");
-            getIPfromDHCP(net_info->ip);
-            getGWfromDHCP(net_info->gw);
-            getSNfromDHCP(net_info->sn);
-            getDNSfromDHCP(net_info->dns);
-            memcpy(&g_net_info, net_info, sizeof(wiz_NetInfo));
+            getIPfromDHCP(g_net_info->ip);
+            getGWfromDHCP(g_net_info->gw);
+            getSNfromDHCP(g_net_info->sn);
+            getDNSfromDHCP(g_net_info->dns);
+            g_net_info->dhcp = NETINFO_DHCP;  // DHCP 모드로 설정
             
-            // IP 저장
+            // DHCP IP를 last_dhcp_ip에도 저장 (빠른 부팅용)
             system_config_t *sys_cfg = system_config_get();
-            if (!sys_cfg->has_last_dhcp_ip || 
-                memcmp(sys_cfg->last_dhcp_ip, net_info->ip, 4) != 0) {
-                memcpy(sys_cfg->last_dhcp_ip, net_info->ip, 4);
-                memcpy(sys_cfg->last_dhcp_gw, net_info->gw, 4);
-                memcpy(sys_cfg->last_dhcp_sn, net_info->sn, 4);
-                memcpy(sys_cfg->last_dhcp_dns, net_info->dns, 4);
-                sys_cfg->has_last_dhcp_ip = true;
-                system_config_save_to_flash();
-                DBG_DHCP_PRINT("New DHCP IP saved\n");
-            }
+            memcpy(sys_cfg->last_dhcp_ip, g_net_info->ip, 4);
+            memcpy(sys_cfg->last_dhcp_gw, g_net_info->gw, 4);
+            memcpy(sys_cfg->last_dhcp_sn, g_net_info->sn, 4);
+            memcpy(sys_cfg->last_dhcp_dns, g_net_info->dns, 4);
+            sys_cfg->has_last_dhcp_ip = true;
             
-            apply_network_config(net_info);
+            apply_network_config(g_net_info);
+            
+            // Flash에 저장
+            system_config_save_to_flash();
+            DBG_DHCP_PRINT("DHCP configuration saved to flash\n");
+            
             close(0);
             dhcp_in_progress = false;
             status_led_set_mode(LED_MODE_CONNECTED);  // 연결 모드: 녹색 고정
@@ -497,14 +287,14 @@ bool dhcp_process_check(wiz_NetInfo *net_info) {
 
 // 네트워크 상태 출력
 void w5500_print_network_status(void) {
-    DBG_NET_PRINT("IP Address: %d.%d.%d.%d\n", g_net_info.ip[0], g_net_info.ip[1], g_net_info.ip[2], g_net_info.ip[3]);
-    DBG_NET_PRINT("Subnet Mask: %d.%d.%d.%d\n", g_net_info.sn[0], g_net_info.sn[1], g_net_info.sn[2], g_net_info.sn[3]);
-    DBG_NET_PRINT("Gateway: %d.%d.%d.%d\n", g_net_info.gw[0], g_net_info.gw[1], g_net_info.gw[2], g_net_info.gw[3]);
-    DBG_NET_PRINT("DNS Server: %d.%d.%d.%d\n", g_net_info.dns[0], g_net_info.dns[1], g_net_info.dns[2], g_net_info.dns[3]);
+    DBG_NET_PRINT("IP Address: %d.%d.%d.%d\n", g_net_info->ip[0], g_net_info->ip[1], g_net_info->ip[2], g_net_info->ip[3]);
+    DBG_NET_PRINT("Subnet Mask: %d.%d.%d.%d\n", g_net_info->sn[0], g_net_info->sn[1], g_net_info->sn[2], g_net_info->sn[3]);
+    DBG_NET_PRINT("Gateway: %d.%d.%d.%d\n", g_net_info->gw[0], g_net_info->gw[1], g_net_info->gw[2], g_net_info->gw[3]);
+    DBG_NET_PRINT("DNS Server: %d.%d.%d.%d\n", g_net_info->dns[0], g_net_info->dns[1], g_net_info->dns[2], g_net_info->dns[3]);
     DBG_NET_PRINT("MAC Address: %02X:%02X:%02X:%02X:%02X:%02X\n", 
-           g_net_info.mac[0], g_net_info.mac[1], g_net_info.mac[2], g_net_info.mac[3], g_net_info.mac[4], g_net_info.mac[5]);
+           g_net_info->mac[0], g_net_info->mac[1], g_net_info->mac[2], g_net_info->mac[3], g_net_info->mac[4], g_net_info->mac[5]);
     DBG_NET_PRINT("DHCP Mode       : %s\n",
-           g_net_info.dhcp == NETINFO_DHCP ? "DHCP" : "Static");
+           g_net_info->dhcp == NETINFO_DHCP ? "DHCP" : "Static");
     DBG_NET_PRINT("Link Status     : %s\n",
            w5500_check_link_status() ? "UP" : "DOWN");
 }
@@ -551,25 +341,67 @@ bool network_is_connected(void) {
 
 // 네트워크 초기화 함수
 void network_init(void) {
-    // 저장된 네트워크 설정 로드 및 MAC 주소 설정
-    DBG_NET_PRINT("Loading network configuration from flash...\n");
-    network_config_load_from_flash(&g_net_info);
+    uint8_t mac[6];
+    
+    // g_net_info를 system_config의 network로 초기화 (이미 Flash에서 로드됨)
+    g_net_info = system_config_get_network();
+    
+    // 유효성 검사: MAC이 모두 0xFF 또는 0x00이면 기본값으로 초기화
+    if (is_mac_invalid(g_net_info->mac)) {
+        DBG_NET_PRINT("Flash config invalid, using default config\n");
+        memset(g_net_info, 0, sizeof(wiz_NetInfo));
+        g_net_info->mac[0] = 0x00; g_net_info->mac[1] = 0x08; g_net_info->mac[2] = 0xDC;
+        g_net_info->ip[0] = 192; g_net_info->ip[1] = 168; g_net_info->ip[2] = 1; g_net_info->ip[3] = 100;
+        g_net_info->sn[0] = 255; g_net_info->sn[1] = 255; g_net_info->sn[2] = 255; g_net_info->sn[3] = 0;
+        g_net_info->gw[0] = 192; g_net_info->gw[1] = 168; g_net_info->gw[2] = 1; g_net_info->gw[3] = 1;
+        g_net_info->dns[0] = 8; g_net_info->dns[1] = 8; g_net_info->dns[2] = 8; g_net_info->dns[3] = 8;
+        g_net_info->dhcp = NETINFO_DHCP;
+    }
+    
+    // 보드 고유 ID로 MAC 생성 및 설정
+    generate_mac_from_board_id(mac);
+    memcpy(g_net_info->mac, mac, 6);
+    
+    // 고정 IP 모드일 때, IP/GW/SN/DNS가 0.0.0.0 이면 기본값으로 보정
+    if (g_net_info->dhcp == NETINFO_STATIC) {
+        if (is_ip_zero(g_net_info->ip)) {
+            uint8_t default_ip[4] = {192, 168, 1, 100};
+            set_default_ip(g_net_info->ip, default_ip);
+            DBG_NET_PRINT("Static IP was 0.0.0.0, set to default 192.168.1.100\n");
+        }
+        if (is_ip_zero(g_net_info->gw)) {
+            uint8_t default_gw[4] = {192, 168, 1, 1};
+            set_default_ip(g_net_info->gw, default_gw);
+            DBG_NET_PRINT("Gateway was 0.0.0.0, set to default 192.168.1.1\n");
+        }
+        if (is_ip_zero(g_net_info->sn)) {
+            uint8_t default_sn[4] = {255, 255, 255, 0};
+            set_default_ip(g_net_info->sn, default_sn);
+            DBG_NET_PRINT("Subnet Mask was 0.0.0.0, set to default 255.255.255.0\n");
+        }
+        if (is_ip_zero(g_net_info->dns)) {
+            uint8_t default_dns[4] = {8, 8, 8, 8};
+            set_default_ip(g_net_info->dns, default_dns);
+            DBG_NET_PRINT("DNS was 0.0.0.0, set to default 8.8.8.8\n");
+        }
+    }
+    DBG_NET_PRINT("Network configuration loaded from flash (system config)\n");
     
     // W5500 및 네트워크 초기화
     if (w5500_initialize() == W5500_INIT_SUCCESS) {
         DBG_WIZNET_PRINT("W5500 initialization successful\n");
         
         // DHCP 또는 Static IP 모드에 따라 설정 적용
-        if (g_net_info.dhcp == NETINFO_DHCP) {
+        if (g_net_info->dhcp == NETINFO_DHCP) {
             DBG_NET_PRINT("Starting DHCP mode...\n");
-            w5500_set_dhcp_mode(&g_net_info);
+            w5500_set_dhcp_mode(g_net_info);
         } else {
             DBG_NET_PRINT("Applying Static IP mode...\n");
-            w5500_set_static_ip(&g_net_info);
+            w5500_set_static_ip(g_net_info);
         }
         
-        // 네트워크 정보 직접 업데이트 (스케줄러 시작 전이므로 mutex 없이)
-        wizchip_getnetinfo(&g_net_info);
+        // 네트워크 정보 직접 업데이트
+        wizchip_getnetinfo(g_net_info);
         DBG_NET_PRINT("[NET] Network info initialized\n");
     } else {
         DBG_WIZNET_PRINT("ERROR: W5500 initialization failed\n");
@@ -604,9 +436,7 @@ static void network_update_status(network_status_t* status) {
         status->connection_changed = true;
         last_connected_state = status->current_connected;
     }
-    
-    // 전역 상태 업데이트
-    g_network_connected = status->current_connected;
+    // 상태 LED 업데이트
     status_led_set_network_connected(status->current_connected);
 }
 
@@ -623,7 +453,7 @@ static void network_handle_ip_assignment(bool cable_connected, network_status_t*
             last_debug = current_time;
         }
         
-        if (dhcp_process_check(&g_net_info)) {
+        if (dhcp_process_check(g_net_info)) {
             printf("DHCP successful, IP assigned\n");
             dhcp_configured = true;
             w5500_print_network_status();
@@ -634,15 +464,15 @@ static void network_handle_ip_assignment(bool cable_connected, network_status_t*
     
     // IP가 없으면 할당 시도
     if (cable_connected && !network_is_connected()) {
-        if (g_net_info.dhcp == NETINFO_DHCP && !dhcp_configured) {
+        if (g_net_info->dhcp == NETINFO_DHCP && !dhcp_configured) {
             if (dhcp_retry_time == 0 || (current_time - dhcp_retry_time) >= 1000) {
                 printf("Attempting DHCP for IP assignment...\n");
-                w5500_set_dhcp_mode(&g_net_info);
+                w5500_set_dhcp_mode(g_net_info);
                 dhcp_retry_time = current_time;
             }
-        } else if (g_net_info.dhcp == NETINFO_STATIC) {
+        } else if (g_net_info->dhcp == NETINFO_STATIC) {
             printf("Applying static IP configuration...\n");
-            if (w5500_set_static_ip(&g_net_info)) {
+            if (w5500_set_static_ip(g_net_info)) {
                 printf("Static IP applied successfully\n");
                 w5500_print_network_status();
                 status->connection_changed = true;

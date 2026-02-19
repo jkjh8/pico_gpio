@@ -1,5 +1,7 @@
 #include "command_handler.h"
 #include "network/network_config.h"
+#include "system/system_config.h"
+#include "tcp/tcp_server.h"
 #include "gpio/gpio.h"
 #include "uart/uart_rs232.h"
 #include "tcp/tcp_server.h"
@@ -141,21 +143,17 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
 
 // IP 주소 확인 명령어
 cmd_result_t cmd_get_ip(char* response, size_t response_size) {
-    wiz_NetInfo current_info;
-    wizchip_getnetinfo(&current_info);
-
     snprintf(response, response_size,
              "IP Address: %d.%d.%d.%d\r\n"
              "Subnet Mask: %d.%d.%d.%d\r\n"
              "Gateway: %d.%d.%d.%d\r\n"
              "DNS: %d.%d.%d.%d\r\n"
              "DHCP Mode: %s\r\n",
-             current_info.ip[0], current_info.ip[1], current_info.ip[2], current_info.ip[3],
-             current_info.sn[0], current_info.sn[1], current_info.sn[2], current_info.sn[3],
-             current_info.gw[0], current_info.gw[1], current_info.gw[2], current_info.gw[3],
-             current_info.dns[0], current_info.dns[1], current_info.dns[2], current_info.dns[3],
-             g_net_info.dhcp == NETINFO_DHCP ? "DHCP" : "Static");
-
+             g_net_info->ip[0], g_net_info->ip[1], g_net_info->ip[2], g_net_info->ip[3],
+             g_net_info->sn[0], g_net_info->sn[1], g_net_info->sn[2], g_net_info->sn[3],
+             g_net_info->gw[0], g_net_info->gw[1], g_net_info->gw[2], g_net_info->gw[3],
+             g_net_info->dns[0], g_net_info->dns[1], g_net_info->dns[2], g_net_info->dns[3],
+             g_net_info->dhcp == NETINFO_DHCP ? "DHCP" : "Static");
     return CMD_SUCCESS;
 }
 
@@ -481,9 +479,9 @@ cmd_result_t cmd_set_ip(const char* param, char* response, size_t response_size)
         return CMD_ERROR_INVALID;
     }
 
-    memcpy(g_net_info.ip, ip, 4);
-    g_net_info.dhcp = NETINFO_STATIC;
-    network_config_save_to_flash(&g_net_info);
+    memcpy(g_net_info->ip, ip, 4);
+    g_net_info->dhcp = NETINFO_STATIC;
+    system_config_save_to_flash();
     
     snprintf(response, response_size, "IP address set to %d.%d.%d.%d. Restart required.\r\n", 
              ip[0], ip[1], ip[2], ip[3]);
@@ -502,8 +500,8 @@ cmd_result_t cmd_set_subnet(const char* param, char* response, size_t response_s
         return CMD_ERROR_INVALID;
     }
 
-    memcpy(g_net_info.sn, subnet, 4);
-    network_config_save_to_flash(&g_net_info);
+    memcpy(g_net_info->sn, subnet, 4);
+    system_config_save_to_flash();
     
     snprintf(response, response_size, "Subnet mask set to %d.%d.%d.%d. Restart required.\r\n", 
              subnet[0], subnet[1], subnet[2], subnet[3]);
@@ -522,8 +520,8 @@ cmd_result_t cmd_set_gateway(const char* param, char* response, size_t response_
         return CMD_ERROR_INVALID;
     }
 
-    memcpy(g_net_info.gw, gateway, 4);
-    network_config_save_to_flash(&g_net_info);
+    memcpy(g_net_info->gw, gateway, 4);
+    system_config_save_to_flash();
     
     snprintf(response, response_size, "Gateway set to %d.%d.%d.%d. Restart required.\r\n", 
              gateway[0], gateway[1], gateway[2], gateway[3]);
@@ -545,9 +543,10 @@ cmd_result_t cmd_set_network(const char* param, char* response, size_t response_
     char* ip_str = strtok(param_copy, ",");
     char* subnet_str = strtok(NULL, ",");
     char* gateway_str = strtok(NULL, ",");
+    char* dhcp_str = strtok(NULL, ",");
 
     if (ip_str == NULL || subnet_str == NULL || gateway_str == NULL) {
-        snprintf(response, response_size, "Error: Use format 'setnetwork,ip,subnet,gateway' (e.g., 'setnetwork,192.168.1.100,255.255.255.0,192.168.1.1')\r\n");
+        snprintf(response, response_size, "Error: Use format 'setnetwork,ip,subnet,gateway,dhcp' (e.g., 'setnetwork,192.168.1.100,255.255.255.0,192.168.1.1',1)\r\n");
         return CMD_ERROR_INVALID;
     }
 
@@ -572,25 +571,39 @@ cmd_result_t cmd_set_network(const char* param, char* response, size_t response_
         return CMD_ERROR_INVALID;
     }
 
+    uint8_t dhcp = NETINFO_STATIC;
+    if (dhcp_str != NULL) {
+        int dhcp_val = atoi(dhcp_str);
+        if (dhcp_val == 1) {
+            dhcp = NETINFO_DHCP;
+        } else if (dhcp_val == 0) {
+            dhcp = NETINFO_STATIC;
+        } else {
+            snprintf(response, response_size, "Error: Invalid DHCP value. Use 1 (enable) or 0 (disable)\r\n");
+            return CMD_ERROR_INVALID;
+        }
+    }
+
     // 네트워크 정보 설정
-    memcpy(g_net_info.ip, ip, 4);
-    memcpy(g_net_info.sn, subnet, 4);
-    memcpy(g_net_info.gw, gateway, 4);
-    g_net_info.dhcp = NETINFO_STATIC;
+    memcpy(g_net_info->ip, ip, 4);
+    memcpy(g_net_info->sn, subnet, 4);
+    memcpy(g_net_info->gw, gateway, 4);
+    g_net_info->dhcp = dhcp;
     
     // 플래시에 저장
-    network_config_save_to_flash(&g_net_info);
+    system_config_save_to_flash();
     
     snprintf(response, response_size, 
              "Network configuration set:\r\n"
              "IP: %d.%d.%d.%d\r\n"
              "Subnet: %d.%d.%d.%d\r\n"
              "Gateway: %d.%d.%d.%d\r\n"
-             "DHCP: Disabled\r\n"
+             "DHCP: %s\r\n"
              "Restart required.\r\n",
              ip[0], ip[1], ip[2], ip[3],
              subnet[0], subnet[1], subnet[2], subnet[3],
-             gateway[0], gateway[1], gateway[2], gateway[3]);
+             gateway[0], gateway[1], gateway[2], gateway[3],
+             (dhcp == NETINFO_DHCP) ? "Enabled" : "Disabled");
     return CMD_SUCCESS;
 }
 
@@ -605,8 +618,6 @@ cmd_result_t cmd_set_tcp_port(const char* param, char* response, size_t response
         snprintf(response, response_size, "Error: Invalid port range. Use 1-65535\r\n");
         return CMD_ERROR_INVALID;
     }
-
-    extern uint16_t tcp_port;
     tcp_port = (uint16_t)port;
     save_tcp_port_to_flash(tcp_port);
     
@@ -620,19 +631,29 @@ cmd_result_t cmd_set_dhcp(const char* param, char* response, size_t response_siz
         return CMD_ERROR_INVALID;
     }
 
+    // 포인터 및 주소 확인
+    wiz_NetInfo* sys_net = system_config_get_network();
+    DBG_MAIN_PRINT("[CMD] g_net_info=%p, system_config_get_network()=%p\n", g_net_info, sys_net);
+    DBG_MAIN_PRINT("[CMD] g_net_info->dhcp addr=%p, value=%d\n", &g_net_info->dhcp, g_net_info->dhcp);
+    DBG_MAIN_PRINT("[CMD] sys_net->dhcp addr=%p, value=%d\n", &sys_net->dhcp, sys_net->dhcp);
+
     if (strcmp(param, "on") == 0 || strcmp(param, "1") == 0) {
-        g_net_info.dhcp = NETINFO_DHCP;
+        DBG_MAIN_PRINT("[CMD] Setting DHCP to NETINFO_DHCP (%d)\n", NETINFO_DHCP);
+        sys_net->dhcp = NETINFO_DHCP;
     } else if (strcmp(param, "off") == 0 || strcmp(param, "0") == 0) {
-        g_net_info.dhcp = NETINFO_STATIC;
+        DBG_MAIN_PRINT("[CMD] Setting DHCP to NETINFO_STATIC (%d)\n", NETINFO_STATIC);
+        sys_net->dhcp = NETINFO_STATIC;
     } else {
         snprintf(response, response_size, "Error: Invalid DHCP value. Use 'on' or 'off'\r\n");
         return CMD_ERROR_INVALID;
     }
 
-    network_config_save_to_flash(&g_net_info);
+    DBG_MAIN_PRINT("[CMD] After direct write: sys_net->dhcp=%d\n", sys_net->dhcp);
+    system_config_save_to_flash();
+    DBG_MAIN_PRINT("[CMD] After flash save: sys_net->dhcp=%d, g_net_info->dhcp=%d\n", sys_net->dhcp, g_net_info->dhcp);
     
     snprintf(response, response_size, "DHCP %s. Restart required.\r\n", 
-             (g_net_info.dhcp == NETINFO_DHCP) ? "enabled" : "disabled");
+             (g_net_info->dhcp == NETINFO_DHCP) ? "enabled" : "disabled");
     return CMD_SUCCESS;
 }
 
@@ -873,8 +894,8 @@ cmd_result_t cmd_factory_reset(char* response, size_t response_size) {
     };
     
     // 네트워크 설정 초기화
-    memcpy(&g_net_info, &default_net_info, sizeof(wiz_NetInfo));
-    network_config_save_to_flash(&g_net_info);
+    memcpy(g_net_info, &default_net_info, sizeof(wiz_NetInfo));
+    system_config_save_to_flash();
     
     // TCP 포트 초기화
     extern uint16_t tcp_port;
