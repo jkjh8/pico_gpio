@@ -358,7 +358,8 @@ cmd_result_t cmd_set(const char* param, char* response, size_t response_size) {
 
     hct595_write(gpio_output_data);
 
-    snprintf(response, response_size, "OK,set,%d,%d,%d", get_gpio_device_id(), channel, value);
+    // 자동 피드백으로만 전송 (중복 방지)
+    response[0] = '\0';
     return CMD_SUCCESS;
 }
 
@@ -404,7 +405,8 @@ cmd_result_t cmd_outb(const char* param, char* response, size_t response_size) {
     // GPIO 출력에 적용
     hct595_write(gpio_value);
     
-    snprintf(response, response_size, "OK,outb,%d,%d,%d", get_gpio_device_id(), low_byte, high_byte);
+    // 자동 피드백으로만 전송 (중복 방지)
+    response[0] = '\0';
     return CMD_SUCCESS;
 }
 
@@ -462,7 +464,8 @@ cmd_result_t cmd_out(const char* param, char* response, size_t response_size) {
     // GPIO 출력에 적용
     hct595_write(gpio_value);
     
-    snprintf(response, response_size, "OK,out,%d,0x%04X", get_gpio_device_id(), gpio_value);
+    // 자동 피드백으로만 전송 (중복 방지)
+    response[0] = '\0';
     return CMD_SUCCESS;
 }
 

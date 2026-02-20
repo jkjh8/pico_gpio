@@ -91,7 +91,7 @@ void uart_rs232_process(void) {
                 // 응답 전송 (청크 단위로 전송, 지연 감소)
                 size_t resp_len = strlen(response);
                 const size_t CHUNK_SIZE = 256;
-                if (result == CMD_SUCCESS || result == CMD_ERROR_INVALID) {
+                if ((result == CMD_SUCCESS || result == CMD_ERROR_INVALID) && resp_len > 0) {
                     size_t sent = 0;
                     while (sent < resp_len) {
                         size_t remaining = resp_len - sent;
@@ -105,7 +105,7 @@ void uart_rs232_process(void) {
                         const char* newline = "\r\n";
                         uart_rs232_write(RS232_PORT_1, (uint8_t*)newline, 2);
                     }
-                } else {
+                } else if (result != CMD_SUCCESS && result != CMD_ERROR_INVALID) {
                     char error_msg[128];
                     snprintf(error_msg, sizeof(error_msg), "Command error: %d\r\n", result);
                     size_t err_len = strlen(error_msg);

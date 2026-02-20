@@ -130,21 +130,23 @@ void tcp_servers_process(void) {
                     
                     result = process_command((char*)buf, response, sizeof(response));
                     
-                    if (result == CMD_SUCCESS || result == CMD_ERROR_INVALID) {
+                    if ((result == CMD_SUCCESS || result == CMD_ERROR_INVALID)) {
                         size_t resp_len = strlen(response);
-                        size_t sent = 0;
-                        const size_t CHUNK_SIZE = 256;
-                        while (sent < resp_len) {
-                            size_t remaining = resp_len - sent;
-                            uint16_t this_len = (uint16_t)(remaining > CHUNK_SIZE ? CHUNK_SIZE : remaining);
-                            int s = send(i, (uint8_t*)response + sent, this_len);
-                            if (s <= 0) break;
-                            sent += (size_t)s;
-                        }
-                        // 응답이 줄바꿈으로 끝나지 않으면 추가
-                        if (resp_len < 2 || response[resp_len-2] != '\r' || response[resp_len-1] != '\n') {
-                            const char* newline = "\r\n";
-                            send(i, (uint8_t*)newline, 2);
+                        if (resp_len > 0) {
+                            size_t sent = 0;
+                            const size_t CHUNK_SIZE = 256;
+                            while (sent < resp_len) {
+                                size_t remaining = resp_len - sent;
+                                uint16_t this_len = (uint16_t)(remaining > CHUNK_SIZE ? CHUNK_SIZE : remaining);
+                                int s = send(i, (uint8_t*)response + sent, this_len);
+                                if (s <= 0) break;
+                                sent += (size_t)s;
+                            }
+                            // 응답이 줄바꿈으로 끝나지 않으면 추가
+                            if (resp_len < 2 || response[resp_len-2] != '\r' || response[resp_len-1] != '\n') {
+                                const char* newline = "\r\n";
+                                send(i, (uint8_t*)newline, 2);
+                            }
                         }
                     } else {
                         char error_msg[128];
