@@ -128,11 +128,6 @@ bool gpio_spi_init(void) {
     gpio_set_dir(HCT595_LATCH_PIN, GPIO_OUT);
     gpio_put(HCT595_LATCH_PIN, 1); // 초기 high
 
-    // 595 클리어 핀 (SRCLR) - GP10
-    // gpio_init(HCT595_CLEAR_PIN);
-    // gpio_set_dir(HCT595_CLEAR_PIN, GPIO_OUT);
-    // gpio_put(HCT595_CLEAR_PIN, 1); // 클리어 해제 (HIGH)
-
     // 165 로드 핀 (SH/LD) - GP9
     gpio_init(HCT165_LOAD_PIN);
     gpio_set_dir(HCT165_LOAD_PIN, GPIO_OUT);
@@ -142,13 +137,10 @@ bool gpio_spi_init(void) {
 }
 
 void hct595_write(uint16_t data) {
-    // 출력 반전 (0이 ON, 1이 OFF인 경우 사용)
-    uint16_t inverted_data = ~data;
-    
     // HCT595는 MSB-first이므로 바이트 순서를 맞춰서 전송
     uint8_t buffer[2];
-    buffer[0] = (inverted_data >> 8) & 0xFF;  // 상위 바이트 먼저
-    buffer[1] = inverted_data & 0xFF;         // 하위 바이트 나중
+    buffer[0] = (data >> 8) & 0xFF;  // 상위 바이트 먼저
+    buffer[1] = data & 0xFF;         // 하위 바이트 나중
     
     // 데이터를 시프트 레지스터에 전송
     spi_write_blocking(GPIO_PORT, buffer, 2);
