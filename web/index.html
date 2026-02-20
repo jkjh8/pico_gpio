@@ -1100,6 +1100,88 @@
               </table>
 
               <h3 style="margin-bottom: 12px; color: var(--primary)">
+                Multicast Commands
+              </h3>
+              <table
+                style="
+                  width: 100%;
+                  border-collapse: collapse;
+                  margin-bottom: 24px;
+                  font-size: 0.75rem;
+                ">
+                <thead>
+                  <tr style="background-color: var(--bg-grey)">
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Setting
+                    </th>
+                    <th
+                      style="
+                        padding: 8px;
+                        text-align: left;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Value
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <strong>Multicast Group</strong>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      239.224.0.1
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <strong>UDP Port</strong>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      9000 (TX/RX)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      <strong>Description</strong>
+                    </td>
+                    <td
+                      style="
+                        padding: 6px;
+                        border: 1px solid var(--border-color);
+                      ">
+                      Device-to-device communication via UDP multicast. All GPIO commands are supported. Devices automatically broadcast GPIO state changes to the multicast group.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3 style="margin-bottom: 12px; color: var(--primary)">
                 UART Commands
               </h3>
               <table
@@ -1209,7 +1291,7 @@
                         padding: 6px;
                         border: 1px solid var(--border-color);
                       ">
-                      Get all 16 inputs (format: low,high)
+                      Get all 16 inputs (CHANNEL: in,id,binary / BYTES: ins,id,low,high)
                     </td>
                   </tr>
                   <tr>
@@ -1225,7 +1307,7 @@
                         padding: 6px;
                         border: 1px solid var(--border-color);
                       ">
-                      Get all 16 outputs (format: low,high)
+                      Get all 16 outputs (CHANNEL: out,id,binary / BYTES: outs,id,low,high)
                     </td>
                   </tr>
                   <tr>
