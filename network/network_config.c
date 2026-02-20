@@ -5,6 +5,7 @@
 #include "../tcp/tcp_server.h"
 #include "../led/status_led.h"
 #include "../main.h"
+#include "multicast_server.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
 #include "network/mdns.h"
@@ -513,8 +514,10 @@ static void network_handle_tcp_queue(bool connected) {
 }
 
 // 서버 초기화 및 처리
+static bool multicast_initialized = false;
+
 static void network_handle_servers(bool connected) {
-    // TCP/HTTP 서버 초기화 (한 번만)
+    // TCP/HTTP 서버 초기화 (한 번만, 케이블 연결 시)
     if (!tcp_servers_initialized && connected && !is_system_restart_requested()) {
         tcp_servers_init(tcp_port);
         tcp_servers_initialized = true;
@@ -526,13 +529,33 @@ static void network_handle_servers(bool connected) {
     
     // 서버 처리
     if (connected && !is_system_restart_requested()) {
-        // mDNS는 network_is_connected() 상태에서만 동작
+        // mDNS와 멀티캐스트는 network_is_connected() (IP 할당 완료) 상태에서만 동작
         if (network_is_connected()) {
             // mDNS가 초기화되지 않았으면 초기화
             if (!mdns_is_initialized()) {
                 mdns_init();
             }
             mdns_process();
+            
+            // 멀티캐스트 서버 초기화 (DHCP IP 할당 후)
+            if (!multicast_initialized) {
+                if (multicast_server_init()) {
+                    multicast_initialized = true;
+                    printf("[MCAST] Multicast server initialized after IP assignment\n");
+                    fflush(stdout);
+                }
+            }
+            
+            // 멀티캐스트 서버 처리
+            multicast_server_process();
+            
+            // 멀티캐스트 GPIO 메시지 큐 처리
+            if (gpio_queues[GPIO_QUEUE_MCAST] != NULL) {
+                char msg_buffer[GPIO_MSG_MAX_LEN];
+                while (xQueueReceive(gpio_queues[GPIO_QUEUE_MCAST], msg_buffer, 0) == pdTRUE) {
+                    multicast_send_feedback(msg_buffer);
+                }
+            }
         }
         tcp_servers_process();
         http_server_process();

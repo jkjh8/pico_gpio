@@ -49,6 +49,7 @@ add_executable(main
     network/mac_utils.c
     network/network_config.c
     network/mdns.c
+    network/multicast_server.c
     debug/debug.c
     http/http_server.c
     http/http_handlers.c

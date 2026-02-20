@@ -282,7 +282,7 @@ cmd_result_t cmd_get_output(const char* param, char* response, size_t response_s
     return CMD_SUCCESS;
 }
 
-// GPIO 전체 출력 읽기 (getouts,id -> low,high)
+// GPIO 전체 출력 읽기 (getouts,id -> low,high 또는 binary string)
 cmd_result_t cmd_get_outputs(const char* param, char* response, size_t response_size) {
     if (param == NULL) {
         snprintf(response, response_size, "Error: Parameter required. Use: getouts,id\r\n");
@@ -299,10 +299,23 @@ cmd_result_t cmd_get_outputs(const char* param, char* response, size_t response_
     }
 
     uint16_t gpio_state = gpio_output_data;
-    uint8_t low_byte = (uint8_t)(gpio_state & 0xFF);
-    uint8_t high_byte = (uint8_t)((gpio_state >> 8) & 0xFF);
-
-    snprintf(response, response_size, "output_bytes,%d,%d,%d", get_gpio_device_id(), low_byte, high_byte);
+    gpio_rt_mode_t rt_mode = get_gpio_rt_mode();
+    
+    if (rt_mode == GPIO_RT_MODE_CHANNEL) {
+        // CHANNEL 모드: 바이너리 스트링 형식 (LSB first)
+        char binary[17];
+        for (int i = 0; i < 16; i++) {
+            binary[i] = (gpio_state & (1 << i)) ? '1' : '0';
+        }
+        binary[16] = '\0';
+        snprintf(response, response_size, "out,%d,%s", get_gpio_device_id(), binary);
+    } else {
+        // BYTES 모드: 바이트 형식
+        uint8_t low_byte = (uint8_t)(gpio_state & 0xFF);
+        uint8_t high_byte = (uint8_t)((gpio_state >> 8) & 0xFF);
+        snprintf(response, response_size, "outs,%d,%d,%d", get_gpio_device_id(), low_byte, high_byte);
+    }
+    
     return CMD_SUCCESS;
 }
 
@@ -828,8 +841,8 @@ cmd_result_t cmd_help(char* response, size_t response_size) {
         "  getuartconfig             - Show UART configuration\r\n"
         "  setuartbaud,rate          - Set UART baud rate\r\n"
         "GPIO Control (All Channels):\r\n"
-        "  getins,id                 - Get all 16 inputs (format: low,high)\r\n"
-        "  getouts,id                - Get all 16 outputs (format: low,high)\r\n"
+        "  getins,id                 - Get all 16 inputs (CHANNEL: in,id,binary / BYTES: ins,id,low,high)\r\n"
+        "  getouts,id                - Get all 16 outputs (CHANNEL: out,id,binary / BYTES: outs,id,low,high)\r\n"
         "  out,id,binary             - Set all 16 outputs with binary (id:0=all, e.g., out,1,1010101010101010)\r\n"
         "  outb,id,low,high          - Set all 16 outputs with 2 bytes (id:0=all, e.g., outb,1,255,128)\r\n"
         "GPIO Control (Single Channel):\r\n"

@@ -5,6 +5,7 @@
 #include "http/http_server.h"
 #include "network/mdns.h"
 #include "network/network_config.h"
+#include "network/multicast_server.h"
 #include "lib/wiznet/socket.h"
 #include <stdio.h>
 #include "pico/stdio.h"
@@ -19,7 +20,7 @@
 // GPIO 응답 메시지 큐 (통합 큐 구조)
 #define GPIO_MSG_MAX_LEN 64  // 실제 메시지는 최대 27바이트
 #define GPIO_QUEUE_SIZE 20   // 큐 크기 증가 (16채널 동시 변경 대응)
-#define MAX_GPIO_QUEUES 2
+#define MAX_GPIO_QUEUES 3
 
 QueueHandle_t gpio_queues[MAX_GPIO_QUEUES] = {NULL};
 bool gpio_queues_enabled[MAX_GPIO_QUEUES] = {false};
@@ -215,6 +216,7 @@ int main()
 
     network_init();
     DBG_MAIN_PRINT("Network initialized\n");
+    // 멀티캐스트는 network_process()에서 네트워크 연결 후 초기화됨
     uart_rs232_init(RS232_PORT_1, uart_rs232_1_baud);
     DBG_MAIN_PRINT("UART RS232 initialized at %u baud\n", uart_rs232_1_baud);
     gpio_spi_init();
@@ -225,14 +227,17 @@ int main()
 
     gpio_queues[GPIO_QUEUE_UART] = xQueueCreate(GPIO_QUEUE_SIZE, GPIO_MSG_MAX_LEN);
     gpio_queues[GPIO_QUEUE_TCP] = xQueueCreate(GPIO_QUEUE_SIZE, GPIO_MSG_MAX_LEN);
+    gpio_queues[GPIO_QUEUE_MCAST] = xQueueCreate(GPIO_QUEUE_SIZE, GPIO_MSG_MAX_LEN);
     
     gpio_queues_enabled[GPIO_QUEUE_UART] = true;  // UART는 항상 활성화
     gpio_queues_enabled[GPIO_QUEUE_TCP] = false;  // TCP는 클라이언트 연결 시 활성화
+    gpio_queues_enabled[GPIO_QUEUE_MCAST] = true; // 멀티캐스트는 항상 활성화
     
-    if (gpio_queues[GPIO_QUEUE_UART] == NULL || gpio_queues[GPIO_QUEUE_TCP] == NULL) {
+    if (gpio_queues[GPIO_QUEUE_UART] == NULL || gpio_queues[GPIO_QUEUE_TCP] == NULL || 
+        gpio_queues[GPIO_QUEUE_MCAST] == NULL) {
         DBG_MAIN_PRINT("ERROR: Failed to create GPIO message queues\n");
     } else {
-        DBG_MAIN_PRINT("GPIO message queues created (UART + TCP broadcast, size=%d)\n", GPIO_QUEUE_SIZE);
+        DBG_MAIN_PRINT("GPIO message queues created (UART + TCP + MCAST, size=%d)\n", GPIO_QUEUE_SIZE);
     }
     
     xTaskCreate(network_task, "Network", 2048, NULL, 4, NULL);

@@ -20,7 +20,7 @@ extern "C"
 #endif
 
 #define TCP_SOCKET_START 2
-#define TCP_SOCKET_COUNT 4  // 소켓 2, 3, 4, 5 사용
+#define TCP_SOCKET_COUNT 3  // 소켓 2, 3, 4 사용 (5번은 멀티캐스트용으로 예약)
 
   extern uint16_t tcp_port;
   void save_tcp_port_to_flash(uint16_t port);
