@@ -27,6 +27,7 @@ typedef struct
 
 // 명령어 처리 함수
 cmd_result_t process_command(const char *command, char *response, size_t response_size);
+cmd_result_t process_mcast_command(const char *command, char *response, size_t response_size);
 
 // 기존 명령어들
 cmd_result_t cmd_get_ip(char *response, size_t response_size);

@@ -7,6 +7,8 @@
 #include "system/system_config.h"
 #include "network/network_config.h"
 #include "handlers/command_handler.h"
+#include "tcp/tcp_server.h"
+#include "uart/uart_rs232.h"
 #include "../main.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
@@ -141,7 +143,7 @@ void http_handle_post_network(uint8_t sock, const char* body) {
     free(json_str);
     cJSON_Delete(root);
     
-    // 소켓 닫기 및 리부팅 (딜레이 단축)
+    // 소켓 닫기 및 리부팅
     vTaskDelay(pdMS_TO_TICKS(100));
     disconnect(sock);
     vTaskDelay(pdMS_TO_TICKS(100));
@@ -159,15 +161,37 @@ void http_handle_post_control(uint8_t sock, const char* body) {
         return;
     }
     
-    cJSON* tcp_port = cJSON_GetObjectItem(json, "tcp_port");
-    cJSON* uart_baud = cJSON_GetObjectItem(json, "rs232_1_baud");
+    cJSON* tcp_port_json = cJSON_GetObjectItem(json, "tcp_port");
+    cJSON* uart_baud_json = cJSON_GetObjectItem(json, "rs232_1_baud");
     
-    if (tcp_port && cJSON_IsNumber(tcp_port)) {
-        system_config_set_tcp_port((uint16_t)tcp_port->valueint);
+    bool tcp_changed = false;
+    bool uart_changed = false;
+    
+    if (tcp_port_json && cJSON_IsNumber(tcp_port_json)) {
+        uint16_t new_port = (uint16_t)tcp_port_json->valueint;
+        system_config_set_tcp_port(new_port);
+        tcp_changed = true;
+        
+        // TCP 서버 즉시 재시작
+        extern uint16_t tcp_port;
+        extern bool tcp_servers_initialized;
+        tcp_port = new_port;
+        if (tcp_servers_initialized) {
+            tcp_servers_restart_with_port(tcp_port);
+            DBG_HTTP_PRINT("TCP port changed to %d and applied\n", tcp_port);
+        }
     }
     
-    if (uart_baud && cJSON_IsNumber(uart_baud)) {
-        system_config_set_uart_baud((uint32_t)uart_baud->valueint);
+    if (uart_baud_json && cJSON_IsNumber(uart_baud_json)) {
+        uint32_t new_baud = (uint32_t)uart_baud_json->valueint;
+        system_config_set_uart_baud(new_baud);
+        uart_changed = true;
+        
+        // UART 즉시 재초기화
+        extern uint32_t uart_rs232_1_baud;
+        uart_rs232_1_baud = new_baud;
+        uart_rs232_init(RS232_PORT_1, new_baud);
+        DBG_HTTP_PRINT("UART baud changed to %lu and applied\n", new_baud);
     }
     
     cJSON_Delete(json);
@@ -181,19 +205,13 @@ void http_handle_post_control(uint8_t sock, const char* body) {
     // 성공 응답
     cJSON* root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "status", "ok");
-    cJSON_AddStringToObject(root, "message", "Control settings saved. System will reboot.");
+    cJSON_AddStringToObject(root, "message", "Control settings saved and applied.");
     char* json_str = cJSON_PrintUnformatted(root);
     
     send_json_response(sock, json_str);
     
     free(json_str);
     cJSON_Delete(root);
-    
-    // 소켓 닫기 및 리부팅 요청
-    vTaskDelay(pdMS_TO_TICKS(200));
-    disconnect(sock);
-    vTaskDelay(pdMS_TO_TICKS(300));
-    system_restart_request();
 }
 
 // POST /api/gpio - GPIO 설정 변경

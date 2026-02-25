@@ -78,15 +78,6 @@ void multicast_server_process(void) {
         return;
     }
     
-    // 주기적인 상태 체크 (10초마다)
-    static uint32_t last_debug = 0;
-    uint32_t now = to_ms_since_boot(get_absolute_time());
-    if (now - last_debug > 10000) {
-        uint16_t rx_check = getSn_RX_RSR(MCAST_SOCKET);
-        DBG_NET_PRINT("[MCAST] Status check - Socket: 0x%02X, RX buffer: %d bytes\n", status, rx_check);
-        last_debug = now;
-    }
-    
     // 멀티캐스트 명령 수신 처리
     uint16_t rx_size = getSn_RX_RSR(MCAST_SOCKET);
     if (rx_size > 0) {
@@ -110,7 +101,7 @@ void multicast_server_process(void) {
             
             // 명령어 처리
             char response[4096];
-            cmd_result_t result = process_command((char*)buf, response, sizeof(response));
+            cmd_result_t result = process_mcast_command((char*)buf, response, sizeof(response));
             
             // 정상 처리되었거나 유효하지 않은 명령일 경우 응답 전송
             if ((result == CMD_SUCCESS || result == CMD_ERROR_INVALID)) {

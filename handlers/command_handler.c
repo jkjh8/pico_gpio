@@ -85,9 +85,9 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
         return cmd_get_outputs(param_part, response, response_size);
     } else if (strcmp(cmd_part, "set") == 0) {
         return cmd_set(param_part, response, response_size);
-    } else if (strcmp(cmd_part, "out") == 0) {
+    } else if (strcmp(cmd_part, "sets") == 0) {
         return cmd_out(param_part, response, response_size);
-    } else if (strcmp(cmd_part, "outb") == 0) {
+    } else if (strcmp(cmd_part, "setb") == 0) {
         return cmd_outb(param_part, response, response_size);
     } else if (strcmp(cmd_part, "setip") == 0) {
         return cmd_set_ip(param_part, response, response_size);
@@ -141,6 +141,85 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
     }
 }
 
+cmd_result_t process_mcast_command(const char* command, char* response, size_t response_size) {
+    if (command == NULL || response == NULL || response_size == 0) {
+        return CMD_ERROR_INVALID;
+    }
+
+    // factoryreset 명령어는 모드와 관계없이 먼저 확인 (JSON 파싱 전)
+    if (strncmp(command, "factoryreset", 12) == 0) {
+        return cmd_factory_reset(response, response_size);
+    }
+
+    // 텍스트 모드 - 기존 방식
+    char cmd_copy[256];
+    strncpy(cmd_copy, command, sizeof(cmd_copy) - 1);
+    cmd_copy[sizeof(cmd_copy) - 1] = '\0';
+
+    // 앞뒤 공백 제거
+    char* start = cmd_copy;
+    while (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r') start++;
+    char* end = start + strlen(start) - 1;
+    while (end > start && (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')) end--;
+    *(end + 1) = '\0';
+
+    if (strlen(start) == 0) {
+        return CMD_ERROR_INVALID;
+    }
+
+    // 명령어 중간에 공백이나 줄바꿈이 있으면 그 이후 데이터 제거
+    for (char* p = start; *p != '\0'; p++) {
+        if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
+            *p = '\0';
+            break;
+        }
+    }
+
+    // 명령어와 매개변수 분리 (쉼표로 구분)
+    char* comma_pos = strchr(start, ',');
+    char* cmd_part = start;
+    char* param_part = NULL;
+    
+    if (comma_pos != NULL) {
+        *comma_pos = '\0';
+        param_part = comma_pos + 1;
+        // param_part에서도 중간에 공백/줄바꿈 있으면 제거
+        for (char* p = param_part; *p != '\0'; p++) {
+            if (*p == '\n' || *p == '\r') {
+                *p = '\0';
+                break;
+            }
+        }
+        // param_part 앞뒤 공백 제거
+        while (*param_part == ' ' || *param_part == '\t') param_part++;
+        char* param_end = param_part + strlen(param_part) - 1;
+        while (param_end > param_part && (*param_end == ' ' || *param_end == '\t')) param_end--;
+        *(param_end + 1) = '\0';
+    }
+
+    // 명령어 처리
+    if (strcmp(cmd_part, "getip") == 0) {
+        return cmd_get_ip(response, response_size);
+    } else if (strcmp(cmd_part, "getin") == 0) {
+        return cmd_get_input(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "getins") == 0) {
+        return cmd_get_inputs(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "getout") == 0) {
+        return cmd_get_output(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "getouts") == 0) {
+        return cmd_get_outputs(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "set") == 0) {
+        return cmd_set(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "sets") == 0) {
+        return cmd_out(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "setb") == 0) {
+        return cmd_outb(param_part, response, response_size);
+    }  else {
+        snprintf(response, response_size, "Unknown command: %s. Type 'help' for available commands.", cmd_part);
+        return CMD_ERROR_UNKNOWN;
+    }
+}
+
 // IP 주소 확인 명령어
 cmd_result_t cmd_get_ip(char* response, size_t response_size) {
     snprintf(response, response_size,
@@ -148,12 +227,14 @@ cmd_result_t cmd_get_ip(char* response, size_t response_size) {
              "Subnet Mask: %d.%d.%d.%d\r\n"
              "Gateway: %d.%d.%d.%d\r\n"
              "DNS: %d.%d.%d.%d\r\n"
-             "DHCP Mode: %s\r\n",
+             "DHCP Mode: %s\r\n"
+             "Device ID: %d\r\n",
              g_net_info->ip[0], g_net_info->ip[1], g_net_info->ip[2], g_net_info->ip[3],
              g_net_info->sn[0], g_net_info->sn[1], g_net_info->sn[2], g_net_info->sn[3],
              g_net_info->gw[0], g_net_info->gw[1], g_net_info->gw[2], g_net_info->gw[3],
              g_net_info->dns[0], g_net_info->dns[1], g_net_info->dns[2], g_net_info->dns[3],
-             g_net_info->dhcp == NETINFO_DHCP ? "DHCP" : "Static");
+             g_net_info->dhcp == NETINFO_DHCP ? "DHCP" : "Static",
+             get_gpio_device_id());
     return CMD_SUCCESS;
 }
 
@@ -690,7 +771,10 @@ cmd_result_t cmd_set_uart_baud(const char* param, char* response, size_t respons
     uart_rs232_1_baud = baud;
     save_uart_rs232_baud_to_flash();
     
-    snprintf(response, response_size, "UART baud rate set to %lu. Restart required.\r\n", baud);
+    // UART 재초기화하여 즉시 적용
+    uart_rs232_init(RS232_PORT_1, baud);
+    
+    snprintf(response, response_size, "UART baud rate set to %lu and applied.\r\n", baud);
     return CMD_SUCCESS;
 }
 
