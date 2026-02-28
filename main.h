@@ -64,7 +64,4 @@ void system_restart_request(void);
 void system_restart(void);
 bool is_system_restart_requested(void);
 
-// USB CDC 명령 처리 함수
-void process_usb_cdc_commands(void);
-
 #endif // PICO_GPIO_H

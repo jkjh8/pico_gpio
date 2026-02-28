@@ -56,6 +56,7 @@ add_executable(main
     static_files.c
     tcp/tcp_server.c
     uart/uart_rs232.c
+    usb/usb_cdc.c
     gpio/gpio.c
     led/status_led.c
     system/system_config.c

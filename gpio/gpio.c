@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <pico/stdio.h>
+#include "FreeRTOS.h"
+#include "task.h"
 
 uint16_t gpio_input_data = 0xFFFF; // HCT165 이전 데이터
 uint16_t gpio_output_data = 0x0000; // HCT595 출력 데이터
@@ -298,4 +300,12 @@ bool update_gpio_config(uint8_t device_id, bool auto_response,
     // 플래시에 저장
     save_gpio_config_to_flash();
     return true;
+}
+
+void gpio_task(void *pvParameters)
+{
+    while (true) {
+        hct165_read();
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 }

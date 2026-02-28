@@ -5,6 +5,8 @@
 #include "debug/debug.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "queue.h"
+#include "../main.h"
 
 void save_uart_rs232_baud_to_flash(void) {
     system_config_set_uart_baud(uart_rs232_1_baud);
@@ -92,5 +94,21 @@ void uart_rs232_process(void) {
             DBG_UART_PRINT("UART1: Buffer overflow, discarding line\n");
             uart_line_pos = 0;
         }
+    }
+}
+
+void uart_task(void *pvParameters)
+{
+    char msg_buffer[GPIO_MSG_MAX_LEN];
+    while (true) {
+        uart_rs232_process();
+
+        if (gpio_queues[GPIO_QUEUE_UART] != NULL) {
+            while (xQueueReceive(gpio_queues[GPIO_QUEUE_UART], msg_buffer, 0) == pdTRUE) {
+                uart_rs232_write(RS232_PORT_1, (uint8_t*)msg_buffer, strlen(msg_buffer));
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }

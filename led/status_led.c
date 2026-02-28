@@ -1,6 +1,8 @@
 #include "status_led.h"
 #include "hardware/gpio.h"
 #include "pico/stdlib.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
 // LED 상태 관리 변수
 static uint32_t activity_blink_start_time = 0;
@@ -190,5 +192,13 @@ void status_led_process(void)
                 gpio_put(STATUS_LED_RED_PIN, 1);    // 빨간색 OFF
             }
             break;
+    }
+}
+
+void led_task(void *pvParameters)
+{
+    while (true) {
+        status_led_process();
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

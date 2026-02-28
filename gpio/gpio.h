@@ -72,4 +72,7 @@ bool update_gpio_config(uint8_t device_id, bool auto_response,
 extern uint16_t gpio_input_data;
 extern uint16_t gpio_output_data;
 
+// FreeRTOS 태스크
+void gpio_task(void *pvParameters);
+
 #endif // GPIO_H

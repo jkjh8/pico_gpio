@@ -37,5 +37,6 @@ void status_led_activity_blink(void);
 void status_led_set_network_connected(bool connected);
 void status_led_set_mode(led_mode_t mode);
 void status_led_process(void);
+void led_task(void *pvParameters);
 
 #endif // STATUS_LED_H

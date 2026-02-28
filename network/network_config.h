@@ -102,4 +102,7 @@ extern void status_led_set_mode(uint8_t mode);
 // 네트워크 처리 함수 (네트워크 상태 반환)
 network_status_t network_process(void);
 
+// FreeRTOS 태스크
+void network_task(void *pvParameters);
+
 #endif // NETWORK_CONFIG_H

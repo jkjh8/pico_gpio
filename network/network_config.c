@@ -8,6 +8,7 @@
 #include "multicast_server.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
+#include "task.h"
 #include "network/mdns.h"
 
 // Network configuration pointer (points to system_config network)
@@ -580,6 +581,21 @@ network_status_t network_process(void) {
     
     // 5. 서버 초기화 및 처리
     network_handle_servers(status.current_connected);
-    
+
     return status;
+}
+
+void network_task(void *pvParameters)
+{
+    DBG_MAIN_PRINT("[TASK] network_task started\n");
+    fflush(stdout);
+
+    while (true) {
+        if (is_system_restart_requested()) {
+            DBG_MAIN_PRINT("[RESTART] System monitor task detected restart request\n");
+            system_restart();
+        }
+        network_process();
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 }

@@ -42,6 +42,7 @@ extern "C"
   bool uart_rs232_init(rs232_port_t port, uint32_t baudrate);
   bool uart_rs232_write(rs232_port_t port, const uint8_t *data, uint32_t len);
   void uart_rs232_process(void);
+  void uart_task(void *pvParameters);
 
 #ifdef __cplusplus
 }
