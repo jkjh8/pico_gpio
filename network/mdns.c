@@ -112,35 +112,6 @@ static bool hostname_match(const char* query, const char* hostname) {
     return query[i] == hostname[i];  // 둘 다 '\0'이어야 함
 }
 
-// 로그용으로 qname을 사람이 읽을 수 있게 변환
-static void make_printable_for_log(const char* src, char* dst, int max_len) {
-    if (!src || !dst || max_len <= 0) return;
-    int i = 0;
-    while (src[i] && i < max_len - 1) {
-        unsigned char c = (unsigned char)src[i];
-        if (c >= 32 && c <= 126) dst[i] = (char)c;
-        else dst[i] = '.';
-        i++;
-    }
-    dst[i] = '\0';
-}
-
-// 헥사 덤프 생성 (최대 출력 길이 제한)
-static void hex_dump(const uint8_t* data, int len, char* out, int out_len) {
-    if (!data || !out || out_len <= 0) return;
-    int pos = 0;
-    int max_bytes = (out_len - 1) / 3; // "AA " per byte
-    if (max_bytes <= 0) { out[0] = '\0'; return; }
-    int bytes = len < max_bytes ? len : max_bytes;
-    for (int i = 0; i < bytes; i++) {
-        int n = snprintf(out + pos, out_len - pos, "%02X ", data[i]);
-        if (n <= 0 || n >= out_len - pos) break;
-        pos += n;
-    }
-    if (pos > 0 && pos < out_len) out[pos - 1] = '\0';
-    else out[0] = '\0';
-}
-
 // A 레코드 응답 생성
 static int build_a_record_response(uint8_t* response, const char* hostname, const uint8_t* ip) {
     int pos = 0;
@@ -425,12 +396,9 @@ void mdns_process(void) {
     // 질의 파싱
     const uint8_t* ptr = buf + sizeof(dns_header_t);
     char qname[128];
-    char qname_print[256];
-    
+
     for (int i = 0; i < qdcount; i++) {
         int name_len = dns_decode_name(buf, ptr, qname, sizeof(qname));
-        // 로그용 안전 문자열 생성
-        make_printable_for_log(qname, qname_print, sizeof(qname_print));
         ptr += name_len;
         
         uint16_t qtype = (ptr[0] << 8) | ptr[1];

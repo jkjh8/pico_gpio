@@ -15,12 +15,6 @@ void save_tcp_port_to_flash(uint16_t port) {
     DBG_MAIN_PRINT("[FLASH] TCP 포트 저장 (시스템 설정): %u\n", port);
 }
 
-void load_tcp_port_from_flash(void) {
-    tcp_port = system_config_get_tcp_port();
-    DBG_MAIN_PRINT("[FLASH] TCP 포트 로드 (시스템 설정): %u\n", tcp_port);
-}
-
-
 // 모든 연결된 TCP 클라이언트에 메시지 전송
 void tcp_servers_broadcast(const uint8_t* data, uint16_t len) {
     int sent_count = 0;

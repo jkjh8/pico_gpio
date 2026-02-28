@@ -12,8 +12,6 @@
 #include "pico/stdlib.h"
 #include "../network/network_config.h"
 
-#define TCP_PORT_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - 8192) // 마지막에서 두 번째 4KB
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -24,7 +22,6 @@ extern "C"
 
   extern uint16_t tcp_port;
   void save_tcp_port_to_flash(uint16_t port);
-  void load_tcp_port_from_flash(void);
   void tcp_servers_init(uint16_t port);
   void tcp_servers_process(void);
   void tcp_servers_restart(void);

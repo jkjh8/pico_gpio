@@ -57,11 +57,9 @@ uint8_t g_ethernet_buf[2048];
 // SPI 콜백 함수 구현
 void wizchip_select(void) {
     gpio_put(SPI_CS, 0);
-    sleep_us(1);  // CS 안정화를 위한 짧은 지연
 }
 
 void wizchip_deselect(void) {
-    sleep_us(1);  // 데이터 전송 완료 대기
     gpio_put(SPI_CS, 1);
 }
 
@@ -77,9 +75,8 @@ void wizchip_write(uint8_t wb) {
 
 w5500_init_result_t w5500_initialize(void) {
     DBG_WIZNET_PRINT("Starting W5500 initialization...\n");
-    // SPI 속도를 5MHz로 설정
-    DBG_WIZNET_PRINT("Initializing SPI at 5MHz...\n");
-    uint32_t actual_baudrate = spi_init(SPI_PORT, 5000 * 1000 * 4);
+    DBG_WIZNET_PRINT("Initializing SPI at 25MHz...\n");
+    uint32_t actual_baudrate = spi_init(SPI_PORT, 5000 * 1000 * 5);
     DBG_WIZNET_PRINT("SPI baudrate set to: %u Hz\n", actual_baudrate);
     
     // SPI 포맷 설정: 8비트, SPI Mode 0 (CPOL=0, CPHA=0)
@@ -128,12 +125,9 @@ w5500_init_result_t w5500_initialize(void) {
 
 // Static IP 설정
 bool w5500_set_static_ip(wiz_NetInfo *net_info) {
-    // DHCP 모드를 Static으로 변경
     net_info->dhcp = NETINFO_STATIC;
     apply_network_config(net_info);
-    system_config_save_to_flash();
-    DBG_NET_PRINT("Static IP configuration saved to flash\n");
-    
+    DBG_NET_PRINT("Static IP configuration applied\n");
     return true;
 }
 
