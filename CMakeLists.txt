@@ -43,8 +43,8 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(main 
-    main.c 
+add_executable(main
+    main.c
     handlers/command_handler.c
     network/mac_utils.c
     network/network_config.c
@@ -53,6 +53,7 @@ add_executable(main
     debug/debug.c
     http/http_server.c
     http/http_handlers.c
+    http/ota_handler.c
     static_files.c
     tcp/tcp_server.c
     uart/uart_rs232.c
@@ -64,6 +65,13 @@ add_executable(main
 
 # define W5500 chip for all source files
 target_compile_definitions(main PRIVATE _WIZCHIP_=W5500)
+
+# Firmware version
+target_compile_definitions(main PRIVATE
+    FW_VER_MAJOR=1
+    FW_VER_MINOR=0
+    FW_VER_PATCH=0
+)
 
 # Enable debug flags (set to 1 to enable, 0 to disable)
 target_compile_definitions(main PRIVATE 

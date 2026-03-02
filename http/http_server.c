@@ -1,5 +1,6 @@
 #include "http_server.h"
 #include "http_handlers.h"
+#include "ota_handler.h"
 #include "../main.h"
 #include "lib/wiznet/socket.h"
 #include "lib/wiznet/w5500.h"
@@ -13,9 +14,21 @@
 #include "task.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
-// HTTP 소켓 (소켓 1번만 사용 - 간단한 사용 시)
-static const uint8_t http_sockets[] = {6,7};
+// HTTP 소켓
+static const uint8_t http_sockets[] = {6, 7};
+
+// Content-Length 헤더 값 파싱 (-1: 없음)
+// HTTP 헤더는 대소문자 구분 없지만 실제 브라우저/클라이언트는 대문자 전송
+static int parse_content_length(const char *request) {
+    const char *p = strstr(request, "Content-Length:");
+    if (!p) p = strstr(request, "content-length:");
+    if (!p) return -1;
+    p += 15; // "Content-Length:" 길이
+    while (*p == ' ') p++;
+    return atoi(p);
+}
 #define HTTP_SOCKET_COUNT (sizeof(http_sockets) / sizeof(http_sockets[0]))
 
 // HTTP 응답 헤더 (바이너리 데이터 지원)
@@ -146,8 +159,8 @@ static void http_handle_api_post(uint8_t sock, const char* path, const char* bod
     }
 }
 
-// HTTP 요청 처리
-static void http_handle_request(uint8_t sock, char* request) {
+// HTTP 요청 처리 (len: recv()로 읽힌 실제 바이트 수)
+static void http_handle_request(uint8_t sock, char* request, int len) {
     // GET /path HTTP/1.1 파싱
     char method[16], path[128];
     if (sscanf(request, "%15s %127s", method, path) != 2) {
@@ -171,7 +184,18 @@ static void http_handle_request(uint8_t sock, char* request) {
         if (strcmp(method, "GET") == 0) {
             http_handle_api_get(sock, path);
         } else if (strcmp(method, "POST") == 0) {
-            if (body) {
+            // OTA 업데이트: 바이너리 스트리밍 처리 (body 포인터 + Content-Length 사용)
+            if (strcmp(path, "/api/update") == 0) {
+                int clen = parse_content_length(request);
+                const uint8_t *ibody = body ? (const uint8_t *)body : NULL;
+                int ilen = 0;
+                if (body) {
+                    // 버퍼 끝까지가 body 데이터
+                    ilen = (int)(request + len - body);
+                    if (ilen < 0) ilen = 0;
+                }
+                http_handle_post_update(sock, ibody, ilen, clen);
+            } else if (body) {
                 http_handle_api_post(sock, path, body);
             } else {
                 http_send_response(sock, "400 Bad Request", "text/plain", "No body");
@@ -212,7 +236,7 @@ void http_server_process(void) {
                     len = recv(sock, (uint8_t*)buffer, len);
                     if (len > 0) {
                         buffer[len] = '\0';
-                        http_handle_request(sock, buffer);
+                        http_handle_request(sock, buffer, len);
                     }
                     disconnect(sock);
                 }

@@ -576,10 +576,9 @@
         <svg class="icon"><use href="#logo2"></use></svg>
       </button>
       <div class="header-title">MIC CONTROL</div>
-      <div
-        class="header-mac"
-        id="header-mac">
-        N/A
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px">
+        <div class="header-mac" id="header-mac">N/A</div>
+        <div class="header-mac" id="header-version" style="opacity:0.8">v-.-.-</div>
       </div>
     </header>
     <div class="layout">
@@ -684,6 +683,21 @@
                   <div class="row items-center justify-between">
                     <span>Baud Rate</span>
                     <strong id="sum-baud">Loading...</strong>
+                  </div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>System</label>
+                <div
+                  style="
+                    padding: 8px 8px 8px 24px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                  ">
+                  <div class="row items-center justify-between">
+                    <span>Firmware</span>
+                    <strong id="sum-fw">Loading...</strong>
                   </div>
                 </div>
               </div>
@@ -956,6 +970,27 @@
                   </svg>
                   <span class="btn-text">Reboot</span>
                 </button>
+              </div>
+              <div style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+                <div class="row items-center gap-sm" style="margin-bottom: 10px;">
+                  <svg class="icon-sm text-primary" style="fill: var(--primary)">
+                    <use href="#settings"></use>
+                  </svg>
+                  <span>FIRMWARE UPDATE (.bin)</span>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <input
+                    type="file"
+                    id="fw-file"
+                    accept=".bin"
+                    style="flex: 1; font-size: 0.75rem; color: #333;" />
+                  <button
+                    id="btn-fw-upload"
+                    class="btn btn-primary">
+                    <span class="btn-text">Upload</span>
+                  </button>
+                </div>
+                <div id="fw-status" style="margin-top: 8px; font-size: 0.75rem; color: var(--primary); display: none;"></div>
               </div>
             </div>
           </div>
@@ -2118,6 +2153,14 @@
           const sb = document.getElementById('sum-baud')
           if (sb) sb.textContent = data.control.rs232_1_baud
 
+          // Firmware version
+          if (data.firmware_version) {
+            const hv = document.getElementById('header-version')
+            if (hv) hv.textContent = 'v' + data.firmware_version
+            const sfv = document.getElementById('sum-fw')
+            if (sfv) sfv.textContent = data.firmware_version
+          }
+
           // GPIO data
           state.gpio = data.gpio
           const gi = document.getElementById('gpio-id')
@@ -2342,6 +2385,52 @@
           '<div style="color: #4ec9b0;">MIC Terminal v1.0</div>' +
           '<div style="color: #6a9955;">Type "help" for available commands</div>' +
           '<div style="margin-top: 8px;">></div>'
+      })
+
+      // Firmware OTA Upload
+      document.getElementById('btn-fw-upload').addEventListener('click', async () => {
+        const fileInput = document.getElementById('fw-file')
+        const file = fileInput.files[0]
+        if (!file) {
+          showToast('BIN 파일을 선택하세요', 'negative')
+          return
+        }
+        if (!file.name.toLowerCase().endsWith('.bin')) {
+          showToast('.bin 파일만 업로드 가능합니다', 'negative')
+          return
+        }
+        if (!confirm('펌웨어를 업데이트하면 기기가 재부팅됩니다.\n계속하시겠습니까?')) return
+
+        const statusEl = document.getElementById('fw-status')
+        statusEl.style.display = 'block'
+        statusEl.style.color = 'var(--primary)'
+        statusEl.textContent = `업로드 중... (${(file.size / 1024).toFixed(1)} KB)`
+        showLoading('Uploading firmware...')
+
+        try {
+          const res = await fetch('/api/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: file
+          })
+          if (res.ok) {
+            statusEl.style.color = 'var(--positive)'
+            statusEl.textContent = '업로드 완료! 재부팅 중...'
+            showToast('펌웨어 업로드 완료! 재부팅 중...', 'positive')
+          } else {
+            let msg = '업로드 실패'
+            try { const e = await res.json(); msg = e.error || msg } catch (_) {}
+            statusEl.style.color = 'var(--negative)'
+            statusEl.textContent = msg
+            showToast(msg, 'negative')
+          }
+        } catch (err) {
+          statusEl.style.color = 'var(--negative)'
+          statusEl.textContent = '네트워크 오류'
+          showToast('업로드 중 오류 발생', 'negative')
+        } finally {
+          hideLoading()
+        }
       })
 
       window.addEventListener('DOMContentLoaded', async () => {

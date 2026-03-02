@@ -59,6 +59,12 @@ extern bool gpio_queues_enabled[MAX_GPIO_QUEUES];
 extern uint16_t tcp_port;
 extern bool tcp_servers_initialized;
 
+// 펌웨어 버전 문자열 (CMakeLists.txt에서 FW_VER_MAJOR/MINOR/PATCH 정의)
+#define _FWVER_STR(x) #x
+#define FWVER_STR(x)  _FWVER_STR(x)
+#define FIRMWARE_VERSION \
+    FWVER_STR(FW_VER_MAJOR) "." FWVER_STR(FW_VER_MINOR) "." FWVER_STR(FW_VER_PATCH)
+
 // 시스템 재시작 함수
 void system_restart_request(void);
 void system_restart(void);

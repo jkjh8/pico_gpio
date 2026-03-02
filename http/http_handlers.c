@@ -388,9 +388,12 @@ void http_handle_get_all(uint8_t sock) {
     cJSON_AddNumberToObject(control, "rs232_1_baud", uart_baud);
     cJSON_AddItemToObject(root, "control", control);
     
+    // 펌웨어 버전
+    cJSON_AddStringToObject(root, "firmware_version", FIRMWARE_VERSION);
+
     char* json_str = cJSON_PrintUnformatted(root);
     send_json_response(sock, json_str);
-    
+
     free(json_str);
     cJSON_Delete(root);
 }
