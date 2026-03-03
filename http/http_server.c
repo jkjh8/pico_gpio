@@ -107,25 +107,45 @@ static void http_handle_static_file(uint8_t sock, const char* path) {
         // 파일 데이터를 청크 단위로 전송 (512 바이트씩)
         const size_t chunk_size = 512;
         size_t sent = 0;
+        uint32_t timeout_start = to_ms_since_boot(get_absolute_time());
         while (sent < file_size) {
+            // 소켓 상태 확인
+            uint8_t sock_status = getSn_SR(sock);
+            if (sock_status == SOCK_CLOSED || sock_status == SOCK_CLOSE_WAIT) {
+                DBG_HTTP_PRINT("Socket closed during send at offset %zu\n", sent);
+                break;
+            }
+
+            // 전송 타임아웃 (10초)
+            uint32_t now = to_ms_since_boot(get_absolute_time());
+            if ((now - timeout_start) > 10000) {
+                DBG_HTTP_PRINT("Send timeout at offset %zu/%zu\n", sent, file_size);
+                break;
+            }
+
             // TX 버퍼 공간 확인
             uint16_t free_size = getSn_TX_FSR(sock);
             if (free_size == 0) {
-                vTaskDelay(pdMS_TO_TICKS(10));
+                vTaskDelay(pdMS_TO_TICKS(5));
                 continue;
             }
-            
+
             // 전송할 크기 결정 (버퍼 공간, 청크 크기, 남은 데이터 중 최소값)
             size_t remaining = file_size - sent;
             size_t to_send = (remaining > chunk_size) ? chunk_size : remaining;
             to_send = (to_send > free_size) ? free_size : to_send;
-            
+
             int32_t result = send(sock, (uint8_t*)(file_data + sent), to_send);
-            if (result <= 0) {
-                DBG_HTTP_PRINT("Send failed at offset %zu\n", sent);
+            if (result < 0) {
+                DBG_HTTP_PRINT("Send failed at offset %zu (err=%d)\n", sent, (int)result);
                 break;
             }
+            if (result == 0) {
+                vTaskDelay(pdMS_TO_TICKS(5));
+                continue;
+            }
             sent += result;
+            timeout_start = to_ms_since_boot(get_absolute_time()); // 진행 중이면 타임아웃 리셋
         }
         DBG_HTTP_PRINT("Sent %zu/%zu bytes\n", sent, file_size);
     } else {

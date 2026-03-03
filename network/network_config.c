@@ -29,18 +29,22 @@ void set_default_ip(uint8_t ip[4], uint8_t default_ip[4]) {
     memcpy(ip, default_ip, 4);
 }
 
-// Check if MAC address is all 0xFF (invalid)
+// Check if MAC address is all 0xFF or all 0x00 (invalid)
 bool is_mac_invalid(const uint8_t mac[6]) {
+    bool all_ff = true;
+    bool all_00 = true;
+    
     for (int i = 0; i < 6; i++) {
-        if (mac[i] != 0xFF) {
-            return false;
-        }
+        if (mac[i] != 0xFF) all_ff = false;
+        if (mac[i] != 0x00) all_00 = false;
     }
-    return true;
+    
+    return all_ff || all_00;
 }
 
 // Apply network configuration to W5500 chip
 void apply_network_config(const wiz_NetInfo* config) {
+
     // W5500에 설정 적용
     wizchip_setnetinfo((wiz_NetInfo*)config);
     
@@ -346,12 +350,12 @@ void network_init(void) {
     if (is_mac_invalid(g_net_info->mac)) {
         DBG_NET_PRINT("Flash config invalid, using default config\n");
         memset(g_net_info, 0, sizeof(wiz_NetInfo));
+        g_net_info->dhcp = NETINFO_DHCP;  // 기본값은 DHCP 모드
         g_net_info->mac[0] = 0x00; g_net_info->mac[1] = 0x08; g_net_info->mac[2] = 0xDC;
         g_net_info->ip[0] = 192; g_net_info->ip[1] = 168; g_net_info->ip[2] = 1; g_net_info->ip[3] = 100;
         g_net_info->sn[0] = 255; g_net_info->sn[1] = 255; g_net_info->sn[2] = 255; g_net_info->sn[3] = 0;
         g_net_info->gw[0] = 192; g_net_info->gw[1] = 168; g_net_info->gw[2] = 1; g_net_info->gw[3] = 1;
         g_net_info->dns[0] = 8; g_net_info->dns[1] = 8; g_net_info->dns[2] = 8; g_net_info->dns[3] = 8;
-        g_net_info->dhcp = NETINFO_DHCP;
     }
     
     // 보드 고유 ID로 MAC 생성 및 설정
@@ -387,6 +391,18 @@ void network_init(void) {
     if (w5500_initialize() == W5500_INIT_SUCCESS) {
         DBG_WIZNET_PRINT("W5500 initialization successful\n");
         
+        // MAC을 W5500에 먼저 적용 (DHCP 소켓 사용 전 MAC이 설정되어야 함)
+        // DHCP 모드일 때는 IP/SN/GW/DNS를 0으로 두어야
+        // getSIPR()이 0.0.0.0을 반환 → network_is_connected() false → 링크 업 후 DHCP 재시도 정상 동작
+        if (g_net_info->dhcp == NETINFO_DHCP) {
+            wiz_NetInfo mac_only = {0};
+            mac_only.dhcp = NETINFO_DHCP;
+            memcpy(mac_only.mac, g_net_info->mac, 6);
+            wizchip_setnetinfo(&mac_only);
+        } else {
+            wizchip_setnetinfo(g_net_info);
+        }
+
         // DHCP 또는 Static IP 모드에 따라 설정 적용
         if (g_net_info->dhcp == NETINFO_DHCP) {
             DBG_NET_PRINT("Starting DHCP mode...\n");
@@ -396,8 +412,7 @@ void network_init(void) {
             w5500_set_static_ip(g_net_info);
         }
         
-        // 네트워크 정보 직접 업데이트
-        wizchip_getnetinfo(g_net_info);
+        // wizchip_getnetinfo() 호출 금지: DHCP 미완료 상태에서 읽으면 g_net_info가 0으로 덮어씌워짐
         DBG_NET_PRINT("[NET] Network info initialized\n");
     } else {
         DBG_WIZNET_PRINT("ERROR: W5500 initialization failed\n");
@@ -425,6 +440,22 @@ static void network_update_status(network_status_t* status) {
         DBG_NET_PRINT("[NETWORK] Link %s detected\n", cable_connected ? "up" : "down");
         dhcp_configured = false;
         last_cable_state = cable_connected;
+
+        // 링크 다운 시 DHCP 모드면 W5500 IP를 0으로 초기화
+        // → getSIPR()이 0.0.0.0 반환 → 링크 업 후 network_is_connected()=false → DHCP 재시도 트리거
+        if (!cable_connected && g_net_info->dhcp == NETINFO_DHCP) {
+            dhcp_in_progress = false;  // 진행 중인 DHCP 중단
+            close(0);                  // DHCP 소켓 닫기
+            memset(g_net_info->ip,  0, 4);
+            memset(g_net_info->gw,  0, 4);
+            memset(g_net_info->sn,  0, 4);
+            memset(g_net_info->dns, 0, 4);
+            wiz_NetInfo mac_only = {0};
+            mac_only.dhcp = NETINFO_DHCP;
+            memcpy(mac_only.mac, g_net_info->mac, 6);
+            wizchip_setnetinfo(&mac_only);  // W5500 IP 레지스터도 0으로 클리어
+            DBG_DHCP_PRINT("Link down: DHCP IP cleared, will retry on link up\n");
+        }
     }
     
     // 연결 상태 변경 감지

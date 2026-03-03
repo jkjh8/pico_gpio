@@ -181,7 +181,11 @@ bool system_config_load_from_flash(void) {
 void system_config_init(void) {
     if (!g_config_initialized) {
         if (!system_config_load_from_flash()) {
+            DBG_MAIN_PRINT("Failed to load config from flash, using defaults\n");
             system_config_reset_to_defaults();
+            // 첫 부팅 시 기본값을 flash에 저장
+            DBG_MAIN_PRINT("Saving default config to flash...\n");
+            system_config_save_to_flash();
         }
         g_config_initialized = true;
     }

@@ -69,7 +69,7 @@ target_compile_definitions(main PRIVATE _WIZCHIP_=W5500)
 # Firmware version
 target_compile_definitions(main PRIVATE
     FW_VER_MAJOR=1
-    FW_VER_MINOR=0
+    FW_VER_MINOR=1
     FW_VER_PATCH=0
 )
 
@@ -95,9 +95,10 @@ pico_enable_stdio_uart(main 0)
 pico_enable_stdio_usb(main 1)
 
 # Add the standard library to the build
-target_link_libraries(main 
+target_link_libraries(main
         pico_stdlib
         pico_unique_id
+        pico_multicore
         hardware_spi
         hardware_gpio
         hardware_flash
@@ -132,4 +133,10 @@ set(CJSON_SOURCE
 target_sources(main PRIVATE ${WIZNET_SOURCE} ${CJSON_SOURCE})
 
 pico_add_extra_outputs(main)
+
+# Pad main.bin to 256-byte boundary for OTA page-alignment requirement
+add_custom_command(TARGET main POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -DBIN_DIR=${CMAKE_BINARY_DIR} -P ${CMAKE_SOURCE_DIR}/pad_bin.cmake
+    COMMENT "Padding main.bin to 256-byte boundary for OTA"
+)
 

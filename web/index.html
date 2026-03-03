@@ -281,6 +281,10 @@
         align-items: center;
         justify-content: center;
       }
+      .btn-text-1 {
+        padding: 8px;
+        transition: all 0.3s ease;
+      }
       .btn-expand .btn-text {
         max-width: 0;
         opacity: 0;
@@ -576,9 +580,24 @@
         <svg class="icon"><use href="#logo2"></use></svg>
       </button>
       <div class="header-title">MIC CONTROL</div>
-      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px">
-        <div class="header-mac" id="header-mac">N/A</div>
-        <div class="header-mac" id="header-version" style="opacity:0.8">v-.-.-</div>
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 2px;
+        ">
+        <div
+          class="header-mac"
+          id="header-mac">
+          N/A
+        </div>
+        <div
+          class="header-mac"
+          id="header-version"
+          style="opacity: 0.8">
+          v-.-.-
+        </div>
       </div>
     </header>
     <div class="layout">
@@ -971,26 +990,42 @@
                   <span class="btn-text">Reboot</span>
                 </button>
               </div>
-              <div style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 16px;">
-                <div class="row items-center gap-sm" style="margin-bottom: 10px;">
-                  <svg class="icon-sm text-primary" style="fill: var(--primary)">
+              <div
+                style="
+                  margin-top: 16px;
+                  border-top: 1px solid var(--border-color);
+                  padding-top: 16px;
+                ">
+                <div
+                  class="row items-center gap-sm"
+                  style="margin-bottom: 10px">
+                  <svg
+                    class="icon-sm text-primary"
+                    style="fill: var(--primary)">
                     <use href="#settings"></use>
                   </svg>
                   <span>FIRMWARE UPDATE (.bin)</span>
                 </div>
-                <div style="display: flex; gap: 8px; align-items: center;">
+                <div style="display: flex; gap: 8px; align-items: center">
                   <input
                     type="file"
                     id="fw-file"
                     accept=".bin"
-                    style="flex: 1; font-size: 0.75rem; color: #333;" />
+                    style="flex: 1; font-size: 0.75rem; color: #333" />
                   <button
                     id="btn-fw-upload"
                     class="btn btn-primary">
-                    <span class="btn-text">Upload</span>
+                    <span class="btn-text-1">Upload</span>
                   </button>
                 </div>
-                <div id="fw-status" style="margin-top: 8px; font-size: 0.75rem; color: var(--primary); display: none;"></div>
+                <div
+                  id="fw-status"
+                  style="
+                    margin-top: 8px;
+                    font-size: 0.75rem;
+                    color: var(--primary);
+                    display: none;
+                  "></div>
               </div>
             </div>
           </div>
@@ -2032,80 +2067,6 @@
           if (el) el.disabled = disabled
         })
       }
-      async function fetchNetwork() {
-        try {
-          const res = await fetch('/api/network')
-          const data = await res.json()
-          state.network = data.network || {}
-          const hm = document.getElementById('header-mac')
-          if (hm) hm.textContent = state.network.mac || 'N/A'
-          const nd = document.getElementById('net-dhcp')
-          if (nd) {
-            nd.checked = state.network.dhcp_enabled
-            const ni = document.getElementById('net-ip')
-            const nm = document.getElementById('net-mask')
-            const ng = document.getElementById('net-gateway')
-            const ndn = document.getElementById('net-dns')
-            if (ni) ni.value = state.network.ip || ''
-            if (nm) nm.value = state.network.subnet || ''
-            if (ng) ng.value = state.network.gateway || ''
-            if (ndn) ndn.value = state.network.dns || ''
-            toggleNetworkInputs(state.network.dhcp_enabled)
-          }
-          const si = document.getElementById('sum-ip')
-          if (si) si.textContent = state.network.ip || 'N/A'
-          const sm = document.getElementById('sum-mac')
-          if (sm) sm.textContent = state.network.mac || 'N/A'
-          const sd = document.getElementById('sum-dhcp')
-          if (sd)
-            sd.textContent = state.network.dhcp_enabled ? 'Enabled' : 'Disabled'
-          const smask = document.getElementById('sum-mask')
-          if (smask) smask.textContent = state.network.subnet || 'N/A'
-          const sg = document.getElementById('sum-gateway')
-          if (sg) sg.textContent = state.network.gateway || 'N/A'
-          const sdn = document.getElementById('sum-dns')
-          if (sdn) sdn.textContent = state.network.dns || 'N/A'
-        } catch (e) {
-          console.error(e)
-          showToast('Failed to fetch network', 'negative')
-        }
-      }
-      async function fetchComm() {
-        try {
-          const res = await fetch('/api/control')
-          const data = await res.json()
-          state.comm = data
-          const ct = document.getElementById('comm-tcp')
-          if (ct) ct.value = data.tcp_port
-          const cb = document.getElementById('comm-baud')
-          if (cb) cb.value = data.rs232_1_baud
-          const st = document.getElementById('sum-tcp')
-          if (st) st.textContent = data.tcp_port
-          const sb = document.getElementById('sum-baud')
-          if (sb) sb.textContent = data.rs232_1_baud
-        } catch (e) {
-          console.error(e)
-        }
-      }
-      async function fetchGpio() {
-        try {
-          const res = await fetch('/api/gpio')
-          const data = await res.json()
-          state.gpio = data
-          const gi = document.getElementById('gpio-id')
-          if (gi) gi.value = data.device_id
-          const gm = document.getElementById('gpio-mode')
-          if (gm) gm.value = data.comm_mode
-          const ga = document.getElementById('gpio-auto')
-          if (ga) ga.value = data.auto_response.toString()
-          const sid = document.getElementById('sum-id')
-          if (sid) sid.textContent = data.device_id
-          const smode = document.getElementById('sum-mode')
-          if (smode) smode.textContent = data.comm_mode.toUpperCase()
-        } catch (e) {
-          console.error(e)
-        }
-      }
       async function fetchAll() {
         try {
           const res = await fetch('/api/all')
@@ -2388,50 +2349,60 @@
       })
 
       // Firmware OTA Upload
-      document.getElementById('btn-fw-upload').addEventListener('click', async () => {
-        const fileInput = document.getElementById('fw-file')
-        const file = fileInput.files[0]
-        if (!file) {
-          showToast('BIN 파일을 선택하세요', 'negative')
-          return
-        }
-        if (!file.name.toLowerCase().endsWith('.bin')) {
-          showToast('.bin 파일만 업로드 가능합니다', 'negative')
-          return
-        }
-        if (!confirm('펌웨어를 업데이트하면 기기가 재부팅됩니다.\n계속하시겠습니까?')) return
-
-        const statusEl = document.getElementById('fw-status')
-        statusEl.style.display = 'block'
-        statusEl.style.color = 'var(--primary)'
-        statusEl.textContent = `업로드 중... (${(file.size / 1024).toFixed(1)} KB)`
-        showLoading('Uploading firmware...')
-
-        try {
-          const res = await fetch('/api/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/octet-stream' },
-            body: file
-          })
-          if (res.ok) {
-            statusEl.style.color = 'var(--positive)'
-            statusEl.textContent = '업로드 완료! 재부팅 중...'
-            showToast('펌웨어 업로드 완료! 재부팅 중...', 'positive')
-          } else {
-            let msg = '업로드 실패'
-            try { const e = await res.json(); msg = e.error || msg } catch (_) {}
-            statusEl.style.color = 'var(--negative)'
-            statusEl.textContent = msg
-            showToast(msg, 'negative')
+      document
+        .getElementById('btn-fw-upload')
+        .addEventListener('click', async () => {
+          const fileInput = document.getElementById('fw-file')
+          const file = fileInput.files[0]
+          if (!file) {
+            showToast('BIN 파일을 선택하세요', 'negative')
+            return
           }
-        } catch (err) {
-          statusEl.style.color = 'var(--negative)'
-          statusEl.textContent = '네트워크 오류'
-          showToast('업로드 중 오류 발생', 'negative')
-        } finally {
-          hideLoading()
-        }
-      })
+          if (!file.name.toLowerCase().endsWith('.bin')) {
+            showToast('.bin 파일만 업로드 가능합니다', 'negative')
+            return
+          }
+          if (
+            !confirm(
+              '펌웨어를 업데이트하면 기기가 재부팅됩니다.\n계속하시겠습니까?'
+            )
+          )
+            return
+
+          const statusEl = document.getElementById('fw-status')
+          statusEl.style.display = 'block'
+          statusEl.style.color = 'var(--primary)'
+          statusEl.textContent = `업로드 중... (${(file.size / 1024).toFixed(1)} KB)`
+          showLoading('Uploading firmware...')
+
+          try {
+            const res = await fetch('/api/update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/octet-stream' },
+              body: file
+            })
+            if (res.ok) {
+              statusEl.style.color = 'var(--positive)'
+              statusEl.textContent = '업로드 완료! 재부팅 중...'
+              showToast('펌웨어 업로드 완료! 재부팅 중...', 'positive')
+            } else {
+              let msg = '업로드 실패'
+              try {
+                const e = await res.json()
+                msg = e.error || msg
+              } catch (_) {}
+              statusEl.style.color = 'var(--negative)'
+              statusEl.textContent = msg
+              showToast(msg, 'negative')
+            }
+          } catch (err) {
+            statusEl.style.color = 'var(--negative)'
+            statusEl.textContent = '네트워크 오류'
+            showToast('업로드 중 오류 발생', 'negative')
+          } finally {
+            hideLoading()
+          }
+        })
 
       window.addEventListener('DOMContentLoaded', async () => {
         showLoading('Fetching status...')

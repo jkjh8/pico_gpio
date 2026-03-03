@@ -7,6 +7,7 @@
 #include "hardware/flash.h"
 #include "hardware/sync.h"
 #include "pico/stdlib.h"
+#include "pico/multicore.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include <string.h>
@@ -24,26 +25,27 @@
 
 // =============================================================================
 // ARM Cortex-M 벡터 테이블 검증
-// .bin 바이너리에서 offset 0x100 (2nd stage bootloader 직후 앱 시작):
+// RP2350 .bin은 offset 0x000부터 바로 벡터 테이블 시작:
 //   [0x000]: Initial Stack Pointer → RP2350 SRAM 범위
 //   [0x004]: Reset Handler 주소  → 플래시 범위, LSB=1 (Thumb)
 // =============================================================================
 
-static bool validate_vector_table(const uint8_t *page1_data) {
-    uint32_t sp  = (uint32_t)page1_data[0]
-                 | ((uint32_t)page1_data[1] << 8)
-                 | ((uint32_t)page1_data[2] << 16)
-                 | ((uint32_t)page1_data[3] << 24);
-    uint32_t rst = (uint32_t)page1_data[4]
-                 | ((uint32_t)page1_data[5] << 8)
-                 | ((uint32_t)page1_data[6] << 16)
-                 | ((uint32_t)page1_data[7] << 24);
+static bool validate_vector_table(const uint8_t *data) {
+    uint32_t sp  = (uint32_t)data[0]
+                 | ((uint32_t)data[1] << 8)
+                 | ((uint32_t)data[2] << 16)
+                 | ((uint32_t)data[3] << 24);
+    uint32_t rst = (uint32_t)data[4]
+                 | ((uint32_t)data[5] << 8)
+                 | ((uint32_t)data[6] << 16)
+                 | ((uint32_t)data[7] << 24);
 
     DBG_HTTP_PRINT("[OTA] SP=0x%08X  Reset=0x%08X\n", (unsigned)sp, (unsigned)rst);
 
     // SP: SRAM 범위 확인
     if (sp < OTA_SRAM_BASE || sp > OTA_SRAM_END) {
-        DBG_HTTP_PRINT("[OTA] ERROR: SP out of SRAM range\n");
+        DBG_HTTP_PRINT("[OTA] ERROR: SP out of SRAM range (0x%08X..0x%08X)\n",
+                       OTA_SRAM_BASE, OTA_SRAM_END);
         return false;
     }
 
@@ -53,8 +55,9 @@ static bool validate_vector_table(const uint8_t *page1_data) {
         return false;
     }
     uint32_t rst_addr = rst & ~1u;
-    if (rst_addr < OTA_FLASH_BASE + OTA_APP_OFFSET || rst_addr >= OTA_FLASH_END) {
-        DBG_HTTP_PRINT("[OTA] ERROR: Reset vector out of flash range\n");
+    if (rst_addr < OTA_FLASH_BASE || rst_addr >= OTA_FLASH_END) {
+        DBG_HTTP_PRINT("[OTA] ERROR: Reset vector out of flash range (0x%08X..0x%08X)\n",
+                       OTA_FLASH_BASE, OTA_FLASH_END);
         return false;
     }
 
@@ -63,8 +66,11 @@ static bool validate_vector_table(const uint8_t *page1_data) {
 
 // =============================================================================
 // RAM 실행 플래시 기록 함수
-// SMP FreeRTOS: vTaskSuspendAll + save_and_disable_interrupts 조합
-// (system_config_save_to_flash와 동일한 패턴)
+//
+// 전략: OTA 시작 전에 multicore_reset_core1()로 Core 1을 ROM 대기 상태로 전환.
+// Core 1이 플래시를 접근하지 않으므로 Core 0에서 인터럽트만 비활성화하면 안전.
+// flash_safe_execute()의 FreeRTOS SMP 구현은 __wfe() 루프가 Core 1 응답 없이
+// 무한 대기할 수 있어 사용하지 않음.
 // =============================================================================
 
 static void __no_inline_not_in_flash_func(ota_erase_sector)(uint32_t offset) {
@@ -76,36 +82,33 @@ static void __no_inline_not_in_flash_func(ota_program_page)(uint32_t offset,
     flash_range_program(offset, data, FLASH_PAGE_SIZE);
 }
 
-// 섹터 경계에서 erase, 256B 페이지 단위 program
+// Core 1이 이미 ROM에 있다고 가정. 인터럽트만 비활성화하고 erase/program.
 static bool ota_flash_write_page(uint32_t flash_offset, const uint8_t *data) {
     if (flash_offset >= OTA_FLASH_MAX_OFFSET) {
         DBG_HTTP_PRINT("[OTA] SKIP: config sector (offset=0x%05X)\n", (unsigned)flash_offset);
         return true;
     }
 
-    vTaskSuspendAll();
-    uint32_t ints = save_and_disable_interrupts();
+    bool do_erase = (flash_offset % FLASH_SECTOR_SIZE) == 0;
 
-    if ((flash_offset % FLASH_SECTOR_SIZE) == 0) {
+    uint32_t ints = save_and_disable_interrupts();
+    if (do_erase) {
         ota_erase_sector(flash_offset);
     }
     ota_program_page(flash_offset, data);
-
     restore_interrupts(ints);
-    xTaskResumeAll();
 
     return true;
 }
 
 // =============================================================================
 // 소켓 + initial_body로부터 순서대로 데이터 수신
-// dest에 need 바이트를 채운 후 실제 복사한 바이트 수 반환 (< need면 오류)
 // =============================================================================
 
 typedef struct {
     const uint8_t *ibuf;
     int            ilen;
-    int            ipos;   // ibuf 내 현재 위치
+    int            ipos;
     uint8_t        sock;
     uint32_t       timeout_start;
 } ota_stream_t;
@@ -130,7 +133,7 @@ static int ota_stream_read(ota_stream_t *s, uint8_t *dest, int need) {
         if (avail == 0) {
             uint32_t now = to_ms_since_boot(get_absolute_time());
             if ((now - s->timeout_start) > OTA_RECV_TIMEOUT_MS) {
-                DBG_HTTP_PRINT("[OTA] ERROR: recv timeout\n");
+                DBG_HTTP_PRINT("[OTA] ERROR: recv timeout (filled=%d/%d)\n", filled, need);
                 return -1;
             }
             vTaskDelay(pdMS_TO_TICKS(5));
@@ -153,22 +156,14 @@ static int ota_stream_read(ota_stream_t *s, uint8_t *dest, int need) {
 
 // =============================================================================
 // POST /api/update 핸들러 — raw .bin 스트리밍
-//
-// 동작:
-//   1. 파일 크기 검증 (최소/최대/페이지 정렬)
-//   2. 처음 두 페이지(512B) 수신 → ARM 벡터 테이블 검증
-//      - SP:    SRAM 범위 (0x20000000-0x20082000)
-//      - Reset: 플래시 범위, Thumb 모드 (LSB=1)
-//   3. 검증 통과 시 처음 두 페이지부터 순서대로 플래시 기록
-//   4. 이후 256B 페이지 단위로 스트리밍 기록
-//   5. 완료 → 200 OK → reboot
 // =============================================================================
 
 void http_handle_post_update(uint8_t sock,
                               const uint8_t *initial_body,
                               int initial_len,
                               int content_len) {
-    DBG_HTTP_PRINT("[OTA] BIN update start, size=%d\n", content_len);
+    uint32_t t_start = to_ms_since_boot(get_absolute_time());
+    DBG_HTTP_PRINT("[OTA] BIN update start, size=%d, t=%u\n", content_len, (unsigned)t_start);
 
     // 파일 크기 검증
     if (content_len < OTA_MIN_FW_SIZE) {
@@ -198,30 +193,76 @@ void http_handle_post_update(uint8_t sock,
         .timeout_start = to_ms_since_boot(get_absolute_time()),
     };
 
-    // --- Phase 1: 첫 두 페이지 수신 및 검증 ---
-    static uint8_t pre_buf[FLASH_PAGE_SIZE * 2];  // 512B (page0 + page1)
+    // --- Phase 1: 첫 두 페이지 수신 및 벡터 테이블 검증 ---
+    static uint8_t pre_buf[FLASH_PAGE_SIZE * 2];
+
+    DBG_HTTP_PRINT("[OTA] t=%u: Receiving header (512B)...\n",
+                   (unsigned)to_ms_since_boot(get_absolute_time()));
+    stdio_flush();
 
     if (ota_stream_read(&stream, pre_buf, sizeof(pre_buf)) != sizeof(pre_buf)) {
+        DBG_HTTP_PRINT("[OTA] ERROR: header recv failed\n");
         http_send_response(sock, "409 Conflict", "application/json",
                            "{\"error\":\"Failed to receive firmware header\"}");
         return;
     }
+    DBG_HTTP_PRINT("[OTA] t=%u: Header OK. Validating vector table...\n",
+                   (unsigned)to_ms_since_boot(get_absolute_time()));
 
-    // 벡터 테이블은 page1 (offset 0x100) 시작
-    if (!validate_vector_table(pre_buf + FLASH_PAGE_SIZE)) {
-        DBG_HTTP_PRINT("[OTA] ERROR: vector table validation failed\n");
+    if (!validate_vector_table(pre_buf)) {
+        DBG_HTTP_PRINT("[OTA] ERROR: vector table invalid\n");
         http_send_response(sock, "400 Bad Request", "application/json",
                            "{\"error\":\"Invalid firmware: vector table check failed\"}");
         return;
     }
-    DBG_HTTP_PRINT("[OTA] Vector table OK, starting flash write...\n");
+    DBG_HTTP_PRINT("[OTA] t=%u: Vector table OK\n",
+                   (unsigned)to_ms_since_boot(get_absolute_time()));
+
+    // --- Core 1 정지: ROM 대기 상태로 전환 ---
+    // flash_safe_execute()의 FreeRTOS SMP __wfe() 방식 대신
+    // 하드웨어 리셋으로 Core 1을 플래시 접근 불가 상태로 만듦
+    DBG_HTTP_PRINT("[OTA] t=%u: Resetting Core 1 (ROM wait)...\n",
+                   (unsigned)to_ms_since_boot(get_absolute_time()));
+    stdio_flush();
+
+    multicore_reset_core1();
+
+    DBG_HTTP_PRINT("[OTA] t=%u: Core 1 reset OK. Starting flash write (%d pages, %d sectors)...\n",
+                   (unsigned)to_ms_since_boot(get_absolute_time()),
+                   content_len / FLASH_PAGE_SIZE,
+                   content_len / FLASH_SECTOR_SIZE);
+    stdio_flush();
 
     // --- Phase 2: 첫 두 페이지 기록 ---
-    if (!ota_flash_write_page(0, pre_buf) ||
-        !ota_flash_write_page(FLASH_PAGE_SIZE, pre_buf + FLASH_PAGE_SIZE)) {
-        http_send_response(sock, "500 Internal Server Error", "application/json",
-                           "{\"error\":\"Flash write failed\"}");
-        return;
+    {
+        uint32_t t0 = to_ms_since_boot(get_absolute_time());
+        DBG_HTTP_PRINT("[OTA] t=%u: Writing page 0 (sector 0 erase + program)...\n", (unsigned)t0);
+        stdio_flush();
+
+        if (!ota_flash_write_page(0, pre_buf)) {
+            DBG_HTTP_PRINT("[OTA] ERROR: page 0 write failed\n");
+            http_send_response(sock, "500 Internal Server Error", "application/json",
+                               "{\"error\":\"Flash write failed at page 0\"}");
+            return;
+        }
+        DBG_HTTP_PRINT("[OTA] t=%u: Page 0 done (%ums)\n",
+                       (unsigned)to_ms_since_boot(get_absolute_time()),
+                       (unsigned)(to_ms_since_boot(get_absolute_time()) - t0));
+
+        t0 = to_ms_since_boot(get_absolute_time());
+        DBG_HTTP_PRINT("[OTA] t=%u: Writing page 1...\n", (unsigned)t0);
+        stdio_flush();
+
+        if (!ota_flash_write_page(FLASH_PAGE_SIZE, pre_buf + FLASH_PAGE_SIZE)) {
+            DBG_HTTP_PRINT("[OTA] ERROR: page 1 write failed\n");
+            http_send_response(sock, "500 Internal Server Error", "application/json",
+                               "{\"error\":\"Flash write failed at page 1\"}");
+            return;
+        }
+        DBG_HTTP_PRINT("[OTA] t=%u: Page 1 done (%ums)\n",
+                       (unsigned)to_ms_since_boot(get_absolute_time()),
+                       (unsigned)(to_ms_since_boot(get_absolute_time()) - t0));
+        stdio_flush();
     }
 
     // --- Phase 3: 나머지 페이지 스트리밍 기록 ---
@@ -230,44 +271,71 @@ void http_handle_post_update(uint8_t sock,
     int total_recv = (int)sizeof(pre_buf);
     uint32_t pages_written = 2;
     bool error = false;
+    uint32_t sector_t = 0;
 
     while (total_recv < content_len) {
+        // 섹터 경계: 수신 전에 로그 (erase가 언제 일어나는지 파악)
+        bool is_sector_start = (flash_offset % FLASH_SECTOR_SIZE) == 0;
+        if (is_sector_start) {
+            sector_t = to_ms_since_boot(get_absolute_time());
+            DBG_HTTP_PRINT("[OTA] t=%u: Sector 0x%05X recv start\n",
+                           (unsigned)sector_t, (unsigned)flash_offset);
+            stdio_flush();
+        }
+
         int n = ota_stream_read(&stream, page_buf, FLASH_PAGE_SIZE);
         if (n != FLASH_PAGE_SIZE) {
-            DBG_HTTP_PRINT("[OTA] ERROR: short read at offset 0x%05X\n", (unsigned)flash_offset);
+            DBG_HTTP_PRINT("[OTA] ERROR: recv short at 0x%05X (got %d, want %d)\n",
+                           (unsigned)flash_offset, n, FLASH_PAGE_SIZE);
+            stdio_flush();
             error = true;
             break;
         }
 
+        if (is_sector_start) {
+            DBG_HTTP_PRINT("[OTA] t=%u: Sector 0x%05X write start (erase+prog)\n",
+                           (unsigned)to_ms_since_boot(get_absolute_time()), (unsigned)flash_offset);
+            stdio_flush();
+        }
+
         if (!ota_flash_write_page(flash_offset, page_buf)) {
             DBG_HTTP_PRINT("[OTA] ERROR: flash write failed at 0x%05X\n", (unsigned)flash_offset);
+            stdio_flush();
             error = true;
             break;
+        }
+
+        if (is_sector_start) {
+            DBG_HTTP_PRINT("[OTA] t=%u: Sector 0x%05X done (%ums)\n",
+                           (unsigned)to_ms_since_boot(get_absolute_time()),
+                           (unsigned)flash_offset,
+                           (unsigned)(to_ms_since_boot(get_absolute_time()) - sector_t));
+            stdio_flush();
         }
 
         flash_offset += FLASH_PAGE_SIZE;
         total_recv   += FLASH_PAGE_SIZE;
         pages_written++;
-
-        if ((pages_written % 64) == 0) {
-            DBG_HTTP_PRINT("[OTA] Progress: %d/%d bytes\n", total_recv, content_len);
-        }
     }
 
     if (error) {
-        DBG_HTTP_PRINT("[OTA] FAILED at page %u\n", (unsigned)pages_written);
+        DBG_HTTP_PRINT("[OTA] FAILED at page %u (offset=0x%05X)\n",
+                       (unsigned)pages_written, (unsigned)flash_offset);
+        stdio_flush();
         http_send_response(sock, "500 Internal Server Error", "application/json",
                            "{\"error\":\"Flash write error\"}");
         return;
     }
 
-    DBG_HTTP_PRINT("[OTA] SUCCESS: %u pages written (%d bytes)\n",
-                   (unsigned)pages_written, total_recv);
+    uint32_t elapsed = to_ms_since_boot(get_absolute_time()) - t_start;
+    DBG_HTTP_PRINT("[OTA] SUCCESS: %u pages / %d bytes in %ums\n",
+                   (unsigned)pages_written, total_recv, (unsigned)elapsed);
+    stdio_flush();
 
-    char resp[96];
+    char resp[128];
     snprintf(resp, sizeof(resp),
-             "{\"status\":\"ok\",\"pages\":%u,\"bytes\":%d}",
-             (unsigned)pages_written, total_recv);
+             "{\"status\":\"ok\",\"pages\":%u,\"bytes\":%d,\"ms\":%u}",
+             (unsigned)pages_written, total_recv, (unsigned)elapsed);
     http_send_response(sock, "200 OK", "application/json", resp);
 
     vTaskDelay(pdMS_TO_TICKS(300));

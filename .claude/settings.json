@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python -c \":*)",
       "Bash(python convert_spa_files.py)",
-      "Bash(python convert_spa_files.py web -o static_files.c)"
+      "Bash(python convert_spa_files.py web -o static_files.c)",
+      "Bash(python convert_spa_files.py web/ -o static_files)"
     ]
   }
 }
