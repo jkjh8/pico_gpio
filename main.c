@@ -111,17 +111,6 @@ int main()
 
     // 1. 기본 초기화
     stdio_init_all();
-
-    // USB CDC 연결 대기 (최대 2000ms)
-    // 이 블록 없으면 부팅 로그가 터미널 열리기 전에 출력되어 유실됨
-    {
-        uint32_t t0 = to_ms_since_boot(get_absolute_time());
-        while (!stdio_usb_connected() &&
-               (to_ms_since_boot(get_absolute_time()) - t0) < 2000) {
-            sleep_ms(10);
-        }
-    }
-
     system_config_init();
     debug_init();
     DBG_MAIN_PRINT("System Starting...\n");

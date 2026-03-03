@@ -2545,6 +2545,21 @@
                 statusEl.textContent = `Done! ${(json.ms / 1000).toFixed(1)}s — Rebooting...`
                 otaOverlayProg.style.display = 'none'
                 showToast('Firmware upload complete! Rebooting...', 'positive')
+                // 재부팅 후 자동 리로드
+                ;(async () => {
+                  await new Promise(r => setTimeout(r, 4000))
+                  const maxWait = 30000
+                  const interval = 1000
+                  const t0 = Date.now()
+                  while (Date.now() - t0 < maxWait) {
+                    try {
+                      const r = await fetch('/api/status', { method: 'GET' })
+                      if (r.ok) { location.reload(); return }
+                    } catch (_) {}
+                    await new Promise(r => setTimeout(r, interval))
+                  }
+                  statusEl.textContent = 'Reboot timeout — please reload manually'
+                })()
                 break
               }
             }
