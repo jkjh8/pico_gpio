@@ -243,18 +243,7 @@
         border-radius: 4px;
         font-size: 0.9rem;
         font-weight: 500;
-        cursor: pointer;
-        transition: background-color 0.2s;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .btn2 {
-        border: none;
-        border-radius: 4px;
-        font-size: 0.9rem;
         padding: 8px 16px;
-        font-weight: 500;
         cursor: pointer;
         transition: background-color 0.2s;
         display: inline-flex;
@@ -282,7 +271,6 @@
         justify-content: center;
       }
       .btn-text-1 {
-        padding: 8px;
         transition: all 0.3s ease;
       }
       .btn-expand .btn-text {
@@ -318,6 +306,7 @@
       .icon-sm {
         width: 20px;
         height: 20px;
+        fill: currentColor;
       }
       .text-primary {
         color: var(--primary);
@@ -528,6 +517,74 @@
           opacity: 0;
         }
       }
+      .help-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 24px;
+        font-size: 0.75rem;
+      }
+      .help-table thead tr {
+        background-color: var(--bg-grey);
+      }
+      .help-table th,
+      .help-table td {
+        text-align: left;
+        border: 1px solid var(--border-color);
+      }
+      .help-table th {
+        padding: 8px;
+      }
+      .help-table td {
+        padding: 6px;
+      }
+      .sum-section {
+        padding: 8px 8px 8px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .field-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .section-divider {
+        margin-top: 16px;
+        border-top: 1px solid var(--border-color);
+        padding-top: 16px;
+      }
+      .fw-progress-info {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.7rem;
+        margin-bottom: 3px;
+      }
+      .fw-bar-track {
+        height: 6px;
+        background: #e0e0e0;
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .fw-bar-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--primary);
+        transition: width 0.2s;
+      }
+      .ota-bar-track {
+        height: 8px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .ota-bar-fill {
+        height: 100%;
+        width: 0%;
+        background: #fff;
+        border-radius: 4px;
+        transition: width 0.15s ease;
+      }
       @media (max-width: 600px) {
         aside {
           transform: translateX(-100%);
@@ -551,39 +608,13 @@
       <!-- OTA 전용 진행 바 (평소엔 숨김) -->
       <div
         id="ota-overlay-progress"
-        style="
-          display: none;
-          margin-top: 20px;
-          width: 260px;
-          text-align: center;
-        ">
-        <div
-          style="
-            display: flex;
-            justify-content: space-between;
-            color: #fff;
-            font-size: 0.8rem;
-            margin-bottom: 6px;
-          ">
+        style="display:none;margin-top:20px;width:260px;text-align:center">
+        <div style="display:flex;justify-content:space-between;color:#fff;font-size:0.8rem;margin-bottom:6px">
           <span id="ota-overlay-pct">0%</span>
           <span id="ota-overlay-kb">0 / 0 KB</span>
         </div>
-        <div
-          style="
-            height: 8px;
-            background: rgba(255, 255, 255, 0.3);
-            border-radius: 4px;
-            overflow: hidden;
-          ">
-          <div
-            id="ota-overlay-bar"
-            style="
-              height: 100%;
-              width: 0%;
-              background: #fff;
-              border-radius: 4px;
-              transition: width 0.15s ease;
-            "></div>
+        <div class="ota-bar-track">
+          <div id="ota-overlay-bar" class="ota-bar-fill"></div>
         </div>
       </div>
     </div>
@@ -602,12 +633,12 @@
         <div class="modal-actions">
           <button
             id="modal-cancel"
-            class="btn2 btn-flat">
+            class="btn btn-flat">
             Cancel
           </button>
           <button
             id="modal-confirm"
-            class="btn2 btn-primary">
+            class="btn btn-primary">
             Reboot
           </button>
         </div>
@@ -691,13 +722,7 @@
             <div class="card-body">
               <div class="form-group">
                 <label>Network</label>
-                <div
-                  style="
-                    padding: 8px 8px 8px 24px;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 12px;
-                  ">
+                <div class="sum-section">
                   <div class="row items-center justify-between">
                     <span>MAC Address</span>
                     <strong id="sum-mac">Loading...</strong>
@@ -726,13 +751,7 @@
               </div>
               <div class="form-group">
                 <label>Communication</label>
-                <div
-                  style="
-                    padding: 8px 8px 8px 24px;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 12px;
-                  ">
+                <div class="sum-section">
                   <div class="row items-center justify-between">
                     <span>TCP Port</span>
                     <strong id="sum-tcp">Loading...</strong>
@@ -745,13 +764,7 @@
               </div>
               <div class="form-group">
                 <label>System</label>
-                <div
-                  style="
-                    padding: 8px 8px 8px 24px;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 12px;
-                  ">
+                <div class="sum-section">
                   <div class="row items-center justify-between">
                     <span>Firmware</span>
                     <strong id="sum-fw">Loading...</strong>
@@ -768,13 +781,7 @@
               </div>
               <div class="form-group">
                 <label>GPIO Control</label>
-                <div
-                  style="
-                    padding: 8px 8px 8px 24px;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 12px;
-                  ">
+                <div class="sum-section">
                   <div class="row items-center justify-between">
                     <span>Device ID</span>
                     <strong id="sum-id">Loading...</strong>
@@ -808,7 +815,6 @@
                   <div class="row items-center gap-sm">
                     <svg
                       class="icon-sm text-primary"
-                      style="fill: var(--primary)">
                       <use href="#adjust"></use>
                     </svg>
                     <span>DHCP</span>
@@ -857,11 +863,7 @@
                 <button
                   type="submit"
                   class="btn btn-primary btn-expand">
-                  <svg
-                    class="icon"
-                    style="fill: white; width: 20px; height: 20px">
-                    <use href="#check_circle"></use>
-                  </svg>
+                  <svg class="icon-sm"><use href="#check_circle"></use></svg>
                   <span class="btn-text">Apply</span>
                 </button>
               </div>
@@ -875,12 +877,9 @@
             <form id="comm-form">
               <div class="card-body">
                 <div class="form-group">
-                  <div
-                    class="row items-center gap-sm"
-                    style="margin-bottom: 8px">
+                  <div class="field-header">
                     <svg
                       class="icon-sm text-primary"
-                      style="fill: var(--primary)">
                       <use href="#terminal"></use>
                     </svg>
                     <span>TCP PORT</span>
@@ -893,12 +892,9 @@
                     max="65535" />
                 </div>
                 <div class="form-group">
-                  <div
-                    class="row items-center gap-sm"
-                    style="margin-bottom: 8px">
+                  <div class="field-header">
                     <svg
                       class="icon-sm text-primary"
-                      style="fill: var(--primary)">
                       <use href="#terminal"></use>
                     </svg>
                     <span>RS232</span>
@@ -916,11 +912,7 @@
                 <button
                   type="submit"
                   class="btn btn-primary btn-expand">
-                  <svg
-                    class="icon"
-                    style="fill: white; width: 20px; height: 20px">
-                    <use href="#check_circle"></use>
-                  </svg>
+                  <svg class="icon-sm"><use href="#check_circle"></use></svg>
                   <span class="btn-text">Apply</span>
                 </button>
               </div>
@@ -934,12 +926,9 @@
             <form id="gpio-form">
               <div class="card-body">
                 <div class="form-group">
-                  <div
-                    class="row items-center gap-sm"
-                    style="margin-bottom: 8px">
+                  <div class="field-header">
                     <svg
                       class="icon-sm text-primary"
-                      style="fill: var(--primary)">
                       <use href="#terminal"></use>
                     </svg>
                     <span>DEVICE ID</span>
@@ -950,12 +939,9 @@
                     required />
                 </div>
                 <div class="form-group">
-                  <div
-                    class="row items-center gap-sm"
-                    style="margin-bottom: 8px">
+                  <div class="field-header">
                     <svg
                       class="icon-sm text-primary"
-                      style="fill: var(--primary)">
                       <use href="#terminal"></use>
                     </svg>
                     <span>RETURN MODE</span>
@@ -966,12 +952,9 @@
                   </select>
                 </div>
                 <div class="form-group">
-                  <div
-                    class="row items-center gap-sm"
-                    style="margin-bottom: 8px">
+                  <div class="field-header">
                     <svg
                       class="icon-sm text-primary"
-                      style="fill: var(--primary)">
                       <use href="#terminal"></use>
                     </svg>
                     <span>TRIGGER MODE</span>
@@ -982,12 +965,9 @@
                   </select>
                 </div>
                 <div class="form-group">
-                  <div
-                    class="row items-center gap-sm"
-                    style="margin-bottom: 8px">
+                  <div class="field-header">
                     <svg
                       class="icon-sm text-primary"
-                      style="fill: var(--primary)">
                       <use href="#terminal"></use>
                     </svg>
                     <span>AUTO RESPONSE</span>
@@ -1002,11 +982,7 @@
                 <button
                   type="submit"
                   class="btn btn-primary btn-expand">
-                  <svg
-                    class="icon"
-                    style="fill: white; width: 20px; height: 20px">
-                    <use href="#check_circle"></use>
-                  </svg>
+                  <svg class="icon-sm"><use href="#check_circle"></use></svg>
                   <span class="btn-text">Apply</span>
                 </button>
               </div>
@@ -1018,36 +994,9 @@
               <span class="card-title">System Actions</span>
             </div>
             <div class="card-body">
-              <div class="row items-center justify-between">
-                <div class="row items-center gap-sm">
+              <div>
+                <div class="field-header" style="margin-bottom:10px">
                   <svg class="icon-sm text-primary">
-                    <use href="#power"></use>
-                  </svg>
-                  <span>REBOOT</span>
-                </div>
-                <button
-                  id="btn-reboot"
-                  class="btn btn-primary btn-expand">
-                  <svg
-                    class="icon"
-                    style="fill: white; width: 20px; height: 20px">
-                    <use href="#power"></use>
-                  </svg>
-                  <span class="btn-text">Reboot</span>
-                </button>
-              </div>
-              <div
-                style="
-                  margin-top: 16px;
-                  border-top: 1px solid var(--border-color);
-                  padding-top: 16px;
-                ">
-                <div
-                  class="row items-center gap-sm"
-                  style="margin-bottom: 10px">
-                  <svg
-                    class="icon-sm text-primary"
-                    style="fill: var(--primary)">
                     <use href="#settings"></use>
                   </svg>
                   <span>FIRMWARE UPDATE (.bin)</span>
@@ -1065,44 +1014,32 @@
                   </button>
                 </div>
                 <!-- 진행 바 -->
-                <div
-                  id="fw-progress-wrap"
-                  style="display: none; margin-top: 8px">
-                  <div
-                    style="
-                      display: flex;
-                      justify-content: space-between;
-                      font-size: 0.7rem;
-                      margin-bottom: 3px;
-                    ">
+                <div id="fw-progress-wrap" style="display:none;margin-top:8px">
+                  <div class="fw-progress-info">
                     <span id="fw-progress-label">0%</span>
                     <span id="fw-progress-chunk">0 / 0 KB</span>
                   </div>
-                  <div
-                    style="
-                      height: 6px;
-                      background: #e0e0e0;
-                      border-radius: 3px;
-                      overflow: hidden;
-                    ">
-                    <div
-                      id="fw-progress-bar"
-                      style="
-                        height: 100%;
-                        width: 0%;
-                        background: var(--primary);
-                        transition: width 0.2s;
-                      "></div>
+                  <div class="fw-bar-track">
+                    <div id="fw-progress-bar" class="fw-bar-fill"></div>
                   </div>
                 </div>
-                <div
-                  id="fw-status"
-                  style="
-                    margin-top: 8px;
-                    font-size: 0.75rem;
-                    color: var(--primary);
-                    display: none;
-                  "></div>
+                <div id="fw-status" style="display:none;margin-top:8px;font-size:0.75rem;color:var(--primary)"></div>
+              </div>
+              <div class="section-divider">
+              <div class="row items-center justify-between">
+                <div class="row items-center gap-sm">
+                  <svg class="icon-sm text-primary">
+                    <use href="#power"></use>
+                  </svg>
+                  <span>REBOOT</span>
+                </div>
+                <button
+                  id="btn-reboot"
+                  class="btn btn-primary btn-expand">
+                  <svg class="icon-sm"><use href="#power"></use></svg>
+                  <span class="btn-text">Reboot</span>
+                </button>
+              </div>
               </div>
             </div>
           </div>
@@ -1119,127 +1056,63 @@
               <h3 style="margin-bottom: 12px; color: var(--primary)">
                 Network Commands
               </h3>
-              <table
-                style="
-                  width: 100%;
-                  border-collapse: collapse;
-                  margin-bottom: 24px;
-                  font-size: 0.75rem;
-                ">
+              <table class="help-table">
                 <thead>
-                  <tr style="background-color: var(--bg-grey)">
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                  <tr>
+                    <th>
                       Command
                     </th>
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <th>
                       Description
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>getip</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Show network configuration
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>setip,x.x.x.x</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Set IP address
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>setsubnet,x.x.x.x</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Set subnet mask
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>setgateway,x.x.x.x</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Set gateway
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>settcpport,port</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Set TCP port
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>setdhcp,on/off</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Enable/disable DHCP
                     </td>
                   </tr>
@@ -1249,79 +1122,39 @@
               <h3 style="margin-bottom: 12px; color: var(--primary)">
                 Multicast Commands
               </h3>
-              <table
-                style="
-                  width: 100%;
-                  border-collapse: collapse;
-                  margin-bottom: 24px;
-                  font-size: 0.75rem;
-                ">
+              <table class="help-table">
                 <thead>
-                  <tr style="background-color: var(--bg-grey)">
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                  <tr>
+                    <th>
                       Setting
                     </th>
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <th>
                       Value
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <strong>Multicast Group</strong>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       239.224.0.1
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <strong>UDP Port</strong>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       9000 (TX/RX)
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <strong>Description</strong>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Device-to-device communication via UDP multicast. All GPIO
                       commands are supported. Devices automatically broadcast
                       GPIO state changes to the multicast group.
@@ -1333,63 +1166,31 @@
               <h3 style="margin-bottom: 12px; color: var(--primary)">
                 UART Commands
               </h3>
-              <table
-                style="
-                  width: 100%;
-                  border-collapse: collapse;
-                  margin-bottom: 24px;
-                  font-size: 0.75rem;
-                ">
+              <table class="help-table">
                 <thead>
-                  <tr style="background-color: var(--bg-grey)">
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                  <tr>
+                    <th>
                       Command
                     </th>
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <th>
                       Description
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>getuartconfig</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Show UART configuration
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>setuartbaud,rate</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Set UART baud rate
                     </td>
                   </tr>
@@ -1399,98 +1200,50 @@
               <h3 style="margin-bottom: 12px; color: var(--primary)">
                 GPIO Control - All Channels
               </h3>
-              <table
-                style="
-                  width: 100%;
-                  border-collapse: collapse;
-                  margin-bottom: 24px;
-                  font-size: 0.75rem;
-                ">
+              <table class="help-table">
                 <thead>
-                  <tr style="background-color: var(--bg-grey)">
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                  <tr>
+                    <th>
                       Command
                     </th>
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <th>
                       Description
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>getins,id</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Get all 16 inputs (CHANNEL: in,id,binary / BYTES:
                       ins,id,low,high)
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>getouts,id</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Get all 16 outputs (CHANNEL: out,id,binary / BYTES:
                       outs,id,low,high)
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>sets,id,binary</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Set all 16 outputs with binary (id:0=all, e.g.,
                       sets,1,1010101010101010)
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>setb,id,low,high</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Set all 16 outputs with 2 bytes (id:0=all, e.g.,
                       setb,1,255,128)
                     </td>
@@ -1501,79 +1254,39 @@
               <h3 style="margin-bottom: 12px; color: var(--primary)">
                 GPIO Control - Single Channel
               </h3>
-              <table
-                style="
-                  width: 100%;
-                  border-collapse: collapse;
-                  margin-bottom: 24px;
-                  font-size: 0.75rem;
-                ">
+              <table class="help-table">
                 <thead>
-                  <tr style="background-color: var(--bg-grey)">
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                  <tr>
+                    <th>
                       Command
                     </th>
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <th>
                       Description
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>set,id,ch,val</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Set single output (id:0=all/1-254, ch:1-16, val:0/1)
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>getin,id,ch</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Get single input (returns: true/false)
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>getout,id,ch</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Get single output (returns: true/false)
                     </td>
                   </tr>
@@ -1583,143 +1296,71 @@
               <h3 style="margin-bottom: 12px; color: var(--primary)">
                 Device Configuration
               </h3>
-              <table
-                style="
-                  width: 100%;
-                  border-collapse: collapse;
-                  margin-bottom: 24px;
-                  font-size: 0.75rem;
-                ">
+              <table class="help-table">
                 <thead>
-                  <tr style="background-color: var(--bg-grey)">
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                  <tr>
+                    <th>
                       Command
                     </th>
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <th>
                       Description
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>getid</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Get device ID
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>setid,id</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Set device ID (1-254)
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>getgpioconfig</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Get all GPIO configuration
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>setrtmode,bytes/channel</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Set return mode
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>getrtmode</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Get return mode
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>settriggermode,toggle/trigger</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Set trigger mode
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>gettriggermode</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Get trigger mode
                     </td>
                   </tr>
@@ -1729,111 +1370,55 @@
               <h3 style="margin-bottom: 12px; color: var(--primary)">
                 System Commands
               </h3>
-              <table
-                style="
-                  width: 100%;
-                  border-collapse: collapse;
-                  margin-bottom: 24px;
-                  font-size: 0.75rem;
-                ">
+              <table class="help-table">
                 <thead>
-                  <tr style="background-color: var(--bg-grey)">
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                  <tr>
+                    <th>
                       Command
                     </th>
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <th>
                       Description
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>setautoresponse,0/1</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Enable/Disable auto response
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>getautoresponse</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Get auto response status
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>factoryreset</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Factory reset
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>restart</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Restart system
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>help</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Show this help
                     </td>
                   </tr>
@@ -1843,95 +1428,47 @@
               <h3 style="margin-bottom: 12px; color: var(--primary)">
                 Feedback Messages
               </h3>
-              <table
-                style="
-                  width: 100%;
-                  border-collapse: collapse;
-                  margin-bottom: 12px;
-                  font-size: 0.75rem;
-                ">
+              <table class="help-table">
                 <thead>
-                  <tr style="background-color: var(--bg-grey)">
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                  <tr>
+                    <th>
                       Message
                     </th>
-                    <th
-                      style="
-                        padding: 8px;
-                        text-align: left;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <th>
                       Description
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>in,id,ch,val</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Input change (CHANNEL mode)
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>inb,id,low,high</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Input change (BYTES mode)
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>out,id,binary</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Output feedback (CHANNEL mode)
                     </td>
                   </tr>
                   <tr>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       <code>outb,id,low,high</code>
                     </td>
-                    <td
-                      style="
-                        padding: 6px;
-                        border: 1px solid var(--border-color);
-                      ">
+                    <td>
                       Output feedback (BYTES mode)
                     </td>
                   </tr>
@@ -1986,18 +1523,8 @@
                     font-family: 'Courier New', monospace;
                     font-size: 0.75rem;
                   " />
-                <button
-                  id="btn-send-cmd"
-                  class="btn btn-primary"
-                  style="padding: 8px 16px">
-                  <span>Send</span>
-                </button>
-                <button
-                  id="btn-clear-terminal"
-                  class="btn btn-flat"
-                  style="padding: 8px 16px">
-                  <span>Clear</span>
-                </button>
+                <button id="btn-send-cmd" class="btn btn-primary">Send</button>
+                <button id="btn-clear-terminal" class="btn btn-flat">Clear</button>
               </div>
             </div>
           </div>
@@ -2082,27 +1609,29 @@
     </svg>
     <script>
       const state = { network: {}, comm: {}, gpio: {} }
+      const $ = (id) => document.getElementById(id)
+      function setEl(id, val) { const el = $(id); if (el) el.textContent = val }
+      function setVal(id, val) { const el = $(id); if (el) el.value = val }
       function showLoading(msg = 'Loading...') {
-        document.getElementById('loading-message').textContent = msg
-        document.getElementById('loading-overlay').classList.remove('hidden')
+        $('loading-message').textContent = msg
+        $('loading-overlay').classList.remove('hidden')
       }
       function hideLoading() {
-        document.getElementById('loading-overlay').classList.add('hidden')
+        $('loading-overlay').classList.add('hidden')
       }
       function showToast(message, type = 'positive') {
-        const container = document.getElementById('toast-container')
         const toast = document.createElement('div')
         toast.className = `toast ${type}`
         const iconId = type === 'positive' ? 'check_circle' : 'cancel'
-        toast.innerHTML = `<svg class="icon-sm" style="fill:white"><use href="#${iconId}"></use></svg><span>${message}</span>`
-        container.appendChild(toast)
+        toast.innerHTML = `<svg class="icon-sm"><use href="#${iconId}"></use></svg><span>${message}</span>`
+        $('toast-container').appendChild(toast)
         setTimeout(() => toast.remove(), 1000)
       }
       function showConfirmModal() {
-        const modal = document.getElementById('confirm-modal')
+        const modal = $('confirm-modal')
         modal.classList.remove('hidden')
-        const cancelBtn = document.getElementById('modal-cancel')
-        const confirmBtn = document.getElementById('modal-confirm')
+        const cancelBtn = $('modal-cancel')
+        const confirmBtn = $('modal-confirm')
         const handleCancel = () => {
           modal.classList.add('hidden')
           cleanup()
@@ -2151,75 +1680,47 @@
 
           // Network data
           state.network = data.network || {}
-          const hm = document.getElementById('header-mac')
-          if (hm) hm.textContent = state.network.mac || 'N/A'
-          const nd = document.getElementById('net-dhcp')
+          const net = state.network
+          setEl('header-mac', net.mac || 'N/A')
+          const nd = $('net-dhcp')
           if (nd) {
-            nd.checked = state.network.dhcp_enabled
-            const ni = document.getElementById('net-ip')
-            const nm = document.getElementById('net-mask')
-            const ng = document.getElementById('net-gateway')
-            const ndn = document.getElementById('net-dns')
-            if (ni) ni.value = state.network.ip || ''
-            if (nm) nm.value = state.network.subnet || ''
-            if (ng) ng.value = state.network.gateway || ''
-            if (ndn) ndn.value = state.network.dns || ''
-            toggleNetworkInputs(state.network.dhcp_enabled)
+            nd.checked = net.dhcp_enabled
+            setVal('net-ip', net.ip || '')
+            setVal('net-mask', net.subnet || '')
+            setVal('net-gateway', net.gateway || '')
+            setVal('net-dns', net.dns || '')
+            toggleNetworkInputs(net.dhcp_enabled)
           }
-          const si = document.getElementById('sum-ip')
-          if (si) si.textContent = state.network.ip || 'N/A'
-          const sm = document.getElementById('sum-mac')
-          if (sm) sm.textContent = state.network.mac || 'N/A'
-          const sd = document.getElementById('sum-dhcp')
-          if (sd)
-            sd.textContent = state.network.dhcp_enabled ? 'Enabled' : 'Disabled'
-          const smask = document.getElementById('sum-mask')
-          if (smask) smask.textContent = state.network.subnet || 'N/A'
-          const sg = document.getElementById('sum-gateway')
-          if (sg) sg.textContent = state.network.gateway || 'N/A'
-          const sdn = document.getElementById('sum-dns')
-          if (sdn) sdn.textContent = state.network.dns || 'N/A'
+          setEl('sum-mac', net.mac || 'N/A')
+          setEl('sum-dhcp', net.dhcp_enabled ? 'Enabled' : 'Disabled')
+          setEl('sum-ip', net.ip || 'N/A')
+          setEl('sum-mask', net.subnet || 'N/A')
+          setEl('sum-gateway', net.gateway || 'N/A')
+          setEl('sum-dns', net.dns || 'N/A')
 
           // Control data
           state.comm = data.control
-          const ct = document.getElementById('comm-tcp')
-          if (ct) ct.value = data.control.tcp_port
-          const cb = document.getElementById('comm-baud')
-          if (cb) cb.value = data.control.rs232_1_baud
-          const st = document.getElementById('sum-tcp')
-          if (st) st.textContent = data.control.tcp_port
-          const sb = document.getElementById('sum-baud')
-          if (sb) sb.textContent = data.control.rs232_1_baud
+          setVal('comm-tcp', data.control.tcp_port)
+          setVal('comm-baud', data.control.rs232_1_baud)
+          setEl('sum-tcp', data.control.tcp_port)
+          setEl('sum-baud', data.control.rs232_1_baud)
 
           // Firmware version
           if (data.firmware_version) {
-            const hv = document.getElementById('header-version')
-            if (hv) hv.textContent = 'v' + data.firmware_version
-            const sfv = document.getElementById('sum-fw')
-            if (sfv) sfv.textContent = data.firmware_version
+            setEl('header-version', 'v' + data.firmware_version)
+            setEl('sum-fw', data.firmware_version)
           }
-          if (data.build_time) {
-            const sfb = document.getElementById('sum-fw-build')
-            if (sfb) sfb.textContent = data.build_time
-          }
+          if (data.build_time) setEl('sum-fw-build', data.build_time)
 
           // GPIO data
           state.gpio = data.gpio
-          const gi = document.getElementById('gpio-id')
-          if (gi) gi.value = data.gpio.device_id
-          const gm = document.getElementById('gpio-mode')
-          if (gm) gm.value = data.gpio.rt_mode
-          const gt = document.getElementById('gpio-trigger')
-          if (gt) gt.value = data.gpio.trigger_mode
-          const ga = document.getElementById('gpio-auto')
-          if (ga) ga.value = data.gpio.auto_response.toString()
-          const sid = document.getElementById('sum-id')
-          if (sid) sid.textContent = data.gpio.device_id
-          const smode = document.getElementById('sum-mode')
-          if (smode) smode.textContent = data.gpio.rt_mode.toUpperCase()
-          const strigger = document.getElementById('sum-trigger')
-          if (strigger)
-            strigger.textContent = data.gpio.trigger_mode.toUpperCase()
+          setVal('gpio-id', data.gpio.device_id)
+          setVal('gpio-mode', data.gpio.rt_mode)
+          setVal('gpio-trigger', data.gpio.trigger_mode)
+          setVal('gpio-auto', data.gpio.auto_response.toString())
+          setEl('sum-id', data.gpio.device_id)
+          setEl('sum-mode', data.gpio.rt_mode.toUpperCase())
+          setEl('sum-trigger', data.gpio.trigger_mode.toUpperCase())
         } catch (e) {
           console.error(e)
           showToast('Failed to fetch data', 'negative')
@@ -2235,7 +1736,7 @@
           document
             .querySelectorAll('.page')
             .forEach((p) => p.classList.add('hidden'))
-          document.getElementById('page-' + page).classList.remove('hidden')
+          $('page-' + page).classList.remove('hidden')
         })
       })
       document
@@ -2243,13 +1744,13 @@
         .addEventListener('submit', async (e) => {
           e.preventDefault()
           showLoading('Applying Network Settings...')
-          const dhcp = document.getElementById('net-dhcp').checked
+          const dhcp = $('net-dhcp').checked
           const payload = {
             dhcp_enabled: dhcp,
-            ip: dhcp ? '' : document.getElementById('net-ip').value,
-            subnet: dhcp ? '' : document.getElementById('net-mask').value,
-            gateway: dhcp ? '' : document.getElementById('net-gateway').value,
-            dns: dhcp ? '' : document.getElementById('net-dns').value,
+            ip: dhcp ? '' : $('net-ip').value,
+            subnet: dhcp ? '' : $('net-mask').value,
+            gateway: dhcp ? '' : $('net-gateway').value,
+            dns: dhcp ? '' : $('net-dns').value,
             mac: state.network.mac
           }
           try {
@@ -2269,10 +1770,10 @@
             hideLoading()
           }
         })
-      document.getElementById('net-dhcp').addEventListener('change', (e) => {
+      $('net-dhcp').addEventListener('change', (e) => {
         toggleNetworkInputs(e.target.checked)
       })
-      document.getElementById('btn-reboot').addEventListener('click', () => {
+      $('btn-reboot').addEventListener('click', () => {
         showConfirmModal()
       })
       document
@@ -2281,8 +1782,8 @@
           e.preventDefault()
           showLoading('Applying Control Settings...')
           const payload = {
-            tcp_port: parseInt(document.getElementById('comm-tcp').value),
-            rs232_1_baud: parseInt(document.getElementById('comm-baud').value)
+            tcp_port: parseInt($('comm-tcp').value),
+            rs232_1_baud: parseInt($('comm-baud').value)
           }
           try {
             const res = await fetch('/api/control', {
@@ -2307,10 +1808,10 @@
           e.preventDefault()
           showLoading('Applying GPIO Settings...')
           const payload = {
-            device_id: parseInt(document.getElementById('gpio-id').value),
-            rt_mode: document.getElementById('gpio-mode').value,
-            trigger_mode: document.getElementById('gpio-trigger').value,
-            auto_response: document.getElementById('gpio-auto').value === 'true'
+            device_id: parseInt($('gpio-id').value),
+            rt_mode: $('gpio-mode').value,
+            trigger_mode: $('gpio-trigger').value,
+            auto_response: $('gpio-auto').value === 'true'
           }
           try {
             const res = await fetch('/api/gpio', {
@@ -2328,10 +1829,10 @@
         })
 
       // Terminal functionality
-      const terminalOutput = document.getElementById('terminal-output')
-      const terminalInput = document.getElementById('terminal-input')
-      const btnSendCmd = document.getElementById('btn-send-cmd')
-      const btnClearTerminal = document.getElementById('btn-clear-terminal')
+      const terminalOutput = $('terminal-output')
+      const terminalInput = $('terminal-input')
+      const btnSendCmd = $('btn-send-cmd')
+      const btnClearTerminal = $('btn-clear-terminal')
       let commandHistory = []
       let historyIndex = -1
 
@@ -2433,7 +1934,7 @@
       document
         .getElementById('btn-fw-upload')
         .addEventListener('click', async () => {
-          const fileInput = document.getElementById('fw-file')
+          const fileInput = $('fw-file')
           const file = fileInput.files[0]
           if (!file) {
             showToast('Please select a BIN file', 'negative')
@@ -2458,12 +1959,16 @@
           // W5500 HTTP RX 4KB: 헤더(~150B) + multipart overhead(~300B) + 3072B ≈ 3522B < 4096B
           const PAGE_SIZE = 256
 
-          const statusEl = document.getElementById('fw-status')
-          const progressW = document.getElementById('fw-progress-wrap')
-          const progressB = document.getElementById('fw-progress-bar')
-          const progressL = document.getElementById('fw-progress-label')
-          const progressC = document.getElementById('fw-progress-chunk')
-          const btnUpload = document.getElementById('btn-fw-upload')
+          const statusEl = $('fw-status')
+          const progressW = $('fw-progress-wrap')
+          const progressB = $('fw-progress-bar')
+          const progressL = $('fw-progress-label')
+          const progressC = $('fw-progress-chunk')
+          const btnUpload = $('btn-fw-upload')
+          const otaOverlayProg = $('ota-overlay-progress')
+          const otaOverlayBar = $('ota-overlay-bar')
+          const otaOverlayPct = $('ota-overlay-pct')
+          const otaOverlayKb = $('ota-overlay-kb')
 
           // 256 배수로 패딩
           const rawBuf = await file.arrayBuffer()
@@ -2471,74 +1976,49 @@
           const buf = new Uint8Array(padLen)
           buf.set(new Uint8Array(rawBuf))
           const total = buf.byteLength
+          const kbTotal = (total / 1024).toFixed(1)
+
+          function updateProgress(pct, kbWritten) {
+            const pctStr = pct + '%'
+            const kbStr = `${kbWritten} / ${kbTotal} KB`
+            progressB.style.width = pctStr
+            progressL.textContent = pctStr
+            progressC.textContent = kbStr
+            statusEl.textContent = `업로드 중... ${pctStr}`
+            otaOverlayBar.style.width = pctStr
+            otaOverlayPct.textContent = pctStr
+            otaOverlayKb.textContent = kbStr
+            $('loading-message').textContent = `Firmware Uploading... ${pctStr}`
+          }
 
           statusEl.style.display = 'block'
           statusEl.style.color = 'var(--primary)'
-          statusEl.textContent = `Preparing upload... (${(total / 1024).toFixed(1)} KB)`
+          statusEl.textContent = `Preparing upload... (${kbTotal} KB)`
           progressW.style.display = 'block'
-          progressB.style.width = '0%'
-          progressL.textContent = '0%'
-          progressC.textContent = `0 / ${(total / 1024).toFixed(1)} KB`
+          updateProgress(0, '0')
           btnUpload.disabled = true
-          showLoading(`Firmware Uploading...`)
-
-          // 오버레이 내 진행 바 표시
-          const otaOverlayProg = document.getElementById('ota-overlay-progress')
-          const otaOverlayBar = document.getElementById('ota-overlay-bar')
-          const otaOverlayPct = document.getElementById('ota-overlay-pct')
-          const otaOverlayKb = document.getElementById('ota-overlay-kb')
-          otaOverlayBar.style.width = '0%'
-          otaOverlayPct.textContent = '0%'
-          otaOverlayKb.textContent = `0 / ${(total / 1024).toFixed(1)} KB`
+          showLoading('Firmware Uploading...')
           otaOverlayProg.style.display = 'block'
 
           try {
             for (let offset = 0; offset < total; offset += CHUNK_SIZE) {
-              const slice = buf.slice(
-                offset,
-                Math.min(offset + CHUNK_SIZE, total)
-              )
+              const slice = buf.slice(offset, Math.min(offset + CHUNK_SIZE, total))
               const formData = new FormData()
               formData.append('offset', String(offset))
               if (offset === 0) formData.append('total', String(total))
-              formData.append(
-                'firmware',
-                new Blob([slice], { type: 'application/octet-stream' }),
-                'chunk.bin'
-              )
+              formData.append('firmware', new Blob([slice], { type: 'application/octet-stream' }), 'chunk.bin')
 
-              const res = await fetch('/api/ota/chunk', {
-                method: 'POST',
-                body: formData
-              })
+              const res = await fetch('/api/ota/chunk', { method: 'POST', body: formData })
 
               if (!res.ok) {
                 let msg = 'Chunk upload failed'
-                try {
-                  const e = await res.json()
-                  msg = e.error || msg
-                } catch (_) {}
+                try { const e = await res.json(); msg = e.error || msg } catch (_) {}
                 throw new Error(msg)
               }
 
               const json = await res.json()
               const written = offset + slice.byteLength
-              const pct = Math.round((written / total) * 100)
-              const kbWritten = (written / 1024).toFixed(1)
-              const kbTotal = (total / 1024).toFixed(1)
-
-              // 페이지 내 진행 바
-              progressB.style.width = pct + '%'
-              progressL.textContent = pct + '%'
-              progressC.textContent = `${kbWritten} / ${kbTotal} KB`
-              statusEl.textContent = `업로드 중... ${pct}%`
-
-              // 오버레이 진행 바
-              otaOverlayBar.style.width = pct + '%'
-              otaOverlayPct.textContent = pct + '%'
-              otaOverlayKb.textContent = `${kbWritten} / ${kbTotal} KB`
-              document.getElementById('loading-message').textContent =
-                `Firmware Uploading... ${pct}%`
+              updateProgress(Math.round((written / total) * 100), (written / 1024).toFixed(1))
 
               if (json.status === 'done') {
                 statusEl.style.color = 'var(--positive)'
