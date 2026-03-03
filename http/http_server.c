@@ -215,6 +215,16 @@ static void http_handle_request(uint8_t sock, char* request, int len) {
                     if (ilen < 0) ilen = 0;
                 }
                 http_handle_post_update(sock, ibody, ilen, clen);
+            } else if (strcmp(path, "/api/ota/chunk") == 0) {
+                int clen = parse_content_length(request);
+                const uint8_t *ibody = body ? (const uint8_t *)body : NULL;
+                int ilen = 0;
+                if (body) {
+                    ilen = (int)(request + len - body);
+                    if (ilen < 0) ilen = 0;
+                    if (clen > 0 && ilen > clen) ilen = clen;
+                }
+                http_handle_post_ota_chunk(sock, request, ibody, ilen);
             } else if (body) {
                 http_handle_api_post(sock, path, body);
             } else {
@@ -247,19 +257,57 @@ void http_server_process(void) {
     for (int i = 0; i < HTTP_SOCKET_COUNT; i++) {
         uint8_t sock = http_sockets[i];
         uint8_t status = getSn_SR(sock);
-        
+
         switch (status) {
             case SOCK_ESTABLISHED: {
-                int len = getSn_RX_RSR(sock);
-                if (len > 0) {
-                    if (len > HTTP_BUFFER_SIZE - 1) len = HTTP_BUFFER_SIZE - 1;
-                    len = recv(sock, (uint8_t*)buffer, len);
-                    if (len > 0) {
-                        buffer[len] = '\0';
-                        http_handle_request(sock, buffer, len);
-                    }
-                    disconnect(sock);
+                // 데이터가 들어올 때까지 최대 300ms 대기 (busy-wait, no vTaskDelay)
+                uint16_t len = 0;
+                uint32_t t0 = to_ms_since_boot(get_absolute_time());
+                while (len == 0) {
+                    len = getSn_RX_RSR(sock);
+                    if (len > 0) break;
+                    if ((to_ms_since_boot(get_absolute_time()) - t0) > 300) break;
                 }
+                if (len == 0) break;
+
+                if (len > HTTP_BUFFER_SIZE - 1) len = HTTP_BUFFER_SIZE - 1;
+                int rlen = recv(sock, (uint8_t*)buffer, len);
+                if (rlen <= 0) { disconnect(sock); break; }
+                buffer[rlen] = '\0';
+
+                // ── TCP 분할 수신 보완 ──────────────────────────────────────
+                // W5500 RX 버퍼가 2KB이고 TCP는 패킷을 분할할 수 있으므로
+                // Content-Length 만큼 body가 다 올 때까지 추가 수신 대기.
+                // ex) 헤더 첫 세그먼트 479B 수신, 나머지 331B는 다음 세그먼트
+                {
+                    int clen2 = parse_content_length(buffer);
+                    if (clen2 > 0) {
+                        char *bp = strstr(buffer, "\r\n\r\n");
+                        if (bp) {
+                            int hdr_len      = (int)(bp + 4 - buffer);
+                            int body_recvd   = rlen - hdr_len;
+                            uint32_t t1      = to_ms_since_boot(get_absolute_time());
+                            while (body_recvd < clen2 &&
+                                   rlen < HTTP_BUFFER_SIZE - 1) {
+                                if ((to_ms_since_boot(get_absolute_time()) - t1) > 2000)
+                                    break; // 2초 타임아웃
+                                uint16_t avail = getSn_RX_RSR(sock);
+                                if (avail == 0) continue; // busy-wait
+                                int space   = HTTP_BUFFER_SIZE - 1 - rlen;
+                                int to_read = ((int)avail < space) ? (int)avail : space;
+                                if (to_read <= 0) break;
+                                int n = recv(sock, (uint8_t*)buffer + rlen, to_read);
+                                if (n <= 0) break;
+                                rlen += n;
+                                buffer[rlen] = '\0';
+                                body_recvd = rlen - hdr_len;
+                            }
+                        }
+                    }
+                }
+
+                http_handle_request(sock, buffer, rlen);
+                disconnect(sock);
                 break;
             }
             case SOCK_CLOSE_WAIT:

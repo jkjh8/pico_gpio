@@ -388,8 +388,9 @@ void http_handle_get_all(uint8_t sock) {
     cJSON_AddNumberToObject(control, "rs232_1_baud", uart_baud);
     cJSON_AddItemToObject(root, "control", control);
     
-    // 펌웨어 버전
+    // 펌웨어 버전 + 빌드 타임스탬프
     cJSON_AddStringToObject(root, "firmware_version", FIRMWARE_VERSION);
+    cJSON_AddStringToObject(root, "build_time", __DATE__ " " __TIME__);
 
     char* json_str = cJSON_PrintUnformatted(root);
     send_json_response(sock, json_str);

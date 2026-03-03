@@ -1,6 +1,7 @@
 #include "main.h"
 #include "handlers/command_handler.h"
 #include "system/system_config.h"
+#include "system/ota_boot.h"
 #include "led/status_led.h"
 #include "http/http_server.h"
 #include "network/mdns.h"
@@ -10,6 +11,7 @@
 #include "lib/wiznet/socket.h"
 #include <stdio.h>
 #include "pico/stdio.h"
+#include "pico/stdio_usb.h"
 #include <string.h>
 #include "FreeRTOS.h"
 #include "task.h"
@@ -25,6 +27,13 @@
 
 QueueHandle_t gpio_queues[MAX_GPIO_QUEUES] = {NULL};
 bool gpio_queues_enabled[MAX_GPIO_QUEUES] = {false};
+
+// 전역 태스크 핸들 (OTA 등에서 일시 정지 용)
+TaskHandle_t h_task_network = NULL;
+TaskHandle_t h_task_gpio    = NULL;
+TaskHandle_t h_task_uart    = NULL;
+TaskHandle_t h_task_usb     = NULL;
+TaskHandle_t h_task_led     = NULL;
 
 // =============================================================================
 // 시스템 재시작 관리
@@ -54,6 +63,27 @@ void system_restart(void) {
 }
 
 // =============================================================================
+// OTA 태스크 일시 정지 / 재개
+// HTTP 태스크는 FreeRTOS task가 아니라 network_task 내부 루프이므로
+// network_task를 포함한 나머지 태스크만 suspend.
+// LED는 GPIO 직접 제어로 대체하기 때문에 함께 정지.
+// =============================================================================
+void ota_suspend_all_tasks(void) {
+    if (h_task_gpio)    vTaskSuspend(h_task_gpio);
+    if (h_task_uart)    vTaskSuspend(h_task_uart);
+    if (h_task_usb)     vTaskSuspend(h_task_usb);
+    if (h_task_led)     vTaskSuspend(h_task_led);
+    // network_task는 현재 HTTP 핸들러를 실행 중인 태스크이므로 정지하지 않음
+}
+
+void ota_resume_all_tasks(void) {
+    if (h_task_gpio)    vTaskResume(h_task_gpio);
+    if (h_task_uart)    vTaskResume(h_task_uart);
+    if (h_task_usb)     vTaskResume(h_task_usb);
+    if (h_task_led)     vTaskResume(h_task_led);
+}
+
+// =============================================================================
 // FreeRTOS Hook Functions
 // =============================================================================
 
@@ -75,8 +105,23 @@ void vApplicationMallocFailedHook(void) {
 
 int main()
 {
+    // ── AB 듀얼뱅크 부트 확인 (FreeRTOS/stdio 시작 전) ───────────────────
+    // Bank B 적용 플래그가 있으면 B→A 복사 후 watchdog 재부팅 (리턴 안 함)
+    ota_boot_check();
+
     // 1. 기본 초기화
     stdio_init_all();
+
+    // USB CDC 연결 대기 (최대 2000ms)
+    // 이 블록 없으면 부팅 로그가 터미널 열리기 전에 출력되어 유실됨
+    {
+        uint32_t t0 = to_ms_since_boot(get_absolute_time());
+        while (!stdio_usb_connected() &&
+               (to_ms_since_boot(get_absolute_time()) - t0) < 2000) {
+            sleep_ms(10);
+        }
+    }
+
     system_config_init();
     debug_init();
     DBG_MAIN_PRINT("System Starting...\n");
@@ -115,11 +160,11 @@ int main()
         DBG_MAIN_PRINT("GPIO message queues created (UART + TCP + MCAST, size=%d)\n", GPIO_QUEUE_SIZE);
     }
 
-    xTaskCreate(network_task, "Network", 2048, NULL, 4, NULL);
-    xTaskCreate(gpio_task, "GPIO", 1024, NULL, 3, NULL);
-    xTaskCreate(uart_task, "UART", 1024, NULL, 3, NULL);
-    xTaskCreate(usb_task, "USB", 1024, NULL, 3, NULL);
-    xTaskCreate(led_task, "LED", 256, NULL, 2, NULL);
+    xTaskCreate(network_task, "Network", 2048, NULL, 4, &h_task_network);
+    xTaskCreate(gpio_task,    "GPIO",    1024, NULL, 3, &h_task_gpio);
+    xTaskCreate(uart_task,    "UART",    1024, NULL, 3, &h_task_uart);
+    xTaskCreate(usb_task,     "USB",     1024, NULL, 3, &h_task_usb);
+    xTaskCreate(led_task,     "LED",     256,  NULL, 2, &h_task_led);
 
     DBG_MAIN_PRINT("Starting FreeRTOS scheduler...\n");
 

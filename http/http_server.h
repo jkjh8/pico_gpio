@@ -7,7 +7,7 @@
 // HTTP 서버 설정
 #define HTTP_PORT 80
 #define HTTP_MAX_CLIENTS 4
-#define HTTP_BUFFER_SIZE 2048
+#define HTTP_BUFFER_SIZE 4096
 
 // HTTP 응답 전송
 void http_send_response(uint8_t sock, const char* status, const char* content_type, const char* body);

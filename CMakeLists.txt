@@ -61,6 +61,7 @@ add_executable(main
     gpio/gpio.c
     led/status_led.c
     system/system_config.c
+    system/ota_boot.c
 )
 
 # define W5500 chip for all source files
@@ -98,7 +99,6 @@ pico_enable_stdio_usb(main 1)
 target_link_libraries(main
         pico_stdlib
         pico_unique_id
-        pico_multicore
         hardware_spi
         hardware_gpio
         hardware_flash

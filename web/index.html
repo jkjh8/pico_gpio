@@ -548,6 +548,44 @@
         style="margin-top: 64px; font-weight: 500">
         Loading...
       </div>
+      <!-- OTA 전용 진행 바 (평소엔 숨김) -->
+      <div
+        id="ota-overlay-progress"
+        style="
+          display: none;
+          margin-top: 20px;
+          width: 260px;
+          text-align: center;
+        ">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            color: #fff;
+            font-size: 0.8rem;
+            margin-bottom: 6px;
+          ">
+          <span id="ota-overlay-pct">0%</span>
+          <span id="ota-overlay-kb">0 / 0 KB</span>
+        </div>
+        <div
+          style="
+            height: 8px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            overflow: hidden;
+          ">
+          <div
+            id="ota-overlay-bar"
+            style="
+              height: 100%;
+              width: 0%;
+              background: #fff;
+              border-radius: 4px;
+              transition: width 0.15s ease;
+            "></div>
+        </div>
+      </div>
     </div>
     <div id="toast-container"></div>
     <div
@@ -717,6 +755,14 @@
                   <div class="row items-center justify-between">
                     <span>Firmware</span>
                     <strong id="sum-fw">Loading...</strong>
+                  </div>
+                  <div class="row items-center justify-between">
+                    <span>Build</span>
+                    <strong
+                      id="sum-fw-build"
+                      style="font-size: 0.7rem; color: #666">
+                      -
+                    </strong>
                   </div>
                 </div>
               </div>
@@ -1017,6 +1063,37 @@
                     class="btn btn-primary">
                     <span class="btn-text-1">Upload</span>
                   </button>
+                </div>
+                <!-- 진행 바 -->
+                <div
+                  id="fw-progress-wrap"
+                  style="display: none; margin-top: 8px">
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      font-size: 0.7rem;
+                      margin-bottom: 3px;
+                    ">
+                    <span id="fw-progress-label">0%</span>
+                    <span id="fw-progress-chunk">0 / 0 KB</span>
+                  </div>
+                  <div
+                    style="
+                      height: 6px;
+                      background: #e0e0e0;
+                      border-radius: 3px;
+                      overflow: hidden;
+                    ">
+                    <div
+                      id="fw-progress-bar"
+                      style="
+                        height: 100%;
+                        width: 0%;
+                        background: var(--primary);
+                        transition: width 0.2s;
+                      "></div>
+                  </div>
                 </div>
                 <div
                   id="fw-status"
@@ -2121,6 +2198,10 @@
             const sfv = document.getElementById('sum-fw')
             if (sfv) sfv.textContent = data.firmware_version
           }
+          if (data.build_time) {
+            const sfb = document.getElementById('sum-fw-build')
+            if (sfb) sfb.textContent = data.build_time
+          }
 
           // GPIO data
           state.gpio = data.gpio
@@ -2348,58 +2429,132 @@
           '<div style="margin-top: 8px;">></div>'
       })
 
-      // Firmware OTA Upload
+      // Firmware OTA Upload — 청크 방식 (/api/ota/chunk, 1536B/req)
       document
         .getElementById('btn-fw-upload')
         .addEventListener('click', async () => {
           const fileInput = document.getElementById('fw-file')
           const file = fileInput.files[0]
           if (!file) {
-            showToast('BIN 파일을 선택하세요', 'negative')
+            showToast('Please select a BIN file', 'negative')
             return
           }
           if (!file.name.toLowerCase().endsWith('.bin')) {
-            showToast('.bin 파일만 업로드 가능합니다', 'negative')
+            showToast('Only .bin files can be uploaded', 'negative')
+            return
+          }
+          if (file.size === 0) {
+            showToast('The selected file is empty', 'negative')
             return
           }
           if (
             !confirm(
-              '펌웨어를 업데이트하면 기기가 재부팅됩니다.\n계속하시겠습니까?'
+              'Updating the firmware will reboot the device.\nDo you want to continue?'
             )
           )
             return
 
+          const CHUNK_SIZE = 3072 // OTA_CHUNK_PAGES(12) * 256 = 3072B
+          // W5500 HTTP RX 4KB: 헤더(~150B) + multipart overhead(~300B) + 3072B ≈ 3522B < 4096B
+          const PAGE_SIZE = 256
+
           const statusEl = document.getElementById('fw-status')
+          const progressW = document.getElementById('fw-progress-wrap')
+          const progressB = document.getElementById('fw-progress-bar')
+          const progressL = document.getElementById('fw-progress-label')
+          const progressC = document.getElementById('fw-progress-chunk')
+          const btnUpload = document.getElementById('btn-fw-upload')
+
+          // 256 배수로 패딩
+          const rawBuf = await file.arrayBuffer()
+          const padLen = Math.ceil(rawBuf.byteLength / PAGE_SIZE) * PAGE_SIZE
+          const buf = new Uint8Array(padLen)
+          buf.set(new Uint8Array(rawBuf))
+          const total = buf.byteLength
+
           statusEl.style.display = 'block'
           statusEl.style.color = 'var(--primary)'
-          statusEl.textContent = `업로드 중... (${(file.size / 1024).toFixed(1)} KB)`
-          showLoading('Uploading firmware...')
+          statusEl.textContent = `Preparing upload... (${(total / 1024).toFixed(1)} KB)`
+          progressW.style.display = 'block'
+          progressB.style.width = '0%'
+          progressL.textContent = '0%'
+          progressC.textContent = `0 / ${(total / 1024).toFixed(1)} KB`
+          btnUpload.disabled = true
+          showLoading(`Firmware Uploading...`)
+
+          // 오버레이 내 진행 바 표시
+          const otaOverlayProg = document.getElementById('ota-overlay-progress')
+          const otaOverlayBar = document.getElementById('ota-overlay-bar')
+          const otaOverlayPct = document.getElementById('ota-overlay-pct')
+          const otaOverlayKb = document.getElementById('ota-overlay-kb')
+          otaOverlayBar.style.width = '0%'
+          otaOverlayPct.textContent = '0%'
+          otaOverlayKb.textContent = `0 / ${(total / 1024).toFixed(1)} KB`
+          otaOverlayProg.style.display = 'block'
 
           try {
-            const res = await fetch('/api/update', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/octet-stream' },
-              body: file
-            })
-            if (res.ok) {
-              statusEl.style.color = 'var(--positive)'
-              statusEl.textContent = '업로드 완료! 재부팅 중...'
-              showToast('펌웨어 업로드 완료! 재부팅 중...', 'positive')
-            } else {
-              let msg = '업로드 실패'
-              try {
-                const e = await res.json()
-                msg = e.error || msg
-              } catch (_) {}
-              statusEl.style.color = 'var(--negative)'
-              statusEl.textContent = msg
-              showToast(msg, 'negative')
+            for (let offset = 0; offset < total; offset += CHUNK_SIZE) {
+              const slice = buf.slice(
+                offset,
+                Math.min(offset + CHUNK_SIZE, total)
+              )
+              const formData = new FormData()
+              formData.append('offset', String(offset))
+              if (offset === 0) formData.append('total', String(total))
+              formData.append(
+                'firmware',
+                new Blob([slice], { type: 'application/octet-stream' }),
+                'chunk.bin'
+              )
+
+              const res = await fetch('/api/ota/chunk', {
+                method: 'POST',
+                body: formData
+              })
+
+              if (!res.ok) {
+                let msg = 'Chunk upload failed'
+                try {
+                  const e = await res.json()
+                  msg = e.error || msg
+                } catch (_) {}
+                throw new Error(msg)
+              }
+
+              const json = await res.json()
+              const written = offset + slice.byteLength
+              const pct = Math.round((written / total) * 100)
+              const kbWritten = (written / 1024).toFixed(1)
+              const kbTotal = (total / 1024).toFixed(1)
+
+              // 페이지 내 진행 바
+              progressB.style.width = pct + '%'
+              progressL.textContent = pct + '%'
+              progressC.textContent = `${kbWritten} / ${kbTotal} KB`
+              statusEl.textContent = `업로드 중... ${pct}%`
+
+              // 오버레이 진행 바
+              otaOverlayBar.style.width = pct + '%'
+              otaOverlayPct.textContent = pct + '%'
+              otaOverlayKb.textContent = `${kbWritten} / ${kbTotal} KB`
+              document.getElementById('loading-message').textContent =
+                `Firmware Uploading... ${pct}%`
+
+              if (json.status === 'done') {
+                statusEl.style.color = 'var(--positive)'
+                statusEl.textContent = `Done! ${(json.ms / 1000).toFixed(1)}s — Rebooting...`
+                otaOverlayProg.style.display = 'none'
+                showToast('Firmware upload complete! Rebooting...', 'positive')
+                break
+              }
             }
           } catch (err) {
             statusEl.style.color = 'var(--negative)'
-            statusEl.textContent = '네트워크 오류'
-            showToast('업로드 중 오류 발생', 'negative')
+            statusEl.textContent = err.message || 'Network error'
+            otaOverlayProg.style.display = 'none'
+            showToast(err.message || 'Error during upload', 'negative')
           } finally {
+            btnUpload.disabled = false
             hideLoading()
           }
         })

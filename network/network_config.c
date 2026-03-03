@@ -111,8 +111,12 @@ w5500_init_result_t w5500_initialize(void) {
     gpio_put(SPI_RST, 1);
     sleep_ms(500);
   
-    uint8_t tx_sizes[8] = {2, 2, 2, 2, 2, 2, 2, 2};
-    uint8_t rx_sizes[8] = {2, 2, 2, 2, 2, 2, 2, 2};
+    // W5500 소켓 버퍼 할당 (각 16KB 널이 TX/RX)
+    // 소켓 0 (DHCP UDP ~300B), 1 (mDNS UDP ~512B), 2-4 (TCP JSON ~256B)
+    // 소켓 5 (Multicast UDP), 6-7 (HTTP TCP — OTA/정적파일)
+    // 합계: 1+1+1+1+1+1+4+4 = 14KB ≤ 16KB ✔ (HTTP에 4KB씩 집중)
+    uint8_t tx_sizes[8] = {1, 1, 1, 1, 1, 1, 4, 4};
+    uint8_t rx_sizes[8] = {1, 1, 1, 1, 1, 1, 4, 4};
     DBG_WIZNET_PRINT("Initializing WIZchip buffers...\n");
     
     int init_result = wizchip_init(tx_sizes, rx_sizes);
