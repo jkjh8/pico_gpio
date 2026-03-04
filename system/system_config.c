@@ -53,15 +53,11 @@ void system_config_reset_to_defaults(void) {
     g_system_config.gpio.device_id = 0x01;
     g_system_config.gpio.auto_response = true;
     g_system_config.gpio.rt_mode = GPIO_RT_MODE_CHANNEL;
-    g_system_config.gpio.trigger_mode = GPIO_MODE_TRIGGER;
+    g_system_config.gpio.trigger_mode = GPIO_MODE_TOGGLE;
     g_system_config.gpio.reserved = 0;
     
     // 네트워크 기본값 (DHCP 활성화)
     g_system_config.network.dhcp = NETINFO_DHCP;
-    memset(g_system_config.network.ip, 0, 4);
-    memset(g_system_config.network.sn, 0, 4);
-    memset(g_system_config.network.gw, 0, 4);
-    memset(g_system_config.network.dns, 0, 4);
     
     // TCP 포트 기본값
     g_system_config.tcp_port = 5050;
@@ -72,12 +68,7 @@ void system_config_reset_to_defaults(void) {
     // 멀티캐스트 기본값
     g_system_config.multicast_enabled = true;
     
-    // DHCP 마지막 IP 정보 초기화
-    memset(g_system_config.last_dhcp_ip, 0, 4);
-    memset(g_system_config.last_dhcp_gw, 0, 4);
-    memset(g_system_config.last_dhcp_sn, 0, 4);
-    memset(g_system_config.last_dhcp_dns, 0, 4);
-    g_system_config.has_last_dhcp_ip = false;
+    // DHCP 마지막 IP 정보는 memset으로 이미 초기화됨 (has_last_dhcp_ip=false)
     
     // 디버그 플래그 기본값 (모두 활성화)
     g_system_config.debug_flags = 0xFFFFFFFF;

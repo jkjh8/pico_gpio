@@ -129,8 +129,6 @@ void status_led_process(void)
     // Activity blink 처리 (50ms) - 풀업: 0=ON, 1=OFF
     if (activity_blink_active) {
         if (now - activity_blink_start_time < 50) {
-            // 빨간색만 켜기, 녹색 끄기
-            // gpio_put(STATUS_LED_GREEN_PIN, 1);  // 녹색 OFF
             gpio_put(STATUS_LED_RED_PIN, 0);    // 빨간색 ON
         } else {
             // Activity blink 종료
@@ -183,14 +181,8 @@ void status_led_process(void)
             
         case LED_MODE_NORMAL:
         default:
-            // 일반 모드: 네트워크 상태에 따라
-            if (network_connected_state) {
-                gpio_put(STATUS_LED_GREEN_PIN, 0);  // 녹색 ON
-                gpio_put(STATUS_LED_RED_PIN, 1);    // 빨간색 OFF
-            } else {
-                gpio_put(STATUS_LED_GREEN_PIN, 0);  // 녹색 ON
-                gpio_put(STATUS_LED_RED_PIN, 1);    // 빨간색 OFF
-            }
+            gpio_put(STATUS_LED_GREEN_PIN, 0);  // 녹색 ON
+            gpio_put(STATUS_LED_RED_PIN, 1);    // 빨간색 OFF
             break;
     }
 }

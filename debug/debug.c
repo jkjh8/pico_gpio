@@ -26,51 +26,20 @@ static const struct {
 };
 
 void debug_init_from_compile_time_defaults(void) {
-#ifdef DBG_MAIN
-    debug_flags[DBG_CAT_MAIN] = (DBG_MAIN) ? true : false;
-#else
-    debug_flags[DBG_CAT_MAIN] = false;
-#endif
-#ifdef DBG_NET
-    debug_flags[DBG_CAT_NET] = (DBG_NET) ? true : false;
-#else
-    debug_flags[DBG_CAT_NET] = false;
-#endif
-#ifdef DBG_TCP
-    debug_flags[DBG_CAT_TCP] = (DBG_TCP) ? true : false;
-#else
-    debug_flags[DBG_CAT_TCP] = false;
-#endif
-#ifdef DBG_HTTP
-    debug_flags[DBG_CAT_HTTP] = (DBG_HTTP) ? true : false;
-#else
-    debug_flags[DBG_CAT_HTTP] = false;
-#endif
-#ifdef DBG_UART
-    debug_flags[DBG_CAT_UART] = (DBG_UART) ? true : false;
-#else
-    debug_flags[DBG_CAT_UART] = false;
-#endif
-#ifdef DBG_JSON
-    debug_flags[DBG_CAT_JSON] = (DBG_JSON) ? true : false;
-#else
-    debug_flags[DBG_CAT_JSON] = false;
-#endif
-#ifdef DBG_GPIO
-    debug_flags[DBG_CAT_GPIO] = (DBG_GPIO) ? true : false;
-#else
-    debug_flags[DBG_CAT_GPIO] = false;
-#endif
-#ifdef DBG_DHCP
-    debug_flags[DBG_CAT_DHCP] = (DBG_DHCP) ? true : false;
-#else
-    debug_flags[DBG_CAT_DHCP] = false;
-#endif
-#ifdef DBG_WIZNET
-    debug_flags[DBG_CAT_WIZNET] = (DBG_WIZNET) ? true : false;
-#else
-    debug_flags[DBG_CAT_WIZNET] = false;
-#endif
+    static const bool compile_defaults[DBG_CAT_COUNT] = {
+        [DBG_CAT_MAIN]   = DBG_MAIN   ? true : false,
+        [DBG_CAT_NET]    = DBG_NET    ? true : false,
+        [DBG_CAT_TCP]    = DBG_TCP    ? true : false,
+        [DBG_CAT_HTTP]   = DBG_HTTP   ? true : false,
+        [DBG_CAT_UART]   = DBG_UART   ? true : false,
+        [DBG_CAT_JSON]   = DBG_JSON   ? true : false,
+        [DBG_CAT_GPIO]   = DBG_GPIO   ? true : false,
+        [DBG_CAT_DHCP]   = DBG_DHCP   ? true : false,
+        [DBG_CAT_WIZNET] = DBG_WIZNET ? true : false,
+    };
+    for (int i = 0; i < DBG_CAT_COUNT; i++) {
+        debug_flags[i] = compile_defaults[i];
+    }
 }
 
 void debug_set(debug_category_t cat, bool enabled) {

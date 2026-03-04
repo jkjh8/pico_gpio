@@ -52,7 +52,7 @@ static void send_gpio_feedback(bool is_input, uint16_t data, uint16_t changed_bi
             for (channel = 1; channel <= 16; channel++) {
                 uint16_t mask = (1 << (channel - 1));
                 if (bits_to_send & mask) {
-                    bool value = (data & mask) ? true : false;
+                    bool value = (data & mask) != 0;
                     
                     snprintf(feedback, sizeof(feedback),
                             "in,%d,%d,%s\r\n",
@@ -149,7 +149,6 @@ void hct595_write(uint16_t data) {
     
     // 데이터를 출력 레지스터로 래치 (STCP 펄스: HIGH -> LOW)
     gpio_put(HCT595_LATCH_PIN, 0); // STCP low - 데이터 래치
-    // busy_wait_us(1);/
     gpio_put(HCT595_LATCH_PIN, 1); // STCP high - 준비 상태
     
     // 전역 변수 업데이트
@@ -164,7 +163,6 @@ void hct595_write(uint16_t data) {
 
 uint16_t hct165_read(void) {
     gpio_put(HCT165_LOAD_PIN, 0); // SH/LD low (load)
-    //busy_wait_us(1);
     gpio_put(HCT165_LOAD_PIN, 1); // SH/LD high (shift)
     
     // 바이트 순서를 맞춰서 읽기
@@ -187,10 +185,7 @@ uint16_t hct165_read(void) {
         
         gpio_input_data = current_data;
     } else if (changed_channels != 0) {
-        // 자동 응답이 비활성화되어 있음
-        if (!gpio_config.auto_response) {
-            DBG_GPIO_PRINT("Input: 0x%04X->0x%04X (auto_resp OFF)\n", gpio_input_data, current_data);
-        }
+        DBG_GPIO_PRINT("Input: 0x%04X->0x%04X (auto_resp OFF)\n", gpio_input_data, current_data);
         gpio_input_data = current_data;
     }
     

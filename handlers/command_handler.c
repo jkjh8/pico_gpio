@@ -4,7 +4,6 @@
 #include "tcp/tcp_server.h"
 #include "gpio/gpio.h"
 #include "uart/uart_rs232.h"
-#include "tcp/tcp_server.h"
 #include "main.h"
 #include "debug/debug.h"
 #include <string.h>

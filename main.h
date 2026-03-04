@@ -77,8 +77,4 @@ extern TaskHandle_t h_task_uart;
 extern TaskHandle_t h_task_usb;
 extern TaskHandle_t h_task_led;
 
-// OTA 중 불필요 태스크 일시정지/재개
-void ota_suspend_all_tasks(void);
-void ota_resume_all_tasks(void);
-
 #endif // PICO_GPIO_H

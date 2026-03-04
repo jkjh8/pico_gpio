@@ -18,10 +18,6 @@
 #define HCT595_LATCH_PIN 14  // HCT595 RCLK on GP14
 #define HCT165_LOAD_PIN 13   // HCT165 SH/LD on GP13
 
-// GPIO 통신 프로토콜
-#define GPIO_MIN_PIN 1
-#define GPIO_MAX_PIN 8
-
 // GPIO 리턴 모드 (입력 변경 시 응답 포맷)
 typedef enum {
     GPIO_RT_MODE_BYTES = 0,   // 2바이트로 리턴 (deviceid, low_byte, high_byte)
@@ -42,10 +38,6 @@ typedef struct {
     gpio_trigger_mode_t trigger_mode; // 동작 모드 (TOGGLE/TRIGGER)
     uint32_t reserved;                // 향후 확장용
 } gpio_config_t;
-
-// GPIO 디바이스 ID (여러 디바이스 구분용)
-extern gpio_config_t gpio_config;
-#define GPIO_CONFIG_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - 16384) // 마지막에서 네 번째 4KB
 
 // GPIO Functions
 bool gpio_spi_init(void);

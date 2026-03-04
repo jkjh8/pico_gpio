@@ -500,9 +500,6 @@ void http_handle_post_ota_chunk(uint8_t        sock,
                        (unsigned)g_ota.total_size);
         stdio_flush();
 
-        // 불필요한 태스크 일시 정지 (HTTP/network_task 제외)
-        ota_suspend_all_tasks();
-
     } else {
         // ── 후속 청크: 순서 및 상태 검증 ──────────────────────────────────
         if (!g_ota.active) {
@@ -536,7 +533,6 @@ void http_handle_post_ota_chunk(uint8_t        sock,
         if (!ota_flash_write_page(flash_offset, fw_data + i)) {
             OTA_LED_ERROR();   // 🔴🟢 동시 = 에러
             g_ota.active = false;
-            ota_resume_all_tasks();
             sleep_ms(10);
             http_send_response(sock, "500 Internal Server Error", "application/json",
                                "{\"error\":\"Flash write failed\"}");

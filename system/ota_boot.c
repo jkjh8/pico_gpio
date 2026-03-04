@@ -59,7 +59,7 @@ void __no_inline_not_in_flash_func(ota_write_boot_flag)(void) {
 // 플래그 확인 → Bank B → Bank A 섹터 복사 → 플래그 클리어 → watchdog 재부팅
 // 복사 중 전원 차단 시: 다음 부팅에 자동 재시도 (플래그 + Bank B 무결)
 // =============================================================================
-void ota_boot_check(void) {
+void __no_inline_not_in_flash_func(ota_boot_check)(void) {
     const uint32_t *flag = (const uint32_t *)(XIP_BASE + OTA_FLAG_OFFSET);
 
     if (flag[0] != OTA_FLAG_MAGIC_0 || flag[1] != OTA_FLAG_MAGIC_1) {

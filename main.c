@@ -63,27 +63,6 @@ void system_restart(void) {
 }
 
 // =============================================================================
-// OTA 태스크 일시 정지 / 재개
-// HTTP 태스크는 FreeRTOS task가 아니라 network_task 내부 루프이므로
-// network_task를 포함한 나머지 태스크만 suspend.
-// LED는 GPIO 직접 제어로 대체하기 때문에 함께 정지.
-// =============================================================================
-void ota_suspend_all_tasks(void) {
-    if (h_task_gpio)    vTaskSuspend(h_task_gpio);
-    if (h_task_uart)    vTaskSuspend(h_task_uart);
-    if (h_task_usb)     vTaskSuspend(h_task_usb);
-    if (h_task_led)     vTaskSuspend(h_task_led);
-    // network_task는 현재 HTTP 핸들러를 실행 중인 태스크이므로 정지하지 않음
-}
-
-void ota_resume_all_tasks(void) {
-    if (h_task_gpio)    vTaskResume(h_task_gpio);
-    if (h_task_uart)    vTaskResume(h_task_uart);
-    if (h_task_usb)     vTaskResume(h_task_usb);
-    if (h_task_led)     vTaskResume(h_task_led);
-}
-
-// =============================================================================
 // FreeRTOS Hook Functions
 // =============================================================================
 
