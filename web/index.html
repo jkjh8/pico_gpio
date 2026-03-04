@@ -608,13 +608,27 @@
       <!-- OTA 전용 진행 바 (평소엔 숨김) -->
       <div
         id="ota-overlay-progress"
-        style="display:none;margin-top:20px;width:260px;text-align:center">
-        <div style="display:flex;justify-content:space-between;color:#fff;font-size:0.8rem;margin-bottom:6px">
+        style="
+          display: none;
+          margin-top: 20px;
+          width: 260px;
+          text-align: center;
+        ">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            color: #fff;
+            font-size: 0.8rem;
+            margin-bottom: 6px;
+          ">
           <span id="ota-overlay-pct">0%</span>
           <span id="ota-overlay-kb">0 / 0 KB</span>
         </div>
         <div class="ota-bar-track">
-          <div id="ota-overlay-bar" class="ota-bar-fill"></div>
+          <div
+            id="ota-overlay-bar"
+            class="ota-bar-fill"></div>
         </div>
       </div>
     </div>
@@ -813,10 +827,6 @@
               <div class="card-body">
                 <div class="form-row">
                   <div class="row items-center gap-sm">
-                    <svg
-                      class="icon-sm text-primary"
-                      <use href="#adjust"></use>
-                    </svg>
                     <span>DHCP</span>
                   </div>
                   <label class="toggle-switch">
@@ -878,10 +888,6 @@
               <div class="card-body">
                 <div class="form-group">
                   <div class="field-header">
-                    <svg
-                      class="icon-sm text-primary"
-                      <use href="#terminal"></use>
-                    </svg>
                     <span>TCP PORT</span>
                   </div>
                   <input
@@ -893,10 +899,6 @@
                 </div>
                 <div class="form-group">
                   <div class="field-header">
-                    <svg
-                      class="icon-sm text-primary"
-                      <use href="#terminal"></use>
-                    </svg>
                     <span>RS232</span>
                   </div>
                   <select id="comm-baud">
@@ -927,10 +929,6 @@
               <div class="card-body">
                 <div class="form-group">
                   <div class="field-header">
-                    <svg
-                      class="icon-sm text-primary"
-                      <use href="#terminal"></use>
-                    </svg>
                     <span>DEVICE ID</span>
                   </div>
                   <input
@@ -940,10 +938,6 @@
                 </div>
                 <div class="form-group">
                   <div class="field-header">
-                    <svg
-                      class="icon-sm text-primary"
-                      <use href="#terminal"></use>
-                    </svg>
                     <span>RETURN MODE</span>
                   </div>
                   <select id="gpio-mode">
@@ -953,10 +947,6 @@
                 </div>
                 <div class="form-group">
                   <div class="field-header">
-                    <svg
-                      class="icon-sm text-primary"
-                      <use href="#terminal"></use>
-                    </svg>
                     <span>TRIGGER MODE</span>
                   </div>
                   <select id="gpio-trigger">
@@ -966,10 +956,6 @@
                 </div>
                 <div class="form-group">
                   <div class="field-header">
-                    <svg
-                      class="icon-sm text-primary"
-                      <use href="#terminal"></use>
-                    </svg>
                     <span>AUTO RESPONSE</span>
                   </div>
                   <select id="gpio-auto">
@@ -995,7 +981,9 @@
             </div>
             <div class="card-body">
               <div>
-                <div class="field-header" style="margin-bottom:10px">
+                <div
+                  class="field-header"
+                  style="margin-bottom: 10px">
                   <svg class="icon-sm text-primary">
                     <use href="#settings"></use>
                   </svg>
@@ -1014,32 +1002,43 @@
                   </button>
                 </div>
                 <!-- 진행 바 -->
-                <div id="fw-progress-wrap" style="display:none;margin-top:8px">
+                <div
+                  id="fw-progress-wrap"
+                  style="display: none; margin-top: 8px">
                   <div class="fw-progress-info">
                     <span id="fw-progress-label">0%</span>
                     <span id="fw-progress-chunk">0 / 0 KB</span>
                   </div>
                   <div class="fw-bar-track">
-                    <div id="fw-progress-bar" class="fw-bar-fill"></div>
+                    <div
+                      id="fw-progress-bar"
+                      class="fw-bar-fill"></div>
                   </div>
                 </div>
-                <div id="fw-status" style="display:none;margin-top:8px;font-size:0.75rem;color:var(--primary)"></div>
+                <div
+                  id="fw-status"
+                  style="
+                    display: none;
+                    margin-top: 8px;
+                    font-size: 0.75rem;
+                    color: var(--primary);
+                  "></div>
               </div>
               <div class="section-divider">
-              <div class="row items-center justify-between">
-                <div class="row items-center gap-sm">
-                  <svg class="icon-sm text-primary">
-                    <use href="#power"></use>
-                  </svg>
-                  <span>REBOOT</span>
+                <div class="row items-center justify-between">
+                  <div class="row items-center gap-sm">
+                    <svg class="icon-sm text-primary">
+                      <use href="#power"></use>
+                    </svg>
+                    <span>REBOOT</span>
+                  </div>
+                  <button
+                    id="btn-reboot"
+                    class="btn btn-primary btn-expand">
+                    <svg class="icon-sm"><use href="#power"></use></svg>
+                    <span class="btn-text">Reboot</span>
+                  </button>
                 </div>
-                <button
-                  id="btn-reboot"
-                  class="btn btn-primary btn-expand">
-                  <svg class="icon-sm"><use href="#power"></use></svg>
-                  <span class="btn-text">Reboot</span>
-                </button>
-              </div>
               </div>
             </div>
           </div>
@@ -1059,12 +1058,8 @@
               <table class="help-table">
                 <thead>
                   <tr>
-                    <th>
-                      Command
-                    </th>
-                    <th>
-                      Description
-                    </th>
+                    <th>Command</th>
+                    <th>Description</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1072,49 +1067,37 @@
                     <td>
                       <code>getip</code>
                     </td>
-                    <td>
-                      Show network configuration
-                    </td>
+                    <td>Show network configuration</td>
                   </tr>
                   <tr>
                     <td>
                       <code>setip,x.x.x.x</code>
                     </td>
-                    <td>
-                      Set IP address
-                    </td>
+                    <td>Set IP address</td>
                   </tr>
                   <tr>
                     <td>
                       <code>setsubnet,x.x.x.x</code>
                     </td>
-                    <td>
-                      Set subnet mask
-                    </td>
+                    <td>Set subnet mask</td>
                   </tr>
                   <tr>
                     <td>
                       <code>setgateway,x.x.x.x</code>
                     </td>
-                    <td>
-                      Set gateway
-                    </td>
+                    <td>Set gateway</td>
                   </tr>
                   <tr>
                     <td>
                       <code>settcpport,port</code>
                     </td>
-                    <td>
-                      Set TCP port
-                    </td>
+                    <td>Set TCP port</td>
                   </tr>
                   <tr>
                     <td>
                       <code>setdhcp,on/off</code>
                     </td>
-                    <td>
-                      Enable/disable DHCP
-                    </td>
+                    <td>Enable/disable DHCP</td>
                   </tr>
                 </tbody>
               </table>
@@ -1125,12 +1108,8 @@
               <table class="help-table">
                 <thead>
                   <tr>
-                    <th>
-                      Setting
-                    </th>
-                    <th>
-                      Value
-                    </th>
+                    <th>Setting</th>
+                    <th>Value</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1138,17 +1117,13 @@
                     <td>
                       <strong>Multicast Group</strong>
                     </td>
-                    <td>
-                      239.224.0.1
-                    </td>
+                    <td>239.224.0.1</td>
                   </tr>
                   <tr>
                     <td>
                       <strong>UDP Port</strong>
                     </td>
-                    <td>
-                      9000 (TX/RX)
-                    </td>
+                    <td>9000 (TX/RX)</td>
                   </tr>
                   <tr>
                     <td>
@@ -1169,12 +1144,8 @@
               <table class="help-table">
                 <thead>
                   <tr>
-                    <th>
-                      Command
-                    </th>
-                    <th>
-                      Description
-                    </th>
+                    <th>Command</th>
+                    <th>Description</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1182,17 +1153,13 @@
                     <td>
                       <code>getuartconfig</code>
                     </td>
-                    <td>
-                      Show UART configuration
-                    </td>
+                    <td>Show UART configuration</td>
                   </tr>
                   <tr>
                     <td>
                       <code>setuartbaud,rate</code>
                     </td>
-                    <td>
-                      Set UART baud rate
-                    </td>
+                    <td>Set UART baud rate</td>
                   </tr>
                 </tbody>
               </table>
@@ -1203,12 +1170,8 @@
               <table class="help-table">
                 <thead>
                   <tr>
-                    <th>
-                      Command
-                    </th>
-                    <th>
-                      Description
-                    </th>
+                    <th>Command</th>
+                    <th>Description</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1257,12 +1220,8 @@
               <table class="help-table">
                 <thead>
                   <tr>
-                    <th>
-                      Command
-                    </th>
-                    <th>
-                      Description
-                    </th>
+                    <th>Command</th>
+                    <th>Description</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1278,17 +1237,13 @@
                     <td>
                       <code>getin,id,ch</code>
                     </td>
-                    <td>
-                      Get single input (returns: true/false)
-                    </td>
+                    <td>Get single input (returns: true/false)</td>
                   </tr>
                   <tr>
                     <td>
                       <code>getout,id,ch</code>
                     </td>
-                    <td>
-                      Get single output (returns: true/false)
-                    </td>
+                    <td>Get single output (returns: true/false)</td>
                   </tr>
                 </tbody>
               </table>
@@ -1299,12 +1254,8 @@
               <table class="help-table">
                 <thead>
                   <tr>
-                    <th>
-                      Command
-                    </th>
-                    <th>
-                      Description
-                    </th>
+                    <th>Command</th>
+                    <th>Description</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1312,57 +1263,43 @@
                     <td>
                       <code>getid</code>
                     </td>
-                    <td>
-                      Get device ID
-                    </td>
+                    <td>Get device ID</td>
                   </tr>
                   <tr>
                     <td>
                       <code>setid,id</code>
                     </td>
-                    <td>
-                      Set device ID (1-254)
-                    </td>
+                    <td>Set device ID (1-254)</td>
                   </tr>
                   <tr>
                     <td>
                       <code>getgpioconfig</code>
                     </td>
-                    <td>
-                      Get all GPIO configuration
-                    </td>
+                    <td>Get all GPIO configuration</td>
                   </tr>
                   <tr>
                     <td>
                       <code>setrtmode,bytes/channel</code>
                     </td>
-                    <td>
-                      Set return mode
-                    </td>
+                    <td>Set return mode</td>
                   </tr>
                   <tr>
                     <td>
                       <code>getrtmode</code>
                     </td>
-                    <td>
-                      Get return mode
-                    </td>
+                    <td>Get return mode</td>
                   </tr>
                   <tr>
                     <td>
                       <code>settriggermode,toggle/trigger</code>
                     </td>
-                    <td>
-                      Set trigger mode
-                    </td>
+                    <td>Set trigger mode</td>
                   </tr>
                   <tr>
                     <td>
                       <code>gettriggermode</code>
                     </td>
-                    <td>
-                      Get trigger mode
-                    </td>
+                    <td>Get trigger mode</td>
                   </tr>
                 </tbody>
               </table>
@@ -1373,12 +1310,8 @@
               <table class="help-table">
                 <thead>
                   <tr>
-                    <th>
-                      Command
-                    </th>
-                    <th>
-                      Description
-                    </th>
+                    <th>Command</th>
+                    <th>Description</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1386,41 +1319,31 @@
                     <td>
                       <code>setautoresponse,0/1</code>
                     </td>
-                    <td>
-                      Enable/Disable auto response
-                    </td>
+                    <td>Enable/Disable auto response</td>
                   </tr>
                   <tr>
                     <td>
                       <code>getautoresponse</code>
                     </td>
-                    <td>
-                      Get auto response status
-                    </td>
+                    <td>Get auto response status</td>
                   </tr>
                   <tr>
                     <td>
                       <code>factoryreset</code>
                     </td>
-                    <td>
-                      Factory reset
-                    </td>
+                    <td>Factory reset</td>
                   </tr>
                   <tr>
                     <td>
                       <code>restart</code>
                     </td>
-                    <td>
-                      Restart system
-                    </td>
+                    <td>Restart system</td>
                   </tr>
                   <tr>
                     <td>
                       <code>help</code>
                     </td>
-                    <td>
-                      Show this help
-                    </td>
+                    <td>Show this help</td>
                   </tr>
                 </tbody>
               </table>
@@ -1431,12 +1354,8 @@
               <table class="help-table">
                 <thead>
                   <tr>
-                    <th>
-                      Message
-                    </th>
-                    <th>
-                      Description
-                    </th>
+                    <th>Message</th>
+                    <th>Description</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1444,33 +1363,25 @@
                     <td>
                       <code>in,id,ch,val</code>
                     </td>
-                    <td>
-                      Input change (CHANNEL mode)
-                    </td>
+                    <td>Input change (CHANNEL mode)</td>
                   </tr>
                   <tr>
                     <td>
                       <code>inb,id,low,high</code>
                     </td>
-                    <td>
-                      Input change (BYTES mode)
-                    </td>
+                    <td>Input change (BYTES mode)</td>
                   </tr>
                   <tr>
                     <td>
                       <code>out,id,binary</code>
                     </td>
-                    <td>
-                      Output feedback (CHANNEL mode)
-                    </td>
+                    <td>Output feedback (CHANNEL mode)</td>
                   </tr>
                   <tr>
                     <td>
                       <code>outb,id,low,high</code>
                     </td>
-                    <td>
-                      Output feedback (BYTES mode)
-                    </td>
+                    <td>Output feedback (BYTES mode)</td>
                   </tr>
                 </tbody>
               </table>
@@ -1523,8 +1434,16 @@
                     font-family: 'Courier New', monospace;
                     font-size: 0.75rem;
                   " />
-                <button id="btn-send-cmd" class="btn btn-primary">Send</button>
-                <button id="btn-clear-terminal" class="btn btn-flat">Clear</button>
+                <button
+                  id="btn-send-cmd"
+                  class="btn btn-primary">
+                  Send
+                </button>
+                <button
+                  id="btn-clear-terminal"
+                  class="btn btn-flat">
+                  Clear
+                </button>
               </div>
             </div>
           </div>
@@ -1610,8 +1529,14 @@
     <script>
       const state = { network: {}, comm: {}, gpio: {} }
       const $ = (id) => document.getElementById(id)
-      function setEl(id, val) { const el = $(id); if (el) el.textContent = val }
-      function setVal(id, val) { const el = $(id); if (el) el.value = val }
+      function setEl(id, val) {
+        const el = $(id)
+        if (el) el.textContent = val
+      }
+      function setVal(id, val) {
+        const el = $(id)
+        if (el) el.value = val
+      }
       function showLoading(msg = 'Loading...') {
         $('loading-message').textContent = msg
         $('loading-overlay').classList.remove('hidden')
@@ -2002,23 +1927,39 @@
 
           try {
             for (let offset = 0; offset < total; offset += CHUNK_SIZE) {
-              const slice = buf.slice(offset, Math.min(offset + CHUNK_SIZE, total))
+              const slice = buf.slice(
+                offset,
+                Math.min(offset + CHUNK_SIZE, total)
+              )
               const formData = new FormData()
               formData.append('offset', String(offset))
               if (offset === 0) formData.append('total', String(total))
-              formData.append('firmware', new Blob([slice], { type: 'application/octet-stream' }), 'chunk.bin')
+              formData.append(
+                'firmware',
+                new Blob([slice], { type: 'application/octet-stream' }),
+                'chunk.bin'
+              )
 
-              const res = await fetch('/api/ota/chunk', { method: 'POST', body: formData })
+              const res = await fetch('/api/ota/chunk', {
+                method: 'POST',
+                body: formData
+              })
 
               if (!res.ok) {
                 let msg = 'Chunk upload failed'
-                try { const e = await res.json(); msg = e.error || msg } catch (_) {}
+                try {
+                  const e = await res.json()
+                  msg = e.error || msg
+                } catch (_) {}
                 throw new Error(msg)
               }
 
               const json = await res.json()
               const written = offset + slice.byteLength
-              updateProgress(Math.round((written / total) * 100), (written / 1024).toFixed(1))
+              updateProgress(
+                Math.round((written / total) * 100),
+                (written / 1024).toFixed(1)
+              )
 
               if (json.status === 'done') {
                 statusEl.style.color = 'var(--positive)'
