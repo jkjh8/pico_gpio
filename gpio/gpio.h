@@ -14,9 +14,9 @@
 #define GPIO_SCK 10
 #define GPIO_MOSI 11
 #define GPIO_MISO 12  // MISO on GP12
-// #define HCT595_CLEAR_PIN 14  // HCT595 SRCLR on GP14
-#define HCT595_LATCH_PIN 14  // HCT595 RCLK on GP14
-#define HCT165_LOAD_PIN 13   // HCT165 SH/LD on GP13
+// #define OUTPUT_REG_CLEAR_PIN 14  // 출력 레지스터 SRCLR on GP14
+#define OUTPUT_REG_LATCH_PIN 14  // 출력 레지스터 RCLK on GP14
+#define INPUT_REG_LOAD_PIN 13    // 입력 레지스터 SH/LD on GP13
 
 // GPIO 리턴 모드 (입력 변경 시 응답 포맷)
 typedef enum {
@@ -36,13 +36,14 @@ typedef struct {
     bool auto_response;               // 자동 응답 여부
     gpio_rt_mode_t rt_mode;           // 리턴 모드 (BYTES/CHANNEL)
     gpio_trigger_mode_t trigger_mode; // 동작 모드 (TOGGLE/TRIGGER)
-    uint32_t reserved;                // 향후 확장용
+    bool output_invert;               // 출력 극성 반전 (출력 비트 전체 반전)
+    uint8_t reserved[3];              // 정렬 패딩
 } gpio_config_t;
 
 // GPIO Functions
 bool gpio_spi_init(void);
-void hct595_write(uint16_t data);
-uint16_t hct165_read(void);
+void output_reg_write(uint16_t data);
+uint16_t input_reg_read(void);
 
 // GPIO 설정 관리 함수
 void save_gpio_config_to_flash(void);
@@ -55,10 +56,13 @@ bool set_gpio_rt_mode(gpio_rt_mode_t mode);
 gpio_rt_mode_t get_gpio_rt_mode(void);
 bool set_gpio_trigger_mode(gpio_trigger_mode_t mode);
 gpio_trigger_mode_t get_gpio_trigger_mode(void);
+bool set_gpio_output_invert(bool invert);
+bool get_gpio_output_invert(void);
 
 // GPIO 설정 한번에 갱신 및 저장
-bool update_gpio_config(uint8_t device_id, bool auto_response, 
-                        gpio_rt_mode_t rt_mode, gpio_trigger_mode_t trigger_mode);
+bool update_gpio_config(uint8_t device_id, bool auto_response,
+                        gpio_rt_mode_t rt_mode, gpio_trigger_mode_t trigger_mode,
+                        bool output_invert);
 
 // Global variables
 extern uint16_t gpio_input_data;

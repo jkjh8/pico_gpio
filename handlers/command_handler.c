@@ -126,6 +126,12 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
         return cmd_set_auto_response(param_part, response, response_size);
     } else if (strcmp(cmd_part, "getautoresponse") == 0) {
         return cmd_get_auto_response(response, response_size);
+    } else if (strcmp(cmd_part, "setoutputinvert") == 0) {
+        return cmd_set_output_invert(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "getoutputinvert") == 0) {
+        return cmd_get_output_invert(response, response_size);
+    } else if (strcmp(cmd_part, "get") == 0) {
+        return cmd_get_all_status(response, response_size);
     } else if (strcmp(cmd_part, "factoryreset") == 0) {
         return cmd_factory_reset(response, response_size);
     } else if (strcmp(cmd_part, "help") == 0) {
@@ -274,7 +280,7 @@ cmd_result_t cmd_get_input(const char* param, char* response, size_t response_si
 
     // 채널을 0-based 인덱스로 변환
     int channel_index = channel - 1;
-    uint16_t input_data = hct165_read();
+    uint16_t input_data = input_reg_read();
     bool value = (input_data & (1 << channel_index)) != 0;
     
     snprintf(response, response_size, "input_ch,%d,%d,%s", get_gpio_device_id(), channel, value ? "1" : "0");
@@ -449,7 +455,7 @@ cmd_result_t cmd_set(const char* param, char* response, size_t response_size) {
         gpio_output_data &= ~mask; // 비트 클리어
     }
 
-    hct595_write(gpio_output_data);
+    output_reg_write(gpio_output_data);
 
     // 자동 피드백으로만 전송 (중복 방지)
     response[0] = '\0';
@@ -496,7 +502,7 @@ cmd_result_t cmd_outb(const char* param, char* response, size_t response_size) {
     uint16_t gpio_value = (uint16_t)((high_byte << 8) | low_byte);
     
     // GPIO 출력에 적용
-    hct595_write(gpio_value);
+    output_reg_write(gpio_value);
     
     // 자동 피드백으로만 전송 (중복 방지)
     response[0] = '\0';
@@ -555,7 +561,7 @@ cmd_result_t cmd_out(const char* param, char* response, size_t response_size) {
     }
 
     // GPIO 출력에 적용
-    hct595_write(gpio_value);
+    output_reg_write(gpio_value);
     
     // 자동 피드백으로만 전송 (중복 방지)
     response[0] = '\0';
@@ -822,17 +828,80 @@ cmd_result_t cmd_get_gpio_config(char* response, size_t response_size) {
     bool auto_resp = get_gpio_auto_response();
     gpio_rt_mode_t rt_mode = get_gpio_rt_mode();
     gpio_trigger_mode_t trigger_mode = get_gpio_trigger_mode();
-    
+    bool output_invert = get_gpio_output_invert();
+
     snprintf(response, response_size,
             "GPIO Configuration:\r\n"
             "Device ID: %d (0x%02X)\r\n"
             "Auto Response: %s\r\n"
             "RT Mode: %s\r\n"
-            "Trigger Mode: %s (only for channel mode)\r\n",
+            "Trigger Mode: %s (channel mode only)\r\n"
+            "Output Invert: %s\r\n",
             id, id,
             auto_resp ? "ON" : "OFF",
             rt_mode == GPIO_RT_MODE_CHANNEL ? "CHANNEL" : "BYTES",
-            trigger_mode == GPIO_MODE_TRIGGER ? "TRIGGER" : "TOGGLE");
+            trigger_mode == GPIO_MODE_TRIGGER ? "TRIGGER" : "TOGGLE",
+            output_invert ? "ON" : "OFF");
+    return CMD_SUCCESS;
+}
+
+// 출력 극성 반전 설정
+cmd_result_t cmd_set_output_invert(const char* param, char* response, size_t response_size) {
+    if (param == NULL) {
+        snprintf(response, response_size, "Error: Parameter required (0=normal, 1=invert)\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    int value = atoi(param);
+    bool invert = (value != 0);
+
+    set_gpio_output_invert(invert);
+    snprintf(response, response_size, "Output invert: %s\r\n", invert ? "ON" : "OFF");
+    return CMD_SUCCESS;
+}
+
+// 출력 극성 반전 조회
+cmd_result_t cmd_get_output_invert(char* response, size_t response_size) {
+    bool invert = get_gpio_output_invert();
+    snprintf(response, response_size, "Output invert: %s\r\n", invert ? "ON" : "OFF");
+    return CMD_SUCCESS;
+}
+
+// 전체 상태 요약 조회
+cmd_result_t cmd_get_all_status(char* response, size_t response_size) {
+    extern uint16_t gpio_input_data;
+    extern uint16_t gpio_output_data;
+    uint8_t id = get_gpio_device_id();
+    bool auto_resp = get_gpio_auto_response();
+    gpio_rt_mode_t rt_mode = get_gpio_rt_mode();
+    gpio_trigger_mode_t trigger_mode = get_gpio_trigger_mode();
+    bool output_invert = get_gpio_output_invert();
+    extern uint32_t uart_rs232_1_baud;
+
+    snprintf(response, response_size,
+            "=== Device Status ===\r\n"
+            "Network: %d.%d.%d.%d (%s)\r\n"
+            "TCP Port: %d\r\n"
+            "UART Baud: %lu\r\n"
+            "GPIO Device ID: %d (0x%02X)\r\n"
+            "Auto Response: %s\r\n"
+            "RT Mode: %s\r\n"
+            "Trigger Mode: %s\r\n"
+            "Output Invert: %s\r\n"
+            "Inputs:  0x%04X\r\n"
+            "Outputs: 0x%04X\r\n",
+            g_net_info->ip[0], g_net_info->ip[1],
+            g_net_info->ip[2], g_net_info->ip[3],
+            g_net_info->dhcp == NETINFO_DHCP ? "DHCP" : "Static",
+            system_config_get_tcp_port(),
+            uart_rs232_1_baud,
+            id, id,
+            auto_resp ? "ON" : "OFF",
+            rt_mode == GPIO_RT_MODE_CHANNEL ? "CHANNEL" : "BYTES",
+            trigger_mode == GPIO_MODE_TRIGGER ? "TRIGGER" : "TOGGLE",
+            output_invert ? "ON" : "OFF",
+            gpio_input_data,
+            gpio_output_data);
     return CMD_SUCCESS;
 }
 
@@ -943,6 +1012,9 @@ cmd_result_t cmd_help(char* response, size_t response_size) {
         "System:\r\n"
         "  setautoresponse,0/1       - Enable/Disable auto response on input change\r\n"
         "  getautoresponse           - Get auto response status\r\n"
+        "  setoutputinvert,0/1       - Set output polarity (0=normal, 1=invert)\r\n"
+        "  getoutputinvert           - Get HC595 output polarity\r\n"
+        "  get                       - Show all current device status\r\n"
         "  factoryreset              - Factory reset (IP:192.168.1.100, Port:5050, Baud:9600)\r\n"
         "  restart                   - Restart system\r\n"
         "  help                      - Show this help\r\n"

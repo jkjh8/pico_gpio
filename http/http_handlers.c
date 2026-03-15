@@ -254,7 +254,16 @@ void http_handle_post_gpio(uint8_t sock, const char* body) {
     if (auto_response && cJSON_IsBool(auto_response)) {
         gpio_cfg->auto_response = cJSON_IsTrue(auto_response);
     }
-    
+
+    cJSON* output_invert = cJSON_GetObjectItem(json, "output_invert");
+    if (output_invert && cJSON_IsBool(output_invert)) {
+        bool invert = cJSON_IsTrue(output_invert);
+        gpio_cfg->output_invert = invert;
+        // 극성 변경 즉시 반영
+        extern uint16_t gpio_output_data;
+        output_reg_write(gpio_output_data);
+    }
+
     cJSON_Delete(json);
     
     // 설정 저장
@@ -378,6 +387,7 @@ void http_handle_get_all(uint8_t sock) {
     cJSON_AddStringToObject(gpio, "trigger_mode", trigger_str);
     
     cJSON_AddBoolToObject(gpio, "auto_response", gpio_cfg->auto_response);
+    cJSON_AddBoolToObject(gpio, "output_invert", gpio_cfg->output_invert);
     cJSON_AddNumberToObject(gpio, "outputs", gpio_output_data);
     cJSON_AddNumberToObject(gpio, "inputs", gpio_input_data);
     cJSON_AddItemToObject(root, "gpio", gpio);

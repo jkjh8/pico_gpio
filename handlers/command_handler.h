@@ -65,6 +65,9 @@ cmd_result_t cmd_set_rt_mode(const char *param, char *response, size_t response_
 cmd_result_t cmd_get_rt_mode(char *response, size_t response_size);
 cmd_result_t cmd_set_trigger_mode(const char *param, char *response, size_t response_size);
 cmd_result_t cmd_get_trigger_mode(char *response, size_t response_size);
+cmd_result_t cmd_set_output_invert(const char *param, char *response, size_t response_size);
+cmd_result_t cmd_get_output_invert(char *response, size_t response_size);
+cmd_result_t cmd_get_all_status(char *response, size_t response_size);
 
 // ID 확인 유틸리티 함수
 bool check_device_id_match(uint8_t target_id);

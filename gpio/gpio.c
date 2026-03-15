@@ -10,8 +10,8 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-uint16_t gpio_input_data = 0xFFFF; // HCT165 이전 데이터
-uint16_t gpio_output_data = 0x0000; // HCT595 출력 데이터
+uint16_t gpio_input_data = 0xFFFF; // 입력 레지스터 이전 데이터
+uint16_t gpio_output_data = 0x0000; // 출력 레지스터 데이터
 
 // GPIO 설정에 대한 매크로 (시스템 설정 참조)
 #define gpio_config (*system_config_get_gpio())
@@ -126,30 +126,31 @@ bool gpio_spi_init(void) {
     gpio_set_function(GPIO_MISO, GPIO_FUNC_SPI);
 
     // 595 래치 핀 (STCP/RCLK) - GP8
-    gpio_init(HCT595_LATCH_PIN);
-    gpio_set_dir(HCT595_LATCH_PIN, GPIO_OUT);
-    gpio_put(HCT595_LATCH_PIN, 1); // 초기 high
+    gpio_init(OUTPUT_REG_LATCH_PIN);
+    gpio_set_dir(OUTPUT_REG_LATCH_PIN, GPIO_OUT);
+    gpio_put(OUTPUT_REG_LATCH_PIN, 1); // 초기 high
 
     // 165 로드 핀 (SH/LD) - GP9
-    gpio_init(HCT165_LOAD_PIN);
-    gpio_set_dir(HCT165_LOAD_PIN, GPIO_OUT);
-    gpio_put(HCT165_LOAD_PIN, 1); // 초기 high
+    gpio_init(INPUT_REG_LOAD_PIN);
+    gpio_set_dir(INPUT_REG_LOAD_PIN, GPIO_OUT);
+    gpio_put(INPUT_REG_LOAD_PIN, 1); // 초기 high
 
     return true;
 }
 
-void hct595_write(uint16_t data) {
-    // HCT595는 MSB-first이므로 바이트 순서를 맞춰서 전송
+void output_reg_write(uint16_t data) {
+    // MSB-first로 바이트 순서를 맞춰서 전송
     uint8_t buffer[2];
-    buffer[0] = (data >> 8) & 0xFF;  // 상위 바이트 먼저
-    buffer[1] = data & 0xFF;         // 하위 바이트 나중
+    uint16_t out = gpio_config.output_invert ? (uint16_t)(~data) : data;
+    buffer[0] = (out >> 8) & 0xFF;   // 상위 바이트 먼저
+    buffer[1] = out & 0xFF;          // 하위 바이트 나중
     
     // 데이터를 시프트 레지스터에 전송
     spi_write_blocking(GPIO_PORT, buffer, 2);
     
     // 데이터를 출력 레지스터로 래치 (STCP 펄스: HIGH -> LOW)
-    gpio_put(HCT595_LATCH_PIN, 0); // STCP low - 데이터 래치
-    gpio_put(HCT595_LATCH_PIN, 1); // STCP high - 준비 상태
+    gpio_put(OUTPUT_REG_LATCH_PIN, 0); // STCP low - 데이터 래치
+    gpio_put(OUTPUT_REG_LATCH_PIN, 1); // STCP high - 준비 상태
     
     // 전역 변수 업데이트
     gpio_output_data = data;
@@ -161,9 +162,9 @@ void hct595_write(uint16_t data) {
     send_gpio_feedback(false, gpio_output_data, 0);
 }
 
-uint16_t hct165_read(void) {
-    gpio_put(HCT165_LOAD_PIN, 0); // SH/LD low (load)
-    gpio_put(HCT165_LOAD_PIN, 1); // SH/LD high (shift)
+uint16_t input_reg_read(void) {
+    gpio_put(INPUT_REG_LOAD_PIN, 0); // SH/LD low (load)
+    gpio_put(INPUT_REG_LOAD_PIN, 1); // SH/LD high (shift)
     
     // 바이트 순서를 맞춰서 읽기
     uint8_t buffer[2];
@@ -266,8 +267,21 @@ gpio_trigger_mode_t get_gpio_trigger_mode(void) {
     return gpio_config.trigger_mode;
 }
 
+bool set_gpio_output_invert(bool invert) {
+    gpio_config.output_invert = invert;
+    // 현재 출력값을 새 극성으로 즉시 재출력
+    output_reg_write(gpio_output_data);
+    save_gpio_config_to_flash();
+    return true;
+}
+
+bool get_gpio_output_invert(void) {
+    return gpio_config.output_invert;
+}
+
 bool update_gpio_config(uint8_t device_id, bool auto_response,
-                        gpio_rt_mode_t rt_mode, gpio_trigger_mode_t trigger_mode) {
+                        gpio_rt_mode_t rt_mode, gpio_trigger_mode_t trigger_mode,
+                        bool output_invert) {
     // 유효성 검사
     if (device_id < 1 || device_id > 254) {
         DBG_GPIO_PRINT("[GPIO] Invalid device_id: %d\n", device_id);
@@ -281,17 +295,21 @@ bool update_gpio_config(uint8_t device_id, bool auto_response,
         DBG_GPIO_PRINT("[GPIO] Invalid trigger_mode: %d\n", trigger_mode);
         return false;
     }
-    
+
     // 설정 갱신
     gpio_config.device_id = device_id;
     gpio_config.auto_response = auto_response;
     gpio_config.rt_mode = rt_mode;
     gpio_config.trigger_mode = trigger_mode;
-    
-    DBG_GPIO_PRINT("[GPIO] Config updated: ID=%d, AutoResp=%d, RT=%d, Trigger=%d\n", 
+    gpio_config.output_invert = output_invert;
+
+    DBG_GPIO_PRINT("[GPIO] Config updated: ID=%d, AutoResp=%d, RT=%d, Trigger=%d, Invert=%d\n",
         gpio_config.device_id, gpio_config.auto_response,
-        gpio_config.rt_mode, gpio_config.trigger_mode);
-    
+        gpio_config.rt_mode, gpio_config.trigger_mode, gpio_config.output_invert);
+
+    // 극성 변경 즉시 반영
+    output_reg_write(gpio_output_data);
+
     // 플래시에 저장
     save_gpio_config_to_flash();
     return true;
@@ -300,7 +318,7 @@ bool update_gpio_config(uint8_t device_id, bool auto_response,
 void gpio_task(void *pvParameters)
 {
     while (true) {
-        hct165_read();
+        input_reg_read();
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

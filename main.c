@@ -109,7 +109,7 @@ int main()
     DBG_MAIN_PRINT("UART RS232 initialized at %u baud\n", uart_rs232_1_baud);
     gpio_spi_init();
     DBG_MAIN_PRINT("GPIO SPI initialized\n");
-    hct595_write(0x0000);
+    output_reg_write(0x0000);
     status_led_set_state(STATUS_LED_GREEN_ON);
     DBG_MAIN_PRINT("System ready - Status LED green\n");
 

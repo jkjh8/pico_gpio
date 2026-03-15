@@ -963,6 +963,15 @@
                     <option value="false">DISABLED</option>
                   </select>
                 </div>
+                <div class="form-group">
+                  <div class="field-header">
+                    <span>OUTPUT INVERT</span>
+                  </div>
+                  <select id="gpio-invert">
+                    <option value="false">NORMAL</option>
+                    <option value="true">INVERTED</option>
+                  </select>
+                </div>
               </div>
               <div class="card-actions">
                 <button
@@ -1643,6 +1652,7 @@
           setVal('gpio-mode', data.gpio.rt_mode)
           setVal('gpio-trigger', data.gpio.trigger_mode)
           setVal('gpio-auto', data.gpio.auto_response.toString())
+          setVal('gpio-invert', (data.gpio.output_invert || false).toString())
           setEl('sum-id', data.gpio.device_id)
           setEl('sum-mode', data.gpio.rt_mode.toUpperCase())
           setEl('sum-trigger', data.gpio.trigger_mode.toUpperCase())
@@ -1736,7 +1746,8 @@
             device_id: parseInt($('gpio-id').value),
             rt_mode: $('gpio-mode').value,
             trigger_mode: $('gpio-trigger').value,
-            auto_response: $('gpio-auto').value === 'true'
+            auto_response: $('gpio-auto').value === 'true',
+            output_invert: $('gpio-invert').value === 'true'
           }
           try {
             const res = await fetch('/api/gpio', {
