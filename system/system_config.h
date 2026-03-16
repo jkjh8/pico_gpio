@@ -12,7 +12,7 @@ extern "C"
 #endif
 
 // 시스템 설정 버전 (구조체가 변경될 때마다 증가)
-#define SYSTEM_CONFIG_VERSION 3
+#define SYSTEM_CONFIG_VERSION 4
 
 // 시스템 전체 설정 구조체
 typedef struct

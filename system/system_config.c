@@ -95,20 +95,29 @@ bool system_config_save_to_flash(void) {
     DBG_MAIN_PRINT("[FLASH] Buffer prepared, size: %d bytes\n", sizeof(system_config_t));
     DBG_MAIN_PRINT("[FLASH] Starting critical flash operation...\n");
 
-    // 크리티컬 섹션: 인터럽트와 스케줄러 비활성화
-    vTaskSuspendAll();
+    // 크리티컬 섹션: 스케줄러 실행 중일 때만 FreeRTOS API 사용
+    // (system_config_init은 vTaskStartScheduler 전에 호출될 수 있음)
+    bool scheduler_running = (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED);
+    if (scheduler_running) vTaskSuspendAll();
     uint32_t ints = save_and_disable_interrupts();
-    
+
     // Flash erase & program (인터럽트 비활성화 상태에서 로그 출력 불가)
     flash_range_erase(FLASH_TARGET_OFFSET, FLASH_SECTOR_SIZE);
     flash_range_program(FLASH_TARGET_OFFSET, page_buffer, FLASH_PAGE_SIZE);
-    
+
     // 복원
     restore_interrupts(ints);
-    xTaskResumeAll();
-    
-    DBG_MAIN_PRINT("[FLASH] Flash operation completed successfully\n");
-    DBG_MAIN_PRINT("[FLASH] System config saved (size: %d, programmed: %d)\n", 
+    if (scheduler_running) xTaskResumeAll();
+
+    // 기록된 데이터 검증 (XIP로 재읽기)
+    const uint8_t *flash_readback = (const uint8_t *)(XIP_BASE + FLASH_TARGET_OFFSET);
+    if (memcmp(page_buffer, flash_readback, sizeof(system_config_t)) != 0) {
+        DBG_MAIN_PRINT("[FLASH] ERROR: Write verification failed!\n");
+        return false;
+    }
+
+    DBG_MAIN_PRINT("[FLASH] Flash operation completed and verified\n");
+    DBG_MAIN_PRINT("[FLASH] System config saved (size: %d, programmed: %d)\n",
                    sizeof(system_config_t), FLASH_PAGE_SIZE);
     return true;
 }
@@ -174,9 +183,11 @@ void system_config_init(void) {
         if (!system_config_load_from_flash()) {
             DBG_MAIN_PRINT("Failed to load config from flash, using defaults\n");
             system_config_reset_to_defaults();
-            // 첫 부팅 시 기본값을 flash에 저장
+            // 첫 부팅 또는 버전/체크섬 불일치 시 기본값을 flash에 저장
             DBG_MAIN_PRINT("Saving default config to flash...\n");
-            system_config_save_to_flash();
+            if (!system_config_save_to_flash()) {
+                DBG_MAIN_PRINT("WARNING: Failed to save default config, continuing with RAM defaults\n");
+            }
         }
         g_config_initialized = true;
     }
