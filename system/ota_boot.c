@@ -2,7 +2,6 @@
 #include "../http/ota_handler.h"
 #include "hardware/flash.h"
 #include "hardware/sync.h"
-#include "hardware/watchdog.h"
 #include "pico/stdlib.h"
 #include <string.h>
 
@@ -10,19 +9,32 @@
 // 섹터 버퍼 (FLASH_SECTOR_SIZE = 4096 bytes, BSS → SRAM)
 // Bank B 섹터를 SRAM에 읽은 뒤 Bank A에 기록 — XIP 정지 중에도 안전
 // =============================================================================
-static uint8_t s_sector_buf[FLASH_SECTOR_SIZE];
+static uint8_t s_sector_buf[FLASH_SECTOR_SIZE] __attribute__((aligned(4)));
 
 // =============================================================================
 // RAM 함수 — flash_range_* 는 XIP를 일시 정지하므로 호출자도 RAM에 있어야 함
 // =============================================================================
 
 // Bank A의 한 섹터(4KB)를 SRAM 버퍼로 소거+프로그램
+// flash_range_program을 FLASH_PAGE_SIZE(256B) 단위로 호출:
+// RP2350 ROM에 4096B를 한번에 넘기면 첫 페이지만 기록되는 경우가 있음
 static void __no_inline_not_in_flash_func(ota_apply_sector)(
         uint32_t a_offset, const uint8_t *buf) {
     uint32_t ints = save_and_disable_interrupts();
     flash_range_erase(a_offset, FLASH_SECTOR_SIZE);
-    flash_range_program(a_offset, buf, FLASH_SECTOR_SIZE);
+    for (uint32_t p = 0; p < FLASH_SECTOR_SIZE; p += FLASH_PAGE_SIZE) {
+        flash_range_program(a_offset + p, buf + p, FLASH_PAGE_SIZE);
+    }
     restore_interrupts(ints);
+}
+
+// Bank A 복사 완료 후 재부팅 — watchdog_reboot() 대신 사용
+// watchdog_reboot()는 flash(Bank A)에 있어서 복사 후 호출하면 새 펌웨어 바이트를 실행함
+// AIRCR은 ARM Cortex-M33 하드웨어 레지스터 → flash 접근 없이 안전
+static void __no_inline_not_in_flash_func(ota_trigger_reboot)(void) {
+    volatile uint32_t *aircr = (volatile uint32_t *)0xE000ED0CU;
+    *aircr = (0x5FAu << 16) | (1u << 2);  // VECTKEY=0x5FA, SYSRESETREQ=1
+    while (1) {}
 }
 
 // 부트 플래그 섹터 소거 (클리어)
@@ -83,6 +95,6 @@ void __no_inline_not_in_flash_func(ota_boot_check)(void) {
     ota_clear_flag_sector();
 
     // ── 새 펌웨어로 재부팅 ────────────────────────────────────────────────
-    watchdog_reboot(0, 0, 100);   // 100ms 후 리셋
-    while (1) tight_loop_contents();
+    // watchdog_reboot() 는 flash(Bank A)에 있어 복사 후 호출 불가 → AIRCR 사용
+    ota_trigger_reboot();
 }

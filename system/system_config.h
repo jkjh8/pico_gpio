@@ -11,42 +11,35 @@ extern "C"
 {
 #endif
 
-// 시스템 설정 버전 (구조체가 변경될 때마다 증가)
-#define SYSTEM_CONFIG_VERSION 4
-
 // 시스템 전체 설정 구조체
+// 플래시 저장 형식: 슬롯 기반 (필드별 고정 오프셋 + 1바이트 XOR CRC)
+// 매직/버전/전체 체크섬 없음 — 필드 추가 시 기존 슬롯 오프셋/크기 변경 금지
 typedef struct
 {
-    uint32_t magic;              // 매직 넘버 (0x47504943 = "GPIC")
-    uint32_t version;            // 설정 버전
-    
     // GPIO 설정
     gpio_config_t gpio;
-    
+
     // 네트워크 설정
     wiz_NetInfo network;
-    
+
     // TCP 서버 설정
     uint16_t tcp_port;
-    
+
     // UART RS232 설정
     uint32_t uart_baud;
-    
+
     // 멀티캐스트 설정
     bool multicast_enabled;
-    
+
     // DHCP로 마지막에 받은 IP 정보 (빠른 부팅용)
     uint8_t last_dhcp_ip[4];
     uint8_t last_dhcp_gw[4];
     uint8_t last_dhcp_sn[4];
     uint8_t last_dhcp_dns[4];
-    bool has_last_dhcp_ip;  // 저장된 DHCP IP가 있는지 플래그
-    
+    bool has_last_dhcp_ip;
+
     // 디버그 플래그
     uint32_t debug_flags;
-    
-    // 체크섬 (구조체 전체의 간단한 체크섬)
-    uint32_t checksum;
 } system_config_t;
 
 // 시스템 설정 함수

@@ -94,46 +94,53 @@ void multicast_server_process(void) {
         int32_t len = recvfrom(MCAST_SOCKET, buf, rx_size, sender_ip, &sender_port);
         
         if (len > 0) {
+            if (len >= (int32_t)sizeof(buf)) len = (int32_t)sizeof(buf) - 1;
             buf[len] = '\0';
-            DBG_NET_PRINT("[MCAST] Received from %d.%d.%d.%d:%d (%d bytes): %s\n",
-                         sender_ip[0], sender_ip[1], sender_ip[2], sender_ip[3],
-                         sender_port, len, buf);
-            
+            // DBG_NET_PRINT("[MCAST] Received from %d.%d.%d.%d:%d (%d bytes): %s\n",
+            //              sender_ip[0], sender_ip[1], sender_ip[2], sender_ip[3],
+            //              sender_port, len, buf);
+
+            // 허용 명령어 화이트리스트 확인 (명령 이름만 추출하여 비교)
+            static const char* const allowed_cmds[] = {
+                "getip", "getin", "getins", "getout", "getouts", "set", "sets", "setb"
+            };
+            char cmd_name[16] = {0};
+            const char* comma = strchr((char*)buf, ',');
+            size_t cmd_len = comma ? (size_t)(comma - (char*)buf) : strlen((char*)buf);
+            if (cmd_len >= sizeof(cmd_name)) cmd_len = sizeof(cmd_name) - 1;
+            memcpy(cmd_name, buf, cmd_len);
+
+            bool whitelisted = false;
+            for (int w = 0; w < (int)(sizeof(allowed_cmds) / sizeof(allowed_cmds[0])); w++) {
+                if (strcmp(cmd_name, allowed_cmds[w]) == 0) { whitelisted = true; break; }
+            }
+
+            if (!whitelisted) {
+                return;
+            } else {
             // 명령어 처리
             char response[4096];
             cmd_result_t result = process_mcast_command((char*)buf, response, sizeof(response));
-            
-            // 정상 처리되었거나 유효하지 않은 명령일 경우 응답 전송
-            if ((result == CMD_SUCCESS || result == CMD_ERROR_INVALID)) {
+
+            if (result == CMD_SUCCESS) {
                 size_t resp_len = strlen(response);
                 if (resp_len > 0) {
-                    // 옵션 1: 송신자에게 유니캐스트로 응답 (더 안정적)
-                    // int32_t sent = sendto(MCAST_SOCKET, (uint8_t*)response, resp_len,
-                    //                      sender_ip, sender_port);
-                    
-                    // 옵션 2: 멀티캐스트 그룹으로 응답 (모든 클라이언트가 받음)
                     int32_t sent = sendto(MCAST_SOCKET, (uint8_t*)response, resp_len,
-                                         mcast_group_ip, MCAST_PORT);
-                    
+                                         sender_ip, sender_port);
                     if (sent > 0) {
-                        DBG_NET_PRINT("[MCAST] Response sent (%d bytes) to multicast\n", sent);
+                        DBG_NET_PRINT("[MCAST] Response sent (%d bytes) to %d.%d.%d.%d:%d\n",
+                                     sent,
+                                     sender_ip[0], sender_ip[1], sender_ip[2], sender_ip[3],
+                                     sender_port);
                     } else {
                         DBG_NET_PRINT("[MCAST] Response send failed: %d\n", sent);
                     }
-                    
-                    // 응답이 줄바꿈으로 끝나지 않으면 추가
-                    if (resp_len < 2 || response[resp_len-2] != '\r' || response[resp_len-1] != '\n') {
-                        const char* newline = "\r\n";
-                        sendto(MCAST_SOCKET, (uint8_t*)newline, 2,
-                              mcast_group_ip, MCAST_PORT);
-                    }
                 }
-            } else if (result == CMD_ERROR_WRONG_ID) {
-                // 디바이스 ID 불일치 - 응답하지 않음 (다른 장치용 명령)
-                DBG_NET_PRINT("[MCAST] Command for different device ID, ignoring\n");
             } else {
-                DBG_NET_PRINT("[MCAST] Command processing error: %d\n", result);
+                // CMD_ERROR_WRONG_ID, CMD_ERROR_INVALID 등 — 무응답
+                DBG_NET_PRINT("[MCAST] No response (result=%d)\n", result);
             }
+            } // whitelisted
         } else if (len < 0) {
             DBG_NET_PRINT("[MCAST] recvfrom error: %d\n", len);
         }

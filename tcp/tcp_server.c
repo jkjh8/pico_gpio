@@ -115,6 +115,8 @@ void tcp_servers_process(void) {
                     uint8_t buf[512];
                     if (rx_size > sizeof(buf)) rx_size = sizeof(buf);
                     int len = recv(i, buf, rx_size);
+                    if (len < 0) len = 0;
+                    if (len >= (int)sizeof(buf)) len = (int)sizeof(buf) - 1;
                     buf[len] = 0;
                     DBG_TCP_PRINT("TCP[%d] 수신: %s\n", i, buf);
                     

@@ -228,6 +228,17 @@ static void __no_inline_not_in_flash_func(ota_program_page)(uint32_t offset,
     flash_range_program(offset, data, FLASH_PAGE_SIZE);
 }
 
+// Bank B 전체 소거 — OTA 세션 시작 시 이전 펌웨어 잔재 완전 제거
+static void __no_inline_not_in_flash_func(ota_erase_bank_b)(void) {
+    for (uint32_t off = OTA_BANK_B_OFFSET;
+         off < OTA_BANK_B_OFFSET + OTA_BANK_SIZE;
+         off += FLASH_SECTOR_SIZE) {
+        uint32_t ints = save_and_disable_interrupts();
+        flash_range_erase(off, FLASH_SECTOR_SIZE);
+        restore_interrupts(ints);
+    }
+}
+
 static bool __no_inline_not_in_flash_func(ota_flash_write_page)(uint32_t flash_offset, const uint8_t *data) {
     // Bank B 범위만 허용 (OTA 전용 영역)
     if (flash_offset < OTA_BANK_B_OFFSET ||
@@ -343,7 +354,14 @@ void http_handle_post_update(uint8_t sock,
                            "{\"error\":\"Invalid firmware: vector table check failed\"}");
         return;
     }
-    // --- Phase 2: 첫 두 페이지 기록 (Bank B) ---
+    // --- Phase 2: Bank B 전체 소거 후 첫 두 페이지 기록 ---
+    // 이전 OTA 잔재(더 큰 펌웨어의 남은 섹터)를 완전히 제거
+    DBG_HTTP_PRINT("[OTA] Bank B 전체 소거 중 (%u sectors)...\n",
+                   (unsigned)(OTA_BANK_SIZE / FLASH_SECTOR_SIZE));
+    stdio_flush();
+    ota_erase_bank_b();
+    DBG_HTTP_PRINT("[OTA] Bank B 소거 완료\n");
+    stdio_flush();
     // A/B 듀얼뱅크: Bank A 벡터 테이블(0x10000000)은 건드리지 않으므로 VTOR 리다이렉트 불필요
     if (!ota_flash_write_page(OTA_BANK_B_OFFSET + 0, pre_buf) ||
         !ota_flash_write_page(OTA_BANK_B_OFFSET + FLASH_PAGE_SIZE, pre_buf + FLASH_PAGE_SIZE)) {
@@ -496,8 +514,12 @@ void http_handle_post_ota_chunk(uint8_t        sock,
         g_ota.t_start       = to_ms_since_boot(get_absolute_time());
 
         // A/B 듀얼뱅크: Bank B에만 쓰므로 Bank A 벡터 테이블 불변 → VTOR 리다이렉트 불필요
-        DBG_HTTP_PRINT("[OTA-CHK] start total=%u — Bank B 기록 시작\n",
-                       (unsigned)g_ota.total_size);
+        DBG_HTTP_PRINT("[OTA-CHK] start total=%u — Bank B 전체 소거 중 (%u sectors)...\n",
+                       (unsigned)g_ota.total_size,
+                       (unsigned)(OTA_BANK_SIZE / FLASH_SECTOR_SIZE));
+        stdio_flush();
+        ota_erase_bank_b();
+        DBG_HTTP_PRINT("[OTA-CHK] Bank B 소거 완료 — 기록 시작\n");
         stdio_flush();
 
     } else {

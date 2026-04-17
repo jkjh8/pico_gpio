@@ -14,6 +14,19 @@
 cmd_result_t cmd_get_debug(const char* param, char* response, size_t response_size);
 cmd_result_t cmd_set_debug(const char* param, char* response, size_t response_size);
 
+// 수신 문자열에서 공백(스페이스·탭·CR·LF)을 모두 제거
+// 프로토콜은 공백을 허용하지 않으므로 수령 직후 한 번만 호출한다
+static void remove_whitespace(char* s) {
+    if (s == NULL) return;
+    char* dst = s;
+    for (char* src = s; *src != '\0'; src++) {
+        if (*src != ' ' && *src != '\t' && *src != '\r' && *src != '\n') {
+            *dst++ = *src;
+        }
+    }
+    *dst = '\0';
+}
+
 // 명령어 처리 함수
 cmd_result_t process_command(const char* command, char* response, size_t response_size) {
     if (command == NULL || response == NULL || response_size == 0) {
@@ -30,45 +43,21 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
     strncpy(cmd_copy, command, sizeof(cmd_copy) - 1);
     cmd_copy[sizeof(cmd_copy) - 1] = '\0';
 
-    // 앞뒤 공백 제거
-    char* start = cmd_copy;
-    while (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r') start++;
-    char* end = start + strlen(start) - 1;
-    while (end > start && (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')) end--;
-    *(end + 1) = '\0';
+    // 수신 즉시 공백 전체 제거 (프로토콜은 공백 비허용)
+    remove_whitespace(cmd_copy);
 
-    if (strlen(start) == 0) {
+    if (cmd_copy[0] == '\0') {
         return CMD_ERROR_INVALID;
     }
 
-    // 명령어 중간에 공백이나 줄바꿈이 있으면 그 이후 데이터 제거
-    for (char* p = start; *p != '\0'; p++) {
-        if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
-            *p = '\0';
-            break;
-        }
-    }
-
     // 명령어와 매개변수 분리 (쉼표로 구분)
-    char* comma_pos = strchr(start, ',');
-    char* cmd_part = start;
+    char* comma_pos = strchr(cmd_copy, ',');
+    char* cmd_part = cmd_copy;
     char* param_part = NULL;
-    
+
     if (comma_pos != NULL) {
         *comma_pos = '\0';
         param_part = comma_pos + 1;
-        // param_part에서도 중간에 공백/줄바꿈 있으면 제거
-        for (char* p = param_part; *p != '\0'; p++) {
-            if (*p == '\n' || *p == '\r') {
-                *p = '\0';
-                break;
-            }
-        }
-        // param_part 앞뒤 공백 제거
-        while (*param_part == ' ' || *param_part == '\t') param_part++;
-        char* param_end = param_part + strlen(param_part) - 1;
-        while (param_end > param_part && (*param_end == ' ' || *param_end == '\t')) param_end--;
-        *(param_end + 1) = '\0';
     }
 
     // 명령어 처리
@@ -161,45 +150,21 @@ cmd_result_t process_mcast_command(const char* command, char* response, size_t r
     strncpy(cmd_copy, command, sizeof(cmd_copy) - 1);
     cmd_copy[sizeof(cmd_copy) - 1] = '\0';
 
-    // 앞뒤 공백 제거
-    char* start = cmd_copy;
-    while (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r') start++;
-    char* end = start + strlen(start) - 1;
-    while (end > start && (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')) end--;
-    *(end + 1) = '\0';
+    // 수신 즉시 공백 전체 제거 (프로토콜은 공백 비허용)
+    remove_whitespace(cmd_copy);
 
-    if (strlen(start) == 0) {
+    if (cmd_copy[0] == '\0') {
         return CMD_ERROR_INVALID;
     }
 
-    // 명령어 중간에 공백이나 줄바꿈이 있으면 그 이후 데이터 제거
-    for (char* p = start; *p != '\0'; p++) {
-        if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
-            *p = '\0';
-            break;
-        }
-    }
-
     // 명령어와 매개변수 분리 (쉼표로 구분)
-    char* comma_pos = strchr(start, ',');
-    char* cmd_part = start;
+    char* comma_pos = strchr(cmd_copy, ',');
+    char* cmd_part = cmd_copy;
     char* param_part = NULL;
-    
+
     if (comma_pos != NULL) {
         *comma_pos = '\0';
         param_part = comma_pos + 1;
-        // param_part에서도 중간에 공백/줄바꿈 있으면 제거
-        for (char* p = param_part; *p != '\0'; p++) {
-            if (*p == '\n' || *p == '\r') {
-                *p = '\0';
-                break;
-            }
-        }
-        // param_part 앞뒤 공백 제거
-        while (*param_part == ' ' || *param_part == '\t') param_part++;
-        char* param_end = param_part + strlen(param_part) - 1;
-        while (param_end > param_part && (*param_end == ' ' || *param_end == '\t')) param_end--;
-        *(param_end + 1) = '\0';
     }
 
     // 명령어 처리
@@ -1157,9 +1122,6 @@ cmd_result_t cmd_set_debug(const char* param, char* response, size_t response_si
         snprintf(response, response_size, "Error: Use format setdebug,<category|all>,on|off\r\n");
         return CMD_ERROR_INVALID;
     }
-
-    // trim whitespace for val
-    while (*val == ' ' || *val == '\t') val++;
 
     bool enabled;
     if (strcasecmp(val, "on") == 0 || strcmp(val, "1") == 0) enabled = true;

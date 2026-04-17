@@ -17,7 +17,6 @@
 #include "task.h"
 #include "semphr.h"
 #include "queue.h"
-#include "hardware/watchdog.h"
 #include "pico/stdlib.h"
 
 // GPIO 응답 메시지 큐 (통합 큐 구조)
@@ -57,9 +56,11 @@ bool is_system_restart_requested(void) {
 }
 
 void system_restart(void) {
-    // 모든 인터럽트 비활성화
+    // AIRCR SYSRESETREQ — watchdog_reboot(0,0,0)은 RP2350에서 BOOTSEL 진입
     taskENTER_CRITICAL();
-    watchdog_reboot(0, 0, 0);
+    volatile uint32_t *aircr = (volatile uint32_t *)0xE000ED0CU;
+    *aircr = (0x5FAu << 16) | (1u << 2);
+    while (1) {}
 }
 
 // =============================================================================
@@ -89,8 +90,10 @@ int main()
     ota_boot_check();
 
     // 1. 기본 초기화
-    stdio_init_all();
+    // system_config_init 먼저: 버전 불일치 시 flash_range_erase(~50ms)가 발생하는데
+    // stdio_init_all 이후에 실행되면 USB CDC 인터럽트가 50ms 차단되어 호스트 연결이 끊김
     system_config_init();
+    stdio_init_all();
     debug_init();
     DBG_MAIN_PRINT("System Starting...\n");
     status_led_init();

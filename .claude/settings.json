@@ -4,7 +4,11 @@
       "Bash(python -c \":*)",
       "Bash(python convert_spa_files.py)",
       "Bash(python convert_spa_files.py web -o static_files.c)",
-      "Bash(python convert_spa_files.py web/ -o static_files)"
+      "Bash(python convert_spa_files.py web/ -o static_files)",
+      "Read(//c/Users/kjh/.claude/projects/c--Users-kjh-Desktop-DEV-pico-gpio/c5951103-ad67-4d1e-ad95-08b55cfd33d6/tool-results/**)",
+      "Bash(grep -rn \"getSIPR\\\\|get_local_ip\\\\|local_ip\\\\|own_ip\" c:/Users/kjh/Desktop/DEV/pico_gpio --include=*.c --include=*.h --exclude-dir=lib --exclude-dir=build)",
+      "Bash(grep -rn \"CONFIG\\\\|config.*offset\\\\|0x1FF\\\\|FLASH_TARGET\\\\|SETTINGS\" c:/Users/kjh/Desktop/DEV/pico_gpio/system --include=*.h --include=*.c)",
+      "Bash(xargs grep:*)"
     ]
   }
 }
