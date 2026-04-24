@@ -45,6 +45,7 @@ void mdns_init(void);
 void mdns_process(void);
 void mdns_close(void);
 bool mdns_is_initialized(void);
+bool mdns_is_expired(void);
 void mdns_announce(void);  // 자발적 응답 (Unsolicited Response)
 
 #ifdef __cplusplus

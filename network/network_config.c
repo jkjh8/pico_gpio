@@ -562,7 +562,7 @@ static void network_handle_servers(bool connected) {
         // mDNS와 멀티캐스트는 network_is_connected() (IP 할당 완료) 상태에서만 동작
         if (network_is_connected()) {
             // mDNS가 초기화되지 않았으면 초기화
-            if (!mdns_is_initialized()) {
+            if (!mdns_is_initialized() && !mdns_is_expired()) {
                 mdns_init();
             }
             mdns_process();

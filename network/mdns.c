@@ -15,6 +15,7 @@
 #define ntohs(x) htons(x)
 
 static bool mdns_initialized = false;
+static bool mdns_expired = false;
 static char mdns_hostname[32] = {0};  // "pico-gpio-XX.local"
 static uint32_t last_announce_time = 0;
 static uint32_t mdns_start_time = 0;
@@ -246,6 +247,7 @@ static int build_txt_record_response(uint8_t* response, const char* hostname) {
 // PTR/SRV 관련 서비스 탐색 응답은 더 이상 제공하지 않습니다.
 // mDNS 초기화
 void mdns_init(void) {
+    if (mdns_expired) return;
     // 이미 초기화된 경우 재초기화하지 말고 아나운스만 실행
     if (mdns_initialized) {
         DBG_NET_PRINT("[mDNS] Already initialized, sending mdns_announce only\n");
@@ -341,11 +343,17 @@ void mdns_announce(void) {
 // mDNS 메시지 처리
 void mdns_process(void) {
     if (!mdns_initialized) return;
-    
+
     // 시작 후 5분 경과 시 자동 종료
     uint32_t current_time = to_ms_since_boot(get_absolute_time());
+    static uint32_t last_alive_print = 0;
+    if (current_time - last_alive_print >= 60000) {
+        printf("[mDNS] alive, elapsed=%lus\n", (current_time - mdns_start_time) / 1000);
+        last_alive_print = current_time;
+    }
     if (current_time - mdns_start_time >= MDNS_LIFETIME_MS) {
-        DBG_NET_PRINT("[mDNS] 5 minutes elapsed, stopping mDNS\n");
+        printf("[mDNS] 5 minutes elapsed, stopping mDNS\n");
+        mdns_expired = true;
         mdns_close();
         return;
     }
@@ -490,7 +498,10 @@ void mdns_close(void) {
     }
 }
 
-// mDNS 초기화 여부 확인
 bool mdns_is_initialized(void) {
     return mdns_initialized;
+}
+
+bool mdns_is_expired(void) {
+    return mdns_expired;
 }
