@@ -78,71 +78,76 @@ void multicast_server_process(void) {
         return;
     }
     
-    // 멀티캐스트 명령 수신 처리
-    uint16_t rx_size = getSn_RX_RSR(MCAST_SOCKET);
-    if (rx_size > 0) {
+    // 멀티캐스트 명령 수신 처리 — 버퍼 완전 소진 (AES67/Dante 패킷 폭주 대응)
+    static const char* const allowed_cmds[] = {
+        "getip", "getin", "getins", "getout", "getouts", "set", "sets", "setb"
+    };
+
+    int drain_count = 0;
+    uint16_t rx_size;
+    while ((rx_size = getSn_RX_RSR(MCAST_SOCKET)) > 0 && drain_count < 16) {
+        drain_count++;
+
+        // getSn_RX_RSR이 비정상값(>1472)이면 SPI/소켓 오염 → 소켓 리셋
+        if (rx_size > 1472) {
+            DBG_NET_PRINT("[MCAST] RX size garbage (%u), reinitializing socket\n", rx_size);
+            close(MCAST_SOCKET);
+            multicast_server_init();
+            return;
+        }
+
         DBG_NET_PRINT("[MCAST] Data available: %d bytes\n", rx_size);
         uint8_t buf[512];
         uint8_t sender_ip[4];
         uint16_t sender_port;
-        
-        if (rx_size > sizeof(buf)) {
-            rx_size = sizeof(buf);
-        }
-        
-        // 멀티캐스트 데이터 수신 (송신자 정보 포함)
-        int32_t len = recvfrom(MCAST_SOCKET, buf, rx_size, sender_ip, &sender_port);
-        
-        if (len > 0) {
-            if (len >= (int32_t)sizeof(buf)) len = (int32_t)sizeof(buf) - 1;
-            buf[len] = '\0';
-            // DBG_NET_PRINT("[MCAST] Received from %d.%d.%d.%d:%d (%d bytes): %s\n",
-            //              sender_ip[0], sender_ip[1], sender_ip[2], sender_ip[3],
-            //              sender_port, len, buf);
 
-            // 허용 명령어 화이트리스트 확인 (명령 이름만 추출하여 비교)
-            static const char* const allowed_cmds[] = {
-                "getip", "getin", "getins", "getout", "getouts", "set", "sets", "setb"
-            };
-            char cmd_name[16] = {0};
-            const char* comma = strchr((char*)buf, ',');
-            size_t cmd_len = comma ? (size_t)(comma - (char*)buf) : strlen((char*)buf);
-            if (cmd_len >= sizeof(cmd_name)) cmd_len = sizeof(cmd_name) - 1;
-            memcpy(cmd_name, buf, cmd_len);
+        int32_t len = recvfrom(MCAST_SOCKET, buf, sizeof(buf), sender_ip, &sender_port);
 
-            bool whitelisted = false;
-            for (int w = 0; w < (int)(sizeof(allowed_cmds) / sizeof(allowed_cmds[0])); w++) {
-                if (strcmp(cmd_name, allowed_cmds[w]) == 0) { whitelisted = true; break; }
-            }
-
-            if (!whitelisted) {
-                return;
-            } else {
-            // 명령어 처리
-            char response[4096];
-            cmd_result_t result = process_mcast_command((char*)buf, response, sizeof(response));
-
-            if (result == CMD_SUCCESS) {
-                size_t resp_len = strlen(response);
-                if (resp_len > 0) {
-                    int32_t sent = sendto(MCAST_SOCKET, (uint8_t*)response, resp_len,
-                                         sender_ip, sender_port);
-                    if (sent > 0) {
-                        DBG_NET_PRINT("[MCAST] Response sent (%d bytes) to %d.%d.%d.%d:%d\n",
-                                     sent,
-                                     sender_ip[0], sender_ip[1], sender_ip[2], sender_ip[3],
-                                     sender_port);
-                    } else {
-                        DBG_NET_PRINT("[MCAST] Response send failed: %d\n", sent);
-                    }
-                }
-            } else {
-                // CMD_ERROR_WRONG_ID, CMD_ERROR_INVALID 등 — 무응답
-                DBG_NET_PRINT("[MCAST] No response (result=%d)\n", result);
-            }
-            } // whitelisted
-        } else if (len < 0) {
+        if (len <= 0) {
             DBG_NET_PRINT("[MCAST] recvfrom error: %d\n", len);
+            break;
+        }
+
+        if (len >= (int32_t)sizeof(buf)) len = (int32_t)sizeof(buf) - 1;
+        buf[len] = '\0';
+
+        // 허용 명령어 화이트리스트 확인 (명령 이름만 추출하여 비교)
+        char cmd_name[16] = {0};
+        const char* comma = strchr((char*)buf, ',');
+        size_t cmd_len = comma ? (size_t)(comma - (char*)buf) : strlen((char*)buf);
+        if (cmd_len >= sizeof(cmd_name)) cmd_len = sizeof(cmd_name) - 1;
+        memcpy(cmd_name, buf, cmd_len);
+
+        bool whitelisted = false;
+        for (int w = 0; w < (int)(sizeof(allowed_cmds) / sizeof(allowed_cmds[0])); w++) {
+            if (strcmp(cmd_name, allowed_cmds[w]) == 0) { whitelisted = true; break; }
+        }
+
+        if (!whitelisted) {
+            continue;
+        }
+
+        // 명령어 처리
+        char response[4096];
+        cmd_result_t result = process_mcast_command((char*)buf, response, sizeof(response));
+
+        if (result == CMD_SUCCESS) {
+            size_t resp_len = strlen(response);
+            if (resp_len > 0) {
+                int32_t sent = sendto(MCAST_SOCKET, (uint8_t*)response, resp_len,
+                                     sender_ip, sender_port);
+                if (sent > 0) {
+                    DBG_NET_PRINT("[MCAST] Response sent (%d bytes) to %d.%d.%d.%d:%d\n",
+                                 sent,
+                                 sender_ip[0], sender_ip[1], sender_ip[2], sender_ip[3],
+                                 sender_port);
+                } else {
+                    DBG_NET_PRINT("[MCAST] Response send failed: %d\n", sent);
+                }
+            }
+        } else {
+            // CMD_ERROR_WRONG_ID, CMD_ERROR_INVALID 등 — 무응답
+            DBG_NET_PRINT("[MCAST] No response (result=%d)\n", result);
         }
     }
 }

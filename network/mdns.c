@@ -17,7 +17,9 @@
 static bool mdns_initialized = false;
 static char mdns_hostname[32] = {0};  // "pico-gpio-XX.local"
 static uint32_t last_announce_time = 0;
+static uint32_t mdns_start_time = 0;
 #define MDNS_ANNOUNCE_INTERVAL_MS 300000  // 300초마다 자발적 응답
+#define MDNS_LIFETIME_MS 300000           // 시작 후 5분간만 동작
 // 초기(부팅시) 아나운스 스케줄링 (블로킹 sleep 사용 금지)
 static int mdns_initial_announces = 0;
 static uint32_t mdns_next_initial_announce = 0;
@@ -289,7 +291,8 @@ void mdns_init(void) {
     DBG_NET_PRINT("[mDNS] Socket status after open: 0x%02X (expected 0x22 for UDP)\n", status);
 
     mdns_initialized = true;
-    last_announce_time = to_ms_since_boot(get_absolute_time());
+    mdns_start_time = to_ms_since_boot(get_absolute_time());
+    last_announce_time = mdns_start_time;
     
     DBG_NET_PRINT("[mDNS] Initialized on socket %d, port %d\n", MDNS_SOCKET, MDNS_PORT);
     DBG_NET_PRINT("[mDNS] Hostname: %s\n", mdns_hostname);
@@ -339,6 +342,14 @@ void mdns_announce(void) {
 void mdns_process(void) {
     if (!mdns_initialized) return;
     
+    // 시작 후 5분 경과 시 자동 종료
+    uint32_t current_time = to_ms_since_boot(get_absolute_time());
+    if (current_time - mdns_start_time >= MDNS_LIFETIME_MS) {
+        DBG_NET_PRINT("[mDNS] 5 minutes elapsed, stopping mDNS\n");
+        mdns_close();
+        return;
+    }
+
     // 재부팅 요청 시 mDNS 소켓 닫고 처리 중단
     if (is_system_restart_requested()) {
         if (mdns_initialized) {
@@ -358,7 +369,6 @@ void mdns_process(void) {
     }
     
     // 주기적 공지 (300초마다)
-    uint32_t current_time = to_ms_since_boot(get_absolute_time());
     if (current_time - last_announce_time >= MDNS_ANNOUNCE_INTERVAL_MS) {
         mdns_announce();
         last_announce_time = current_time;
@@ -375,87 +385,100 @@ void mdns_process(void) {
         DBG_NET_PRINT("[mDNS] Initial announce sent, %d remaining\n", mdns_initial_announces);
     }
     
-    // 수신 데이터 확인
-    uint16_t len = getSn_RX_RSR(MDNS_SOCKET);
-    if (len == 0) return;
-    
-    uint8_t buf[512];
-    uint8_t remote_ip[4];
-    uint16_t remote_port;
-    
-    int32_t ret = recvfrom(MDNS_SOCKET, buf, sizeof(buf), remote_ip, &remote_port);
-    if (ret <= sizeof(dns_header_t)) return;
-    
-    dns_header_t* header = (dns_header_t*)buf;
-    
-    // 질의 패킷만 처리 (응답 패킷 무시)
-    if (ntohs(header->flags) & DNS_FLAG_RESPONSE) return;
-    
-    uint16_t qdcount = ntohs(header->qdcount);
-    if (qdcount == 0) return;
-    // 질의 파싱
-    const uint8_t* ptr = buf + sizeof(dns_header_t);
-    char qname[128];
+    // 수신 데이터 확인 — 버퍼 완전 소진 (AES67/Dante mDNS 패킷 폭주 대응)
+    int mdns_drain = 0;
+    uint16_t len;
+    while ((len = getSn_RX_RSR(MDNS_SOCKET)) > 0 && mdns_drain < 16) {
+        mdns_drain++;
 
-    for (int i = 0; i < qdcount; i++) {
-        int name_len = dns_decode_name(buf, ptr, qname, sizeof(qname));
-        ptr += name_len;
-        
-        uint16_t qtype = (ptr[0] << 8) | ptr[1];
-        ptr += 4;  // TYPE + CLASS
-
-        // 빈 질의는 로그 없이 무시; qtype==0은 rate-limited 로그
-        if (qname[0] == '\0') {
-            continue;
-        }
-        if (qtype == 0) {
-            uint32_t now = to_ms_since_boot(get_absolute_time());
-            if (now - mdns_ignore_last_log_ts > 1000) {
-                mdns_ignore_last_log_ts = now;
-                mdns_ignore_log_count = 0;
-            }
-            if (mdns_ignore_log_count < mdns_ignore_log_limit) {
-                mdns_ignore_log_count++;
-            }
-            continue;
+        // getSn_RX_RSR이 비정상값이면 SPI/소켓 오염 → 소켓 리셋
+        if (len > 1472) {
+            DBG_NET_PRINT("[mDNS] RX size garbage (%u), reinitializing\n", len);
+            mdns_initialized = false;
+            mdns_init();
+            return;
         }
 
-        // A 레코드 질의이고 호스트 이름이 일치하면 응답
-        if (qtype == DNS_TYPE_A) {
-            bool match = hostname_match(qname, mdns_hostname);
-            if (match) {
-            wiz_NetInfo net_info;
-            wizchip_getnetinfo(&net_info);
-            
-            uint8_t response[512];
-            int pos = 0;
-            
-            // DNS 헤더
-            dns_header_t* resp_header = (dns_header_t*)response;
-            memcpy(resp_header, header, sizeof(dns_header_t));
-            resp_header->flags = htons(DNS_FLAG_RESPONSE | DNS_FLAG_AUTHORITATIVE);
-            resp_header->ancount = htons(2);  // A + TXT
-            resp_header->nscount = 0;
-            resp_header->arcount = 0;
-            pos += sizeof(dns_header_t);
-            
-            // 원본 질의 복사
-            memcpy(response + pos, buf + sizeof(dns_header_t), name_len + 4);
-            pos += name_len + 4;
-            
-            // A 레코드 응답
-            pos += build_a_record_response(response + pos, mdns_hostname, net_info.ip);
-            
-            // TXT 레코드 (장비 정보)
-            pos += build_txt_record_response(response + pos, mdns_hostname);
-            
-            // 유니캐스트 응답 (질의자에게 직접)
-            int32_t sent = sendto(MDNS_SOCKET, response, pos, remote_ip, remote_port);
-            
-            break;
+        uint8_t buf[512];
+        uint8_t remote_ip[4];
+        uint16_t remote_port;
+
+        int32_t ret = recvfrom(MDNS_SOCKET, buf, sizeof(buf), remote_ip, &remote_port);
+        if (ret <= (int32_t)sizeof(dns_header_t)) continue;
+
+        dns_header_t* header = (dns_header_t*)buf;
+
+        // 질의 패킷만 처리 (응답 패킷 무시)
+        if (ntohs(header->flags) & DNS_FLAG_RESPONSE) continue;
+
+        uint16_t qdcount = ntohs(header->qdcount);
+        if (qdcount == 0) continue;
+
+        // 질의 파싱
+        const uint8_t* ptr = buf + sizeof(dns_header_t);
+        char qname[128];
+
+        for (int i = 0; i < qdcount; i++) {
+            int name_len = dns_decode_name(buf, ptr, qname, sizeof(qname));
+            ptr += name_len;
+
+            uint16_t qtype = (ptr[0] << 8) | ptr[1];
+            ptr += 4;  // TYPE + CLASS
+
+            // 빈 질의는 로그 없이 무시; qtype==0은 rate-limited 로그
+            if (qname[0] == '\0') {
+                continue;
             }
-        }
-    }
+            if (qtype == 0) {
+                uint32_t now = to_ms_since_boot(get_absolute_time());
+                if (now - mdns_ignore_last_log_ts > 1000) {
+                    mdns_ignore_last_log_ts = now;
+                    mdns_ignore_log_count = 0;
+                }
+                if (mdns_ignore_log_count < mdns_ignore_log_limit) {
+                    mdns_ignore_log_count++;
+                }
+                continue;
+            }
+
+            // A 레코드 질의이고 호스트 이름이 일치하면 응답
+            if (qtype == DNS_TYPE_A) {
+                bool match = hostname_match(qname, mdns_hostname);
+                if (match) {
+                    wiz_NetInfo net_info;
+                    wizchip_getnetinfo(&net_info);
+
+                    uint8_t response[512];
+                    int pos = 0;
+
+                    // DNS 헤더
+                    dns_header_t* resp_header = (dns_header_t*)response;
+                    memcpy(resp_header, header, sizeof(dns_header_t));
+                    resp_header->flags = htons(DNS_FLAG_RESPONSE | DNS_FLAG_AUTHORITATIVE);
+                    resp_header->ancount = htons(2);  // A + TXT
+                    resp_header->nscount = 0;
+                    resp_header->arcount = 0;
+                    pos += sizeof(dns_header_t);
+
+                    // 원본 질의 복사
+                    memcpy(response + pos, buf + sizeof(dns_header_t), name_len + 4);
+                    pos += name_len + 4;
+
+                    // A 레코드 응답
+                    pos += build_a_record_response(response + pos, mdns_hostname, net_info.ip);
+
+                    // TXT 레코드 (장비 정보)
+                    pos += build_txt_record_response(response + pos, mdns_hostname);
+
+                    // 유니캐스트 응답 (질의자에게 직접)
+                    int32_t sent = sendto(MDNS_SOCKET, response, pos, remote_ip, remote_port);
+                    (void)sent;
+
+                    break;
+                }
+            }
+        } // for questions
+    } // while drain
 }
 
 // mDNS 닫기
