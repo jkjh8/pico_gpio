@@ -83,9 +83,13 @@ void __no_inline_not_in_flash_func(ota_boot_check)(void) {
     for (uint32_t offset = 0; offset < OTA_BANK_SIZE; offset += FLASH_SECTOR_SIZE) {
 
         // 1) XIP로 Bank B 섹터 읽기 (flash_range_erase 전에 반드시 수행)
-        memcpy(s_sector_buf,
-               (const uint8_t *)(XIP_BASE + OTA_BANK_B_OFFSET + offset),
-               FLASH_SECTOR_SIZE);
+        // memcpy는 flash에 위치할 수 있어 self-overwrite 도중 호출 시 hang.
+        // 인라인 word 복사로 RAM 내에서 완결되게 함.
+        const uint32_t *src = (const uint32_t *)(XIP_BASE + OTA_BANK_B_OFFSET + offset);
+        uint32_t *dst = (uint32_t *)s_sector_buf;
+        for (uint32_t i = 0; i < FLASH_SECTOR_SIZE / 4; i++) {
+            dst[i] = src[i];
+        }
 
         // 2) Bank A 해당 섹터에 기록 (RAM 함수 — XIP 정지 중 실행)
         ota_apply_sector(OTA_BANK_A_OFFSET + offset, s_sector_buf);
