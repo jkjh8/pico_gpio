@@ -10,8 +10,8 @@
 #include <string.h>
 #include <ctype.h>
 
-// 멀티캐스트 그룹 IP
-static uint8_t mcast_group_ip[4] = {239, 224, 0, 1};
+// 멀티캐스트 그룹 IP (multicast_server.h의 MCAST_GROUP_IP와 반드시 일치해야 함)
+static uint8_t mcast_group_ip[4] = {239, 195, 42, 17};
 
 bool multicast_server_init(void) {
     DBG_NET_PRINT("[MCAST] Initializing multicast server on socket %d\n", MCAST_SOCKET);
@@ -24,15 +24,15 @@ bool multicast_server_init(void) {
     }
     
     // 멀티캐스트 MAC 주소 설정 (소켓 열기 전)
-    // IP 239.224.0.1 -> MAC 01:00:5E:60:00:01
-    // 멀티캐스트 MAC = 01:00:5E + (IP 하위 23비트)
-    uint8_t mcast_mac[6] = {0x01, 0x00, 0x5E, 0x60, 0x00, 0x01};
+    // IP 239.195.42.17 -> MAC 01:00:5E:43:2A:11
+    // 멀티캐스트 MAC = 01:00:5E + (IP 하위 23비트) = 01:00:5E:(2nd옥텟&0x7F):(3rd옥텟):(4th옥텟)
+    uint8_t mcast_mac[6] = {0x01, 0x00, 0x5E, 0x43, 0x2A, 0x11};
     setSn_DHAR(MCAST_SOCKET, mcast_mac);
     DBG_NET_PRINT("[MCAST] MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
         mcast_mac[0], mcast_mac[1], mcast_mac[2], mcast_mac[3], mcast_mac[4], mcast_mac[5]);
-    
+
     // 멀티캐스트 그룹 IP 설정 (패킷의 "목적지 IP" 필터)
-    // 239.224.0.1로 온 패킷만 수신 (송신자가 아니라 dst IP 체크!)
+    // 239.195.42.17로 온 패킷만 수신 (송신자가 아니라 dst IP 체크!)
     setSn_DIPR(MCAST_SOCKET, mcast_group_ip);
     DBG_NET_PRINT("[MCAST] Group IP: %d.%d.%d.%d\n", 
         mcast_group_ip[0], mcast_group_ip[1], mcast_group_ip[2], mcast_group_ip[3]);
@@ -128,7 +128,8 @@ void multicast_server_process(void) {
         }
 
         // 명령어 처리
-        char response[4096];
+        // static: 4KB를 network_task 스택(8KB)에 매번 할당하면 스택 오버플로우로 보드가 정지함
+        static char response[4096];
         cmd_result_t result = process_mcast_command((char*)buf, response, sizeof(response));
 
         if (result == CMD_SUCCESS) {
@@ -149,6 +150,14 @@ void multicast_server_process(void) {
             // CMD_ERROR_WRONG_ID, CMD_ERROR_INVALID 등 — 무응답
             DBG_NET_PRINT("[MCAST] No response (result=%d)\n", result);
         }
+    }
+}
+
+void multicast_server_close(void) {
+    uint8_t status = getSn_SR(MCAST_SOCKET);
+    if (status != SOCK_CLOSED) {
+        close(MCAST_SOCKET);
+        DBG_NET_PRINT("[MCAST] Closed\n");
     }
 }
 

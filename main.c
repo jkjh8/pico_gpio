@@ -131,7 +131,8 @@ int main()
         DBG_MAIN_PRINT("GPIO message queues created (UART + TCP + MCAST, size=%d)\n", GPIO_QUEUE_SIZE);
     }
 
-    xTaskCreate(network_task, "Network", 2048, NULL, 4, &h_task_network);
+    // Network 태스크는 TCP/HTTP/mDNS/멀티캐스트 처리를 모두 이 스택에서 수행하므로 여유있게 확보
+    xTaskCreate(network_task, "Network", 4096, NULL, 4, &h_task_network);
     xTaskCreate(gpio_task,    "GPIO",    1024, NULL, 3, &h_task_gpio);
     xTaskCreate(uart_task,    "UART",    1024, NULL, 3, &h_task_uart);
     xTaskCreate(usb_task,     "USB",     1024, NULL, 3, &h_task_usb);

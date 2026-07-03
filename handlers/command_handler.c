@@ -1,5 +1,6 @@
 #include "command_handler.h"
 #include "network/network_config.h"
+#include "network/multicast_server.h"
 #include "system/system_config.h"
 #include "tcp/tcp_server.h"
 #include "gpio/gpio.h"
@@ -89,6 +90,10 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
         return cmd_set_tcp_port(param_part, response, response_size);
     } else if (strcmp(cmd_part, "setdhcp") == 0) {
         return cmd_set_dhcp(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "setmulticast") == 0) {
+        return cmd_set_multicast(param_part, response, response_size);
+    } else if (strcmp(cmd_part, "getmulticast") == 0) {
+        return cmd_get_multicast(response, response_size);
     } else if (strcmp(cmd_part, "setuartbaud") == 0) {
         return cmd_set_uart_baud(param_part, response, response_size);
     } else if (strcmp(cmd_part, "getuartconfig") == 0) {
@@ -724,6 +729,38 @@ cmd_result_t cmd_set_dhcp(const char* param, char* response, size_t response_siz
     return CMD_SUCCESS;
 }
 
+// 멀티캐스트 포트 활성화/비활성화
+// setdhcp와 달리 재부팅이 필요 없음: network_task 루프가 다음 반복(10ms 이내)에
+// 설정값을 읽어 소켓을 열거나 닫는다 (network/network_config.c network_handle_servers 참고)
+cmd_result_t cmd_set_multicast(const char* param, char* response, size_t response_size) {
+    if (param == NULL) {
+        snprintf(response, response_size, "Error: Multicast parameter required (on/off)\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    bool enable;
+    if (strcmp(param, "on") == 0 || strcmp(param, "1") == 0) {
+        enable = true;
+    } else if (strcmp(param, "off") == 0 || strcmp(param, "0") == 0) {
+        enable = false;
+    } else {
+        snprintf(response, response_size, "Error: Invalid value. Use 'on' or 'off'\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    system_config_set_multicast_enabled(enable);
+    system_config_save_to_flash();
+
+    snprintf(response, response_size, "Multicast %s and applied.\r\n", enable ? "enabled" : "disabled");
+    return CMD_SUCCESS;
+}
+
+cmd_result_t cmd_get_multicast(char* response, size_t response_size) {
+    bool enabled = system_config_get_multicast_enabled();
+    snprintf(response, response_size, "Multicast: %s (port %d)\r\n", enabled ? "enabled" : "disabled", MCAST_PORT);
+    return CMD_SUCCESS;
+}
+
 // UART 설정 명령어들
 cmd_result_t cmd_set_uart_baud(const char* param, char* response, size_t response_size) {
     if (param == NULL) {
@@ -954,6 +991,8 @@ cmd_result_t cmd_help(char* response, size_t response_size) {
         "  setnetwork,ip,sub,gw      - Set IP, subnet, gateway at once\r\n"
         "  settcpport,port           - Set TCP port\r\n"
         "  setdhcp,on/off            - Enable/disable DHCP\r\n"
+        "  setmulticast,on/off       - Enable/disable multicast port\r\n"
+        "  getmulticast              - Show multicast status\r\n"
         "UART:\r\n"
         "  getuartconfig             - Show UART configuration\r\n"
         "  setuartbaud,rate          - Set UART baud rate\r\n"

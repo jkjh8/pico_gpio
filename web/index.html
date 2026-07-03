@@ -774,6 +774,10 @@
                     <span>Baud Rate</span>
                     <strong id="sum-baud">Loading...</strong>
                   </div>
+                  <div class="row items-center justify-between">
+                    <span>Multicast</span>
+                    <strong id="sum-multicast">Loading...</strong>
+                  </div>
                 </div>
               </div>
               <div class="form-group">
@@ -907,6 +911,20 @@
                     <option value="38400">38400</option>
                     <option value="57600">57600</option>
                     <option value="115200">115200</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <div class="field-header">
+                    <span>MULTICAST</span>
+                    <span
+                      id="comm-mcast-addr"
+                      style="font-size: 0.7rem; color: #666"
+                      >-</span
+                    >
+                  </div>
+                  <select id="comm-multicast">
+                    <option value="true">ENABLED</option>
+                    <option value="false">DISABLED</option>
                   </select>
                 </div>
               </div>
@@ -1108,6 +1126,18 @@
                     </td>
                     <td>Enable/disable DHCP</td>
                   </tr>
+                  <tr>
+                    <td>
+                      <code>setmulticast,on/off</code>
+                    </td>
+                    <td>Enable/disable multicast port (also in Settings)</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>getmulticast</code>
+                    </td>
+                    <td>Show multicast enabled status</td>
+                  </tr>
                 </tbody>
               </table>
 
@@ -1126,13 +1156,13 @@
                     <td>
                       <strong>Multicast Group</strong>
                     </td>
-                    <td>239.224.0.1</td>
+                    <td id="help-mcast-group">Loading...</td>
                   </tr>
                   <tr>
                     <td>
                       <strong>UDP Port</strong>
                     </td>
-                    <td>9000 (TX/RX)</td>
+                    <td id="help-mcast-port">Loading... (TX/RX)</td>
                   </tr>
                   <tr>
                     <td>
@@ -1636,8 +1666,26 @@
           state.comm = data.control
           setVal('comm-tcp', data.control.tcp_port)
           setVal('comm-baud', data.control.rs232_1_baud)
+          setVal('comm-multicast', (data.control.multicast_enabled !== false).toString())
+          const mcastAddr =
+            (data.control.multicast_group || '-') +
+            ':' +
+            (data.control.multicast_port || '-')
+          setEl('comm-mcast-addr', mcastAddr)
+          setEl('help-mcast-group', data.control.multicast_group || 'N/A')
+          setEl(
+            'help-mcast-port',
+            (data.control.multicast_port || 'N/A') + ' (TX/RX)'
+          )
           setEl('sum-tcp', data.control.tcp_port)
           setEl('sum-baud', data.control.rs232_1_baud)
+          setEl(
+            'sum-multicast',
+            (data.control.multicast_enabled !== false ? 'Enabled' : 'Disabled') +
+              ' (' +
+              mcastAddr +
+              ')'
+          )
 
           // Firmware version
           if (data.firmware_version) {
@@ -1718,7 +1766,8 @@
           showLoading('Applying Control Settings...')
           const payload = {
             tcp_port: parseInt($('comm-tcp').value),
-            rs232_1_baud: parseInt($('comm-baud').value)
+            rs232_1_baud: parseInt($('comm-baud').value),
+            multicast_enabled: $('comm-multicast').value === 'true'
           }
           try {
             const res = await fetch('/api/control', {

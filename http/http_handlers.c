@@ -6,6 +6,7 @@
 #include "gpio/gpio.h"
 #include "system/system_config.h"
 #include "network/network_config.h"
+#include "network/multicast_server.h"
 #include "handlers/command_handler.h"
 #include "tcp/tcp_server.h"
 #include "uart/uart_rs232.h"
@@ -163,7 +164,8 @@ void http_handle_post_control(uint8_t sock, const char* body) {
     
     cJSON* tcp_port_json = cJSON_GetObjectItem(json, "tcp_port");
     cJSON* uart_baud_json = cJSON_GetObjectItem(json, "rs232_1_baud");
-    
+    cJSON* multicast_json = cJSON_GetObjectItem(json, "multicast_enabled");
+
     bool tcp_changed = false;
     bool uart_changed = false;
     
@@ -193,7 +195,14 @@ void http_handle_post_control(uint8_t sock, const char* body) {
         uart_rs232_init(RS232_PORT_1, new_baud);
         DBG_HTTP_PRINT("UART baud changed to %lu and applied\n", new_baud);
     }
-    
+
+    if (multicast_json && cJSON_IsBool(multicast_json)) {
+        bool enabled = cJSON_IsTrue(multicast_json);
+        system_config_set_multicast_enabled(enabled);
+        // network_task 루프가 다음 반복(10ms 이내)에 소켓을 열거나 닫아 즉시 반영됨
+        DBG_HTTP_PRINT("Multicast %s\n", enabled ? "enabled" : "disabled");
+    }
+
     cJSON_Delete(json);
     
     // 설정 저장
@@ -311,7 +320,8 @@ void http_handle_post_command(uint8_t sock, const char* body) {
     DBG_HTTP_PRINT("Executing command: %s\n", command);
 
     // 명령 실행
-    char cmd_response[2048];
+    // static: 2KB를 network_task 스택(8KB)에 매번 할당하면 스택 오버플로우로 보드가 정지함
+    static char cmd_response[2048];
     cmd_result_t result = process_command(command, cmd_response, sizeof(cmd_response));
 
     cJSON_Delete(json);
@@ -396,6 +406,9 @@ void http_handle_get_all(uint8_t sock) {
     cJSON* control = cJSON_CreateObject();
     cJSON_AddNumberToObject(control, "tcp_port", tcp_port);
     cJSON_AddNumberToObject(control, "rs232_1_baud", uart_baud);
+    cJSON_AddBoolToObject(control, "multicast_enabled", system_config_get_multicast_enabled());
+    cJSON_AddStringToObject(control, "multicast_group", MCAST_GROUP_IP);
+    cJSON_AddNumberToObject(control, "multicast_port", MCAST_PORT);
     cJSON_AddItemToObject(root, "control", control);
     
     // 펌웨어 버전 + 빌드 타임스탬프

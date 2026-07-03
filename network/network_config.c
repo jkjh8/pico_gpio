@@ -567,24 +567,34 @@ static void network_handle_servers(bool connected) {
             }
             mdns_process();
             
-            // 멀티캐스트 서버 초기화 (DHCP IP 할당 후)
-            if (!multicast_initialized) {
-                if (multicast_server_init()) {
-                    multicast_initialized = true;
-                    printf("[MCAST] Multicast server initialized after IP assignment\n");
-                    fflush(stdout);
+            // 멀티캐스트는 설정(multicast_enabled)이 켜져 있을 때만 동작
+            // 웹UI/CLI에서 언제든 켜고 끌 수 있으며, 다음 루프(10ms)에 바로 반영됨
+            if (system_config_get_multicast_enabled()) {
+                // 멀티캐스트 서버 초기화 (DHCP IP 할당 후)
+                if (!multicast_initialized) {
+                    if (multicast_server_init()) {
+                        multicast_initialized = true;
+                        printf("[MCAST] Multicast server initialized after IP assignment\n");
+                        fflush(stdout);
+                    }
                 }
-            }
-            
-            // 멀티캐스트 서버 처리
-            multicast_server_process();
-            
-            // 멀티캐스트 GPIO 메시지 큐 처리
-            if (gpio_queues[GPIO_QUEUE_MCAST] != NULL) {
-                char msg_buffer[GPIO_MSG_MAX_LEN];
-                while (xQueueReceive(gpio_queues[GPIO_QUEUE_MCAST], msg_buffer, 0) == pdTRUE) {
-                    multicast_send_feedback(msg_buffer);
+
+                // 멀티캐스트 서버 처리
+                multicast_server_process();
+
+                // 멀티캐스트 GPIO 메시지 큐 처리
+                if (gpio_queues[GPIO_QUEUE_MCAST] != NULL) {
+                    char msg_buffer[GPIO_MSG_MAX_LEN];
+                    while (xQueueReceive(gpio_queues[GPIO_QUEUE_MCAST], msg_buffer, 0) == pdTRUE) {
+                        multicast_send_feedback(msg_buffer);
+                    }
                 }
+            } else if (multicast_initialized) {
+                // 런타임에 비활성화됨 → 소켓 닫기
+                multicast_server_close();
+                multicast_initialized = false;
+                printf("[MCAST] Disabled by configuration, socket closed\n");
+                fflush(stdout);
             }
         }
         tcp_servers_process();

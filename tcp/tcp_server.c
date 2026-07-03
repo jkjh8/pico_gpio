@@ -121,7 +121,8 @@ void tcp_servers_process(void) {
                     DBG_TCP_PRINT("TCP[%d] 수신: %s\n", i, buf);
                     
                     // 텍스트 명령어 처리
-                    char response[4096];
+                    // static: 4KB를 network_task 스택(8KB)에 매번 할당하면 스택 오버플로우로 보드가 정지함
+                    static char response[4096];
                     cmd_result_t result;
                     
                     result = process_command((char*)buf, response, sizeof(response));

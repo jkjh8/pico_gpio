@@ -2,7 +2,7 @@
 """
 Multicast UDP Test Client for Pico GPIO Controller
 
-Multicast Group: 239.224.0.1
+Multicast Group: 239.195.42.17
 Command Port: 9000 (TX - send commands here)
 Feedback Port: 9001 (RX - receive feedback here)
 """
@@ -13,7 +13,7 @@ import sys
 import threading
 import time
 
-MCAST_GROUP = '239.224.0.1'
+MCAST_GROUP = '239.195.42.17'
 MCAST_PORT = 9000  # 송수신 공통 포트
 
 def listen_feedback():

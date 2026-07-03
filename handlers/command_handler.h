@@ -50,6 +50,8 @@ cmd_result_t cmd_set_gateway(const char *param, char *response, size_t response_
 cmd_result_t cmd_set_network(const char *param, char *response, size_t response_size);
 cmd_result_t cmd_set_tcp_port(const char *param, char *response, size_t response_size);
 cmd_result_t cmd_set_dhcp(const char *param, char *response, size_t response_size);
+cmd_result_t cmd_set_multicast(const char *param, char *response, size_t response_size);
+cmd_result_t cmd_get_multicast(char *response, size_t response_size);
 
 // UART 설정 명령어들
 cmd_result_t cmd_set_uart_baud(const char *param, char *response, size_t response_size);

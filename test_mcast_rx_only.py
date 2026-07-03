@@ -5,7 +5,7 @@
 import socket
 import struct
 
-MCAST_GROUP = '239.224.0.1'
+MCAST_GROUP = '239.195.42.17'
 FEEDBACK_PORT = 9001
 
 print(f"멀티캐스트 수신 테스트: {MCAST_GROUP}:{FEEDBACK_PORT}")

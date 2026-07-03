@@ -30,44 +30,52 @@ static int mdns_ignore_log_count = 0;
 static int mdns_ignore_log_limit = 5; // 초당 최대 로그 수
 
 // DNS 이름 압축 해제 (라벨 형식 → 문자열)
-static int dns_decode_name(const uint8_t* packet, const uint8_t* name_ptr, char* output, int max_len) {
-    int pos = 0;
+// packet_len으로 압축 포인터/라벨이 수신 버퍼를 벗어나지 못하도록 막고,
+// jump_count로 포인터 루프(A→B→A)에 의한 무한 루프/장시간 점유를 방지한다.
+// (조작되거나 손상된 mDNS 질의 패킷이 네트워크 부팅 직후 수신될 수 있음)
+static int dns_decode_name(const uint8_t* packet, size_t packet_len, const uint8_t* name_ptr, char* output, int max_len) {
+    const uint8_t* packet_end = packet + packet_len;
     int output_pos = 0;
     const uint8_t* ptr = name_ptr;
     bool jumped = false;
     int orig_pos = 0;
-    
-    while (*ptr != 0 && output_pos < max_len - 1) {
+    int jump_count = 0;
+
+    while (ptr < packet_end && *ptr != 0 && output_pos < max_len - 1) {
         // 압축 포인터 (상위 2비트가 11)
         if ((*ptr & 0xC0) == 0xC0) {
+            if (ptr + 1 >= packet_end) break;      // 두 번째 포인터 바이트가 범위 밖
+            if (++jump_count > 8) break;           // 과도한/순환 점프 방지
             if (!jumped) {
                 orig_pos = ptr - name_ptr + 2;
             }
             uint16_t offset = ((*ptr & 0x3F) << 8) | *(ptr + 1);
+            if (offset >= packet_len) break;       // 패킷 범위를 벗어난 점프 무시
             ptr = packet + offset;
             jumped = true;
             continue;
         }
-        
+
         // 라벨 길이
         uint8_t len = *ptr++;
         if (len == 0) break;
-        
+        if (ptr + len > packet_end) break;         // 라벨이 패킷 끝을 벗어남
+
         if (output_pos > 0) {
             output[output_pos++] = '.';
         }
-        
+
         for (int i = 0; i < len && output_pos < max_len - 1; i++) {
             output[output_pos++] = *ptr++;
         }
-        
+
         if (!jumped) {
             orig_pos = ptr - name_ptr;
         }
     }
-    
+
     output[output_pos] = '\0';
-    return jumped ? orig_pos : (ptr - name_ptr + 1);
+    return jumped ? orig_pos : (int)(ptr - name_ptr + 1);
 }
 
 // DNS 이름 인코딩 (문자열 → 라벨 형식)
@@ -312,10 +320,11 @@ void mdns_announce(void) {
     
     wiz_NetInfo net_info;
     wizchip_getnetinfo(&net_info);
-    
-    uint8_t response[512];
+
+    // static: network_task 스택 절약 (mdns_process 호출 체인과 중첩되지 않아 안전)
+    static uint8_t response[512];
     int pos = 0;
-    
+
     // DNS 헤더
     dns_header_t* header = (dns_header_t*)response;
     memset(header, 0, sizeof(dns_header_t));
@@ -407,7 +416,8 @@ void mdns_process(void) {
             return;
         }
 
-        uint8_t buf[512];
+        // static: network_task 스택 절약 (mdns_announce 호출 체인과 중첩되지 않아 안전)
+        static uint8_t buf[512];
         uint8_t remote_ip[4];
         uint16_t remote_port;
 
@@ -415,6 +425,7 @@ void mdns_process(void) {
         if (ret <= (int32_t)sizeof(dns_header_t)) continue;
 
         dns_header_t* header = (dns_header_t*)buf;
+        const uint8_t* buf_end = buf + ret;
 
         // 질의 패킷만 처리 (응답 패킷 무시)
         if (ntohs(header->flags) & DNS_FLAG_RESPONSE) continue;
@@ -427,9 +438,13 @@ void mdns_process(void) {
         char qname[128];
 
         for (int i = 0; i < qdcount; i++) {
-            int name_len = dns_decode_name(buf, ptr, qname, sizeof(qname));
+            // qdcount는 패킷 헤더의 값(조작 가능) — 실제 수신 범위를 벗어나면 중단
+            if (ptr >= buf_end) break;
+
+            int name_len = dns_decode_name(buf, (size_t)ret, ptr, qname, sizeof(qname));
             ptr += name_len;
 
+            if (ptr + 4 > buf_end) break;  // TYPE+CLASS를 읽기 전 범위 확인
             uint16_t qtype = (ptr[0] << 8) | ptr[1];
             ptr += 4;  // TYPE + CLASS
 
@@ -456,7 +471,8 @@ void mdns_process(void) {
                     wiz_NetInfo net_info;
                     wizchip_getnetinfo(&net_info);
 
-                    uint8_t response[512];
+                    // static: network_task 스택 절약
+                    static uint8_t response[512];
                     int pos = 0;
 
                     // DNS 헤더

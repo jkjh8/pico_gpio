@@ -70,8 +70,8 @@ target_compile_definitions(main PRIVATE _WIZCHIP_=W5500)
 # Firmware version
 target_compile_definitions(main PRIVATE
     FW_VER_MAJOR=1
-    FW_VER_MINOR=1
-    FW_VER_PATCH=5
+    FW_VER_MINOR=2
+    FW_VER_PATCH=0
 )
 
 # Enable debug flags (set to 1 to enable, 0 to disable)

@@ -3,11 +3,11 @@
 Conference Gooseneck Microphone Controller
 AMX MU Series External Control via Multicast
 
-Pico Device Protocol (239.224.0.1:9000, UDP multicast):
+Pico Device Protocol (239.195.42.17:9000, UDP multicast):
   RX (device → controller): in,<device_id>,<channel>,<value>
   TX (controller → device): set,<device_id>,<channel>,<value>
 
-External Control Commands (AMX MU → 239.224.0.1:9000):
+External Control Commands (AMX MU → 239.195.42.17:9000):
   MIC_ON,<device_id>,<channel>            - Force turn on mic LED
   MIC_OFF,<device_id>,<channel>           - Force turn off mic LED
   MIC_LIMIT,<count>                       - Set max simultaneous mics (0 = unlimited)
@@ -34,7 +34,7 @@ from typing import Set, Optional, Tuple
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 
-MCAST_GROUP      = "239.224.0.1"
+MCAST_GROUP      = "239.195.42.17"
 MCAST_PORT       = 9000
 MCAST_TTL        = 4
 DEVICE_ID        = 0            # 0 = accept all devices (multi-device mode)
