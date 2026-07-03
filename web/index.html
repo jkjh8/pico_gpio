@@ -259,6 +259,15 @@
         background-color: #1565c0;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
       }
+      .btn-danger {
+        background-color: #d32f2f;
+        color: #fff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+      }
+      .btn-danger:hover {
+        background-color: #b71c1c;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      }
       .btn-expand {
         width: 40px;
         height: 40px;
@@ -288,6 +297,19 @@
       .btn-expand:hover .btn-text {
         max-width: 100px;
         opacity: 1;
+      }
+      /* Locate 동작 중: 버튼이 은은하게 깜박여 활성 상태 표시 */
+      .btn-locating {
+        animation: locate-pulse 1s ease-in-out infinite;
+      }
+      @keyframes locate-pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.45;
+        }
       }
       .btn-flat {
         background: none;
@@ -732,6 +754,14 @@
             <div class="card-header">
               <svg class="icon text-primary"><use href="#home"></use></svg>
               <span class="card-title">System Status</span>
+              <button
+                id="btn-locate"
+                class="btn btn-primary btn-expand"
+                style="margin-left: auto"
+                title="LED blinks red/green for 15s to identify this device">
+                <svg class="icon-sm"><use href="#locate"></use></svg>
+                <span class="btn-text">Locate</span>
+              </button>
             </div>
             <div class="card-body">
               <div class="form-group">
@@ -1368,6 +1398,15 @@
                   </tr>
                   <tr>
                     <td>
+                      <code>locate[,on/off]</code>
+                    </td>
+                    <td>
+                      Identify device — LED blinks red/green for 15s (no
+                      argument = toggle)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
                       <code>factoryreset</code>
                     </td>
                     <td>Factory reset</td>
@@ -1564,6 +1603,12 @@
         <path
           d="M480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-84 31.5-156.5T197-763l56 56q-44 44-68.5 102T160-480q0 134 93 227t227 93q134 0 227-93t93-227q0-67-24.5-125T707-707l56-56q54 54 85.5 126.5T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm-40-360v-440h80v440h-80Z" />
       </symbol>
+      <symbol
+        id="locate"
+        viewBox="0 -960 960 960">
+        <path
+          d="M440-42v-80q-125-14-214.5-103.5T122-440H42v-80h80q14-125 103.5-214.5T440-838v-80h80v80q125 14 214.5 103.5T838-520h80v80h-80q-14 125-103.5 214.5T520-122v80h-80Zm40-158q116 0 198-82t82-198q0-116-82-198t-198-82q-116 0-198 82t-82 198q0 116 82 198t198 82Zm0-120q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47Z" />
+      </symbol>
     </svg>
     <script>
       const state = { network: {}, comm: {}, gpio: {} }
@@ -1758,6 +1803,38 @@
       })
       $('btn-reboot').addEventListener('click', () => {
         showConfirmModal()
+      })
+      // Locate 토글: 시작하면 버튼이 Stop(빨강)으로 바뀌고,
+      // 장비가 15초 후 스스로 멈추므로 UI도 같은 타이밍에 원래 상태로 복귀
+      let locateTimer = null
+      function setLocateButton(active) {
+        const btn = $('btn-locate')
+        btn.classList.toggle('btn-danger', active)
+        btn.classList.toggle('btn-primary', !active)
+        btn.classList.toggle('btn-locating', active)
+        btn.querySelector('.btn-text').textContent = active ? 'Stop' : 'Locate'
+      }
+      $('btn-locate').addEventListener('click', async () => {
+        const active = $('btn-locate').classList.contains('btn-danger')
+        try {
+          const res = await fetch('/api/command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: active ? 'locate,off' : 'locate,on' })
+          })
+          if (!res.ok) throw new Error('Failed')
+          if (locateTimer) clearTimeout(locateTimer)
+          if (active) {
+            setLocateButton(false)
+            showToast('Locate stopped', 'positive')
+          } else {
+            setLocateButton(true)
+            showToast('Locating: LED blinking for 15s', 'positive')
+            locateTimer = setTimeout(() => setLocateButton(false), 15000)
+          }
+        } catch (err) {
+          showToast('Failed to send locate command', 'negative')
+        }
       })
       document
         .getElementById('comm-form')

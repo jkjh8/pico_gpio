@@ -74,6 +74,9 @@ cmd_result_t cmd_get_all_status(char *response, size_t response_size);
 // ID 확인 유틸리티 함수
 bool check_device_id_match(uint8_t target_id);
 
+// 장비 식별 (LED 15초간 적/녹 깜박임; 무인자=토글, on/off=명시적 제어)
+cmd_result_t cmd_locate(const char *param, char *response, size_t response_size);
+
 // 도움말 명령어
 cmd_result_t cmd_help(char *response, size_t response_size);
 cmd_result_t cmd_set_auto_response(const char *param, char *response, size_t response_size);

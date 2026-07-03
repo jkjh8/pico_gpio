@@ -34,6 +34,9 @@ void status_led_red_off(void);
 void status_led_toggle_green(void);
 void status_led_toggle_red(void);
 void status_led_activity_blink(void);
+void status_led_locate_start(void);   // 장비 식별: 15초간 적/녹 교차 깜박임
+void status_led_locate_stop(void);    // 장비 식별 중지 (원래 LED 상태로 복귀)
+bool status_led_locate_is_active(void);
 void status_led_set_network_connected(bool connected);
 void status_led_set_mode(led_mode_t mode);
 void status_led_process(void);

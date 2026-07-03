@@ -1,6 +1,7 @@
 #include "command_handler.h"
 #include "network/network_config.h"
 #include "network/multicast_server.h"
+#include "led/status_led.h"
 #include "system/system_config.h"
 #include "tcp/tcp_server.h"
 #include "gpio/gpio.h"
@@ -134,6 +135,8 @@ cmd_result_t process_command(const char* command, char* response, size_t respons
         return cmd_help(response, response_size);
     } else if (strcmp(cmd_part, "restart") == 0) {
         return cmd_restart(response, response_size);
+    } else if (strcmp(cmd_part, "locate") == 0) {
+        return cmd_locate(param_part, response, response_size);
     } else {
         snprintf(response, response_size, "Unknown command: %s. Type 'help' for available commands.", cmd_part);
         return CMD_ERROR_UNKNOWN;
@@ -1019,6 +1022,7 @@ cmd_result_t cmd_help(char* response, size_t response_size) {
         "  setoutputinvert,0/1       - Set output polarity (0=normal, 1=invert)\r\n"
         "  getoutputinvert           - Get HC595 output polarity\r\n"
         "  get                       - Show all current device status\r\n"
+        "  locate[,on|off]           - Identify device (LED blinks red/green 15s; no arg = toggle)\r\n"
         "  factoryreset              - Factory reset (IP:192.168.1.100, Port:5050, Baud:9600)\r\n"
         "  restart                   - Restart system\r\n"
         "  help                      - Show this help\r\n"
@@ -1053,6 +1057,31 @@ cmd_result_t cmd_restart(char* response, size_t response_size) {
     snprintf(response, response_size, "System restart requested...\r\n");
     extern void system_restart_request(void);
     system_restart_request();
+    return CMD_SUCCESS;
+}
+
+// 장비 식별: 15초간 LED 적/녹 교차 깜박임 (led_task가 비동기 처리)
+// 무인자 = 토글, on/1 = 시작, off/0 = 중지
+cmd_result_t cmd_locate(const char* param, char* response, size_t response_size) {
+    bool start;
+    if (param == NULL || param[0] == '\0') {
+        start = !status_led_locate_is_active();  // 토글
+    } else if (strcmp(param, "on") == 0 || strcmp(param, "1") == 0) {
+        start = true;
+    } else if (strcmp(param, "off") == 0 || strcmp(param, "0") == 0) {
+        start = false;
+    } else {
+        snprintf(response, response_size, "Error: Invalid value. Use locate, locate,on or locate,off\r\n");
+        return CMD_ERROR_INVALID;
+    }
+
+    if (start) {
+        status_led_locate_start();
+        snprintf(response, response_size, "Locate started: LED blinking red/green for 15 seconds\r\n");
+    } else {
+        status_led_locate_stop();
+        snprintf(response, response_size, "Locate stopped\r\n");
+    }
     return CMD_SUCCESS;
 }
 

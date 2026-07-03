@@ -19,6 +19,15 @@ static bool mode_blink_state = false;
 static uint32_t boot_mode_start_time = 0;
 static int boot_mode_blink_count = 0;
 
+// 장비 식별(Locate) 깜박임 상태
+// 부팅 모드(500ms 교차)와 구분되도록 250ms 간격의 빠른 적/녹 교차 사용
+#define LOCATE_DURATION_MS       15000
+#define LOCATE_BLINK_INTERVAL_MS 250
+static bool locate_active = false;
+static uint32_t locate_start_time = 0;
+static uint32_t locate_blink_timer = 0;
+static bool locate_blink_state = false;
+
 void status_led_init(void)
 {
     // 녹색 LED 핀 초기화 (풀업 회로: 0=ON, 1=OFF)
@@ -94,6 +103,27 @@ void status_led_activity_blink(void)
     activity_blink_active = true;
 }
 
+// 장비 식별 시작 (non-blocking) — 진행 중 재호출하면 15초 타이머가 다시 시작됨
+void status_led_locate_start(void)
+{
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    locate_active = true;
+    locate_start_time = now;
+    locate_blink_timer = now;
+    locate_blink_state = false;
+}
+
+// 장비 식별 중지 — 다음 status_led_process()에서 모드별 제어가 원래 상태를 복원
+void status_led_locate_stop(void)
+{
+    locate_active = false;
+}
+
+bool status_led_locate_is_active(void)
+{
+    return locate_active;
+}
+
 // 네트워크 연결 상태 설정
 void status_led_set_network_connected(bool connected)
 {
@@ -125,7 +155,23 @@ void status_led_set_mode(led_mode_t mode)
 void status_led_process(void)
 {
     uint32_t now = to_ms_since_boot(get_absolute_time());
-    
+
+    // 장비 식별(Locate) — 최우선: 15초간 적/녹 교차 깜박임 후 원래 모드로 자동 복귀
+    if (locate_active) {
+        if (now - locate_start_time >= LOCATE_DURATION_MS) {
+            locate_active = false;  // 종료 — 아래 모드별 제어가 원래 상태를 다시 그림
+        } else {
+            if (now - locate_blink_timer >= LOCATE_BLINK_INTERVAL_MS) {
+                locate_blink_timer = now;
+                locate_blink_state = !locate_blink_state;
+            }
+            // 풀업: 0=ON, 1=OFF — 적/녹 교차
+            gpio_put(STATUS_LED_GREEN_PIN, locate_blink_state ? 0 : 1);
+            gpio_put(STATUS_LED_RED_PIN,   locate_blink_state ? 1 : 0);
+            return;
+        }
+    }
+
     // Activity blink 처리 (50ms) - 풀업: 0=ON, 1=OFF
     if (activity_blink_active) {
         if (now - activity_blink_start_time < 50) {
