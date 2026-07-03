@@ -19,11 +19,24 @@
 
 
 
+// HTTP 응답 헤더 전송
+static void send_response_header(uint8_t sock, const char* status, const char* content_type, size_t content_length) {
+    char header[256];
+    snprintf(header, sizeof(header),
+             "HTTP/1.1 %s\r\n"
+             "Content-Type: %s\r\n"
+             "Content-Length: %zu\r\n"
+             "Connection: close\r\n"
+             "\r\n",
+             status, content_type, content_length);
+    send(sock, (uint8_t*)header, strlen(header));
+}
+
 // JSON 응답 전송
-// http_send_response()(http_server.c)를 통해 보냄 — TX 여유 확인 + 타임아웃이 적용된
-// 안전한 경로라서, 클라이언트가 응답을 안 읽어도 network_task가 멈추지 않는다.
 static void send_json_response(uint8_t sock, const char* json_str) {
-    http_send_response(sock, "200 OK", "application/json", json_str);
+    size_t len = strlen(json_str);
+    send_response_header(sock, "200 OK", "application/json", len);
+    send(sock, (uint8_t*)json_str, len);
 }
 
 // 에러 응답 전송
@@ -31,7 +44,9 @@ static void send_error_response(uint8_t sock, const char* status, const char* me
     cJSON* root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "error", message);
     char* json_str = cJSON_PrintUnformatted(root);
-    http_send_response(sock, status, "application/json", json_str);
+    size_t len = strlen(json_str);
+    send_response_header(sock, status, "application/json", len);
+    send(sock, (uint8_t*)json_str, len);
     free(json_str);
     cJSON_Delete(root);
 }
