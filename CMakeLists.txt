@@ -77,11 +77,14 @@ add_custom_target(gen_build_time
 add_dependencies(main gen_build_time)
 target_include_directories(main PRIVATE ${CMAKE_BINARY_DIR}/build_info)
 
-# Firmware version
+# Firmware version (산출물 파일명에도 사용되므로 CMake 변수로 정의)
+set(FW_VER_MAJOR 1)
+set(FW_VER_MINOR 2)
+set(FW_VER_PATCH 0)
 target_compile_definitions(main PRIVATE
-    FW_VER_MAJOR=1
-    FW_VER_MINOR=2
-    FW_VER_PATCH=0
+    FW_VER_MAJOR=${FW_VER_MAJOR}
+    FW_VER_MINOR=${FW_VER_MINOR}
+    FW_VER_PATCH=${FW_VER_PATCH}
 )
 
 # Enable debug flags (set to 1 to enable, 0 to disable)
@@ -148,5 +151,14 @@ pico_add_extra_outputs(main)
 add_custom_command(TARGET main POST_BUILD
     COMMAND ${CMAKE_COMMAND} -DBIN_DIR=${CMAKE_BINARY_DIR} -P ${CMAKE_SOURCE_DIR}/pad_bin.cmake
     COMMENT "Padding main.bin to 256-byte boundary for OTA"
+)
+
+# 산출물을 버전+빌드시각 파일명으로 dist/에 복사 (패딩 이후 실행되어야 하므로 pad_bin 다음에 등록)
+add_custom_command(TARGET main POST_BUILD
+    COMMAND ${CMAKE_COMMAND}
+            -DBIN_DIR=${CMAKE_BINARY_DIR}
+            -DFW_VERSION=${FW_VER_MAJOR}.${FW_VER_MINOR}.${FW_VER_PATCH}
+            -P ${CMAKE_SOURCE_DIR}/cmake/copy_timestamped.cmake
+    COMMENT "Copying timestamped firmware to dist/"
 )
 
