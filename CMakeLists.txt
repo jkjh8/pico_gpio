@@ -67,6 +67,16 @@ add_executable(main
 # define W5500 chip for all source files
 target_compile_definitions(main PRIVATE _WIZCHIP_=W5500)
 
+# 빌드 시각 헤더 생성 — 매 빌드마다 갱신 (웹 UI Build 표시용, http_handlers.c에서 사용)
+add_custom_target(gen_build_time
+    COMMAND ${CMAKE_COMMAND} -DOUT=${CMAKE_BINARY_DIR}/build_info/build_time.h
+            -P ${CMAKE_SOURCE_DIR}/cmake/gen_build_time.cmake
+    BYPRODUCTS ${CMAKE_BINARY_DIR}/build_info/build_time.h
+    COMMENT "Generating build_time.h"
+)
+add_dependencies(main gen_build_time)
+target_include_directories(main PRIVATE ${CMAKE_BINARY_DIR}/build_info)
+
 # Firmware version
 target_compile_definitions(main PRIVATE
     FW_VER_MAJOR=1

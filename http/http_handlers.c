@@ -13,6 +13,7 @@
 #include "../main.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
+#include "build_time.h"   // BUILD_TIMESTAMP — CMake가 매 빌드마다 생성 (build/build_info/)
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -398,7 +399,7 @@ void http_handle_get_all(uint8_t sock) {
     
     // 펌웨어 버전 + 빌드 타임스탬프
     cJSON_AddStringToObject(root, "firmware_version", FIRMWARE_VERSION);
-    cJSON_AddStringToObject(root, "build_time", __DATE__ " " __TIME__);
+    cJSON_AddStringToObject(root, "build_time", BUILD_TIMESTAMP);  // build_time.h — 매 빌드마다 CMake가 생성
 
     char* json_str = cJSON_PrintUnformatted(root);
     send_json_response(sock, json_str);
