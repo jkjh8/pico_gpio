@@ -31,34 +31,67 @@ static int parse_content_length(const char *request) {
 }
 #define HTTP_SOCKET_COUNT (sizeof(http_sockets) / sizeof(http_sockets[0]))
 
+// 연결만 하고 요청을 안 보내는 클라이언트(브라우저 preconnect, 포트 스캐너 등)가
+// HTTP 소켓 2개를 계속 점유하지 않도록 일정 시간 후 연결을 끊는다
+#define HTTP_REQUEST_TIMEOUT_MS 3000
+static uint32_t http_conn_started[HTTP_SOCKET_COUNT] = {0};
+
+// 소켓에 데이터를 안전하게 전송 (정적 파일 전송 루프와 같은 검증된 패턴)
+// 논블로킹 소켓에서 send()가 SOCK_BUSY(0)를 반환하면 — TX 버퍼 부족 또는 직전 전송의
+// SENDOK 대기 중 — 짧게 양보(vTaskDelay) 후 재시도한다. timeout_ms 동안 진행이 없으면 포기.
+static bool http_send_raw(uint8_t sock, const uint8_t* data, size_t len, uint32_t timeout_ms) {
+    const size_t chunk_size = 1024;
+    size_t sent = 0;
+    uint32_t timeout_start = to_ms_since_boot(get_absolute_time());
+
+    while (sent < len) {
+        uint8_t sock_status = getSn_SR(sock);
+        if (sock_status == SOCK_CLOSED || sock_status == SOCK_CLOSE_WAIT) {
+            DBG_HTTP_PRINT("Socket closed during send at offset %zu\n", sent);
+            return false;
+        }
+
+        uint32_t now = to_ms_since_boot(get_absolute_time());
+        if ((now - timeout_start) > timeout_ms) {
+            DBG_HTTP_PRINT("Send timeout at offset %zu/%zu\n", sent, len);
+            return false;
+        }
+
+        size_t remaining = len - sent;
+        size_t to_send = (remaining > chunk_size) ? chunk_size : remaining;
+
+        int32_t result = send(sock, (uint8_t*)(data + sent), to_send);
+        if (result < 0) {
+            DBG_HTTP_PRINT("Send failed at offset %zu (err=%d)\n", sent, (int)result);
+            return false;
+        }
+        if (result == 0) {  // SOCK_BUSY — TX 여유 생길 때까지 양보 후 재시도
+            vTaskDelay(pdMS_TO_TICKS(5));
+            continue;
+        }
+        sent += (size_t)result;
+        timeout_start = now;  // 진행 중이면 타임아웃 리셋
+    }
+    return true;
+}
+
 // HTTP 응답 헤더 (바이너리 데이터 지원)
-static void http_send_response_binary(uint8_t sock, const char* status, const char* content_type, 
+static void http_send_response_binary(uint8_t sock, const char* status, const char* content_type,
                                       const uint8_t* body, size_t body_len) {
     char header[256];
-    
-    snprintf(header, sizeof(header),
+
+    int hlen = snprintf(header, sizeof(header),
         "HTTP/1.1 %s\r\n"
         "Content-Type: %s\r\n"
         "Content-Length: %d\r\n"
         "Connection: close\r\n"
         "\r\n",
         status, content_type, (int)body_len);
-    
-    send(sock, (uint8_t*)header, strlen(header));
-    
-    // 큰 데이터는 분할 전송 (1KB 단위)
+
+    if (!http_send_raw(sock, (uint8_t*)header, (size_t)hlen, 10000)) return;
+
     if (body && body_len > 0) {
-        const size_t chunk_size = 1024;
-        size_t sent = 0;
-        while (sent < body_len) {
-            size_t to_send = (body_len - sent > chunk_size) ? chunk_size : (body_len - sent);
-            int32_t result = send(sock, (uint8_t*)(body + sent), to_send);
-            if (result <= 0) {
-                break; // 전송 실패
-            }
-            sent += result;
-            vTaskDelay(pdMS_TO_TICKS(5)); // 짧은 딜레이
-        }
+        http_send_raw(sock, body, body_len, 10000);
     }
 }
 
@@ -101,9 +134,11 @@ static void http_handle_static_file(uint8_t sock, const char* path) {
                 content_type, (int)file_size);
         }
         
-        // 헤더 전송
-        send(sock, (uint8_t*)header, strlen(header));
-        
+        // 헤더 전송 — 논블로킹 소켓에서 SOCK_BUSY로 헤더가 유실되지 않도록 안전 경로 사용
+        if (!http_send_raw(sock, (uint8_t*)header, strlen(header), 10000)) {
+            return;
+        }
+
         // 파일 데이터를 청크 단위로 전송 (512 바이트씩)
         const size_t chunk_size = 512;
         size_t sent = 0;
@@ -245,8 +280,12 @@ static void http_handle_request(uint8_t sock, char* request, int len) {
 bool http_server_init(void) {
     for (int i = 0; i < HTTP_SOCKET_COUNT; i++) {
         uint8_t sock = http_sockets[i];
-        socket(sock, Sn_MR_TCP, HTTP_PORT, 0);
+        // SF_IO_NONBLOCK: 클라이언트가 응답을 안 읽을 때 send()가 network_task 안에서
+        // 무한 대기하지 않도록 논블로킹으로 오픈 (TCP 서버와 동일한 조치)
+        // 주의: 논블로킹 recv()는 lib/wiznet/socket.c의 SOCK_BUSY 버그 수정이 전제 조건
+        socket(sock, Sn_MR_TCP, HTTP_PORT, SF_IO_NONBLOCK);
         listen(sock);
+        http_conn_started[i] = 0;
         DBG_HTTP_PRINT("HTTP server listening on socket %d, port %d\n", sock, HTTP_PORT);
     }
     return true;
@@ -260,15 +299,21 @@ void http_server_process(void) {
 
         switch (status) {
             case SOCK_ESTABLISHED: {
-                // 데이터가 들어올 때까지 최대 300ms 대기 (busy-wait, no vTaskDelay)
-                uint16_t len = 0;
-                uint32_t t0 = to_ms_since_boot(get_absolute_time());
-                while (len == 0) {
-                    len = getSn_RX_RSR(sock);
-                    if (len > 0) break;
-                    if ((to_ms_since_boot(get_absolute_time()) - t0) > 300) break;
+                // 논블로킹 한 번 확인 — busy-wait 없음. 데이터가 없으면 다음 루프(10ms 후)에 재확인.
+                // 연결만 하고 요청을 안 보내는 소켓은 HTTP_REQUEST_TIMEOUT_MS 후 연결 해제.
+                uint16_t len = getSn_RX_RSR(sock);
+                if (len == 0) {
+                    uint32_t now = to_ms_since_boot(get_absolute_time());
+                    if (http_conn_started[i] == 0) {
+                        http_conn_started[i] = now;
+                    } else if ((now - http_conn_started[i]) > HTTP_REQUEST_TIMEOUT_MS) {
+                        DBG_HTTP_PRINT("HTTP[%d] no request within %dms, disconnecting\n", sock, HTTP_REQUEST_TIMEOUT_MS);
+                        disconnect(sock);
+                        http_conn_started[i] = 0;
+                    }
+                    break;
                 }
-                if (len == 0) break;
+                http_conn_started[i] = 0;  // 요청 도착 — 타이머 리셋
 
                 if (len > HTTP_BUFFER_SIZE - 1) len = HTTP_BUFFER_SIZE - 1;
                 int rlen = recv(sock, (uint8_t*)buffer, len);
@@ -292,7 +337,7 @@ void http_server_process(void) {
                                 if ((to_ms_since_boot(get_absolute_time()) - t1) > 2000)
                                     break; // 2초 타임아웃
                                 uint16_t avail = getSn_RX_RSR(sock);
-                                if (avail == 0) continue; // busy-wait
+                                if (avail == 0) { vTaskDelay(pdMS_TO_TICKS(2)); continue; } // 짧게 양보 후 재시도
                                 int space   = HTTP_BUFFER_SIZE - 1 - rlen;
                                 int to_read = ((int)avail < space) ? (int)avail : space;
                                 if (to_read <= 0) break;
@@ -312,9 +357,11 @@ void http_server_process(void) {
             }
             case SOCK_CLOSE_WAIT:
                 disconnect(sock);
+                http_conn_started[i] = 0;
                 break;
             case SOCK_CLOSED:
-                socket(sock, Sn_MR_TCP, HTTP_PORT, 0);
+                http_conn_started[i] = 0;
+                socket(sock, Sn_MR_TCP, HTTP_PORT, SF_IO_NONBLOCK);
                 listen(sock);
                 break;
         }

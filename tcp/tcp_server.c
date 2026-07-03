@@ -49,7 +49,7 @@ bool tcp_servers_has_clients(void) {
 void tcp_servers_restart(void) {
     for (uint8_t i = TCP_SOCKET_START; i < TCP_SOCKET_START + TCP_SOCKET_COUNT; i++) {
         close(i);
-        socket(i, Sn_MR_TCP, tcp_port, 0x00);
+        socket(i, Sn_MR_TCP, tcp_port, SF_IO_NONBLOCK);
         listen(i);
     DBG_TCP_PRINT("TCP 서버 재시작 (소켓: %d, 포트: %d)\n", i, tcp_port);
     }
@@ -60,7 +60,7 @@ void tcp_servers_restart_with_port(uint16_t new_port) {
     tcp_port = new_port;
     for (uint8_t i = TCP_SOCKET_START; i < TCP_SOCKET_START + TCP_SOCKET_COUNT; i++) {
         close(i);
-        socket(i, Sn_MR_TCP, tcp_port, 0x00);
+        socket(i, Sn_MR_TCP, tcp_port, SF_IO_NONBLOCK);
         listen(i);
     DBG_TCP_PRINT("TCP 서버 재시작 (소켓: %d, 포트: %d)\n", i, tcp_port);
     }
@@ -69,7 +69,7 @@ void tcp_servers_restart_with_port(uint16_t new_port) {
 void tcp_servers_init(uint16_t port) {
     for (uint8_t i = TCP_SOCKET_START; i < TCP_SOCKET_START + TCP_SOCKET_COUNT; i++) {
         if (getSn_SR(i) != SOCK_CLOSED) close(i);
-        socket(i, Sn_MR_TCP, port, 0x00);
+        socket(i, Sn_MR_TCP, port, SF_IO_NONBLOCK);
         listen(i);
     DBG_TCP_PRINT("TCP 서버 시작 (소켓: %d, 포트: %d)\n", i, port);
     }
@@ -130,34 +130,30 @@ void tcp_servers_process(void) {
                     if ((result == CMD_SUCCESS || result == CMD_ERROR_INVALID)) {
                         size_t resp_len = strlen(response);
                         if (resp_len > 0) {
+                            // 응답이 줄바꿈으로 끝나지 않으면 추가
+                            if (resp_len < 2 || response[resp_len-2] != '\r' || response[resp_len-1] != '\n') {
+                                if (resp_len + 2 <= sizeof(response)) {
+                                    response[resp_len++] = '\r';
+                                    response[resp_len++] = '\n';
+                                }
+                            }
+                            // 소켓 TX 버퍼(1KB)만큼 청크 전송. 논블로킹이라 상대가 못 받아줘도
+                            // (SOCK_BUSY) 여기서 멈추지 않고 이번 응답은 포기한다 — 대부분의 응답은
+                            // 1KB 이내라 한 번의 send() 호출로 끝난다.
+                            const size_t CHUNK_SIZE = 1024;
                             size_t sent = 0;
-                            const size_t CHUNK_SIZE = 256;
                             while (sent < resp_len) {
                                 size_t remaining = resp_len - sent;
                                 uint16_t this_len = (uint16_t)(remaining > CHUNK_SIZE ? CHUNK_SIZE : remaining);
-                                int s = send(i, (uint8_t*)response + sent, this_len);
+                                int32_t s = send(i, (uint8_t*)response + sent, this_len);
                                 if (s <= 0) break;
                                 sent += (size_t)s;
-                            }
-                            // 응답이 줄바꿈으로 끝나지 않으면 추가
-                            if (resp_len < 2 || response[resp_len-2] != '\r' || response[resp_len-1] != '\n') {
-                                const char* newline = "\r\n";
-                                send(i, (uint8_t*)newline, 2);
                             }
                         }
                     } else {
                         char error_msg[128];
                         snprintf(error_msg, sizeof(error_msg), "Command error: %d\r\n", result);
-                        size_t err_len = strlen(error_msg);
-                        size_t sent = 0;
-                        const size_t CHUNK_SIZE = 256;
-                        while (sent < err_len) {
-                            size_t remaining = err_len - sent;
-                            uint16_t this_len = (uint16_t)(remaining > CHUNK_SIZE ? CHUNK_SIZE : remaining);
-                            int s = send(i, (uint8_t*)error_msg + sent, this_len);
-                            if (s <= 0) break;
-                            sent += (size_t)s;
-                        }
+                        send(i, (uint8_t*)error_msg, strlen(error_msg));  // 128B < 1KB 버퍼라 한 번에 전송
                     }
                 }
                 break;
@@ -171,7 +167,7 @@ void tcp_servers_process(void) {
                 // 네트워크가 연결된 경우에만 재오픈
                 if (network_is_connected()) {
                     close(i); // 안전하게 닫기
-                    socket(i, Sn_MR_TCP, tcp_port, 0x00);
+                    socket(i, Sn_MR_TCP, tcp_port, SF_IO_NONBLOCK);
                     listen(i);
                     DBG_TCP_PRINT("TCP 서버 재오픈 (소켓: %d, 포트: %d)\n", i, tcp_port);
                 }

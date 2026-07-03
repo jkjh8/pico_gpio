@@ -15,12 +15,12 @@
 #define ntohs(x) htons(x)
 
 static bool mdns_initialized = false;
-static bool mdns_expired = false;
 static char mdns_hostname[32] = {0};  // "pico-gpio-XX.local"
 static uint32_t last_announce_time = 0;
-static uint32_t mdns_start_time = 0;
 #define MDNS_ANNOUNCE_INTERVAL_MS 300000  // 300초마다 자발적 응답
-#define MDNS_LIFETIME_MS 300000           // 시작 후 5분간만 동작
+// 참고: 예전에는 폭주 시 사망 문제를 피하려고 시작 5분 후 mDNS를 강제 종료했음.
+// 근본 원인(dns_decode_name 무한루프, 스택 오버플로우, 드라이버 sendto SENDOK 무한대기)을
+// 모두 수정해 제한을 해제 — mDNS는 이제 상시 동작한다.
 // 초기(부팅시) 아나운스 스케줄링 (블로킹 sleep 사용 금지)
 static int mdns_initial_announces = 0;
 static uint32_t mdns_next_initial_announce = 0;
@@ -255,7 +255,6 @@ static int build_txt_record_response(uint8_t* response, const char* hostname) {
 // PTR/SRV 관련 서비스 탐색 응답은 더 이상 제공하지 않습니다.
 // mDNS 초기화
 void mdns_init(void) {
-    if (mdns_expired) return;
     // 이미 초기화된 경우 재초기화하지 말고 아나운스만 실행
     if (mdns_initialized) {
         DBG_NET_PRINT("[mDNS] Already initialized, sending mdns_announce only\n");
@@ -301,8 +300,7 @@ void mdns_init(void) {
     DBG_NET_PRINT("[mDNS] Socket status after open: 0x%02X (expected 0x22 for UDP)\n", status);
 
     mdns_initialized = true;
-    mdns_start_time = to_ms_since_boot(get_absolute_time());
-    last_announce_time = mdns_start_time;
+    last_announce_time = to_ms_since_boot(get_absolute_time());
     
     DBG_NET_PRINT("[mDNS] Initialized on socket %d, port %d\n", MDNS_SOCKET, MDNS_PORT);
     DBG_NET_PRINT("[mDNS] Hostname: %s\n", mdns_hostname);
@@ -353,19 +351,7 @@ void mdns_announce(void) {
 void mdns_process(void) {
     if (!mdns_initialized) return;
 
-    // 시작 후 5분 경과 시 자동 종료
     uint32_t current_time = to_ms_since_boot(get_absolute_time());
-    static uint32_t last_alive_print = 0;
-    if (current_time - last_alive_print >= 60000) {
-        printf("[mDNS] alive, elapsed=%lus\n", (current_time - mdns_start_time) / 1000);
-        last_alive_print = current_time;
-    }
-    if (current_time - mdns_start_time >= MDNS_LIFETIME_MS) {
-        printf("[mDNS] 5 minutes elapsed, stopping mDNS\n");
-        mdns_expired = true;
-        mdns_close();
-        return;
-    }
 
     // 재부팅 요청 시 mDNS 소켓 닫고 처리 중단
     if (is_system_restart_requested()) {
@@ -516,8 +502,4 @@ void mdns_close(void) {
 
 bool mdns_is_initialized(void) {
     return mdns_initialized;
-}
-
-bool mdns_is_expired(void) {
-    return mdns_expired;
 }

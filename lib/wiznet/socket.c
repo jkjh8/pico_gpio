@@ -54,6 +54,7 @@
 //
 //*****************************************************************************
 #include "socket.h"
+#include "pico/time.h"   // sendto() SENDOK 대기 시간 제한용 (아래 sendto_IO_6 참고)
 
 //M20150401 : Typing Error
 //#define SOCK_ANY_PORT_NUM  0xC000;
@@ -684,7 +685,11 @@ int32_t recv(uint8_t sn, uint8_t * buf, uint16_t len) { //lihan
                 return SOCK_BUSY;
             }
 #else
-            if (sock_io_mode & (1 << sn)) {
+            // 버그 수정: 데이터 유무(recvsize)와 무관하게 논블로킹이면 무조건 SOCK_BUSY를
+            // 반환하던 문제. recvfrom_IO_6()의 올바른 패턴과 동일하게 "데이터가 없을 때만
+            // BUSY"로 조건을 맞춤 — 그렇지 않으면 논블로킹 TCP 소켓은 recv()가 항상 0을
+            // 반환해 실제로는 수신 버퍼를 절대 비우지 못한다.
+            if ((sock_io_mode & (1 << sn)) && (recvsize == 0)) {
                 return SOCK_BUSY;
             }
             if (recvsize != 0) {
@@ -891,27 +896,39 @@ static int32_t sendto_IO_6(uint8_t sn, uint8_t * buf, uint16_t len, uint8_t * ad
 #endif
     /* wait to process the command... */
     while (getSn_CR(sn));
-    while (1) {
-        tmp = getSn_IR(sn);
-        if (tmp & Sn_IR_SENDOK) {
-            setSn_IR(sn, Sn_IR_SENDOK);
-            break;
-        }
-        //M:20131104
-        //else if(tmp & Sn_IR_TIMEOUT) return SOCKERR_TIMEOUT;
-        else if (tmp & Sn_IR_TIMEOUT) {
-            setSn_IR(sn, Sn_IR_TIMEOUT);
-            //M20150409 : Fixed the lost of sign bits by type casting.
-            //len = (uint16_t)SOCKERR_TIMEOUT;
-            //break;
-#if _WIZCHIP_ < 5500   //M20150401 : for WIZCHIP Errata #4, #5 (ARP errata)
-            if (taddr) {
-                setSUBR((uint8_t*)&taddr);
+    // 버그 수정: 원본은 SENDOK/TIMEOUT 인터럽트만 기다리는 무한 루프였음.
+    // 폭주 시 SPI 스트레스로 SEND 명령이 유실되거나 IR 플래그가 오염되면 두 플래그가
+    // 영원히 오지 않아 network_task 전체가 여기서 멈춤 (mDNS/멀티캐스트 폭주 사망 원인).
+    // 시간 제한(3초 — W5500 ARP 최악 지연 RTR×RCR≈1.6초보다 여유) + 소켓 상태 확인 추가.
+    {
+        uint32_t sendok_start = to_ms_since_boot(get_absolute_time());
+        while (1) {
+            tmp = getSn_IR(sn);
+            if (tmp & Sn_IR_SENDOK) {
+                setSn_IR(sn, Sn_IR_SENDOK);
+                break;
             }
+            //M:20131104
+            //else if(tmp & Sn_IR_TIMEOUT) return SOCKERR_TIMEOUT;
+            else if (tmp & Sn_IR_TIMEOUT) {
+                setSn_IR(sn, Sn_IR_TIMEOUT);
+                //M20150409 : Fixed the lost of sign bits by type casting.
+                //len = (uint16_t)SOCKERR_TIMEOUT;
+                //break;
+#if _WIZCHIP_ < 5500   //M20150401 : for WIZCHIP Errata #4, #5 (ARP errata)
+                if (taddr) {
+                    setSUBR((uint8_t*)&taddr);
+                }
 #endif
-            return SOCKERR_TIMEOUT;
+                return SOCKERR_TIMEOUT;
+            }
+            if (getSn_SR(sn) == SOCK_CLOSED) {
+                return SOCKERR_SOCKCLOSED;
+            }
+            if ((to_ms_since_boot(get_absolute_time()) - sendok_start) > 3000) {
+                return SOCKERR_TIMEOUT;
+            }
         }
-        ////////////
     }
 #if _WIZCHIP_ < 5500   //M20150401 : for WIZCHIP Errata #4, #5 (ARP errata)
     if (taddr) {
