@@ -32,14 +32,19 @@ static void send_gpio_feedback(bool is_input, uint16_t data, uint16_t changed_bi
     
     // 입력일 경우 trigger_mode 처리
     uint16_t bits_to_send = changed_bits;
+    bool trigger_event = false;
     if (is_input && gpio_config.rt_mode == GPIO_RT_MODE_CHANNEL) {
         if (gpio_config.trigger_mode == GPIO_MODE_TRIGGER) {
-            // TRIGGER 모드: 0->1 (OFF->ON) 변화만 전송
-            bits_to_send = changed_bits & data;  // rising edge만
+            // TRIGGER 모드: 버튼 눌림 시점(1->0, 풀업 회로의 falling edge)에 즉시 전송.
+            // 릴리즈(0->1)는 무시 — 사이클당 1회만 전송되며, 예전처럼 릴리즈까지
+            // 기다리지 않으므로 반응이 빠르다. 메시지 값은 프로토콜 호환을 위해
+            // 항상 1(트리거 발생)로 전송한다.
+            bits_to_send = changed_bits & (uint16_t)~data;  // falling edge만 (눌림)
             if (bits_to_send == 0) {
-                return;  // 전송할 rising edge가 없으면 리턴
+                return;  // 전송할 눌림 이벤트가 없으면 리턴 (릴리즈 무시)
             }
-            DBG_GPIO_PRINT("Trigger mode: rising=0x%04X\n", bits_to_send);
+            trigger_event = true;
+            DBG_GPIO_PRINT("Trigger mode: pressed=0x%04X\n", bits_to_send);
         }
     }
     
@@ -52,8 +57,10 @@ static void send_gpio_feedback(bool is_input, uint16_t data, uint16_t changed_bi
             for (channel = 1; channel <= 16; channel++) {
                 uint16_t mask = (1 << (channel - 1));
                 if (bits_to_send & mask) {
-                    bool value = (data & mask) != 0;
-                    
+                    // 트리거 이벤트는 항상 1로 전송 (눌림 시점의 레지스터 값은 0이지만
+                    // 컨트롤러는 in,id,ch,1 을 "버튼 눌림"으로 해석함)
+                    bool value = trigger_event ? true : ((data & mask) != 0);
+
                     snprintf(feedback, sizeof(feedback),
                             "in,%d,%d,%s\r\n",
                             gpio_config.device_id, channel, value ? "1" : "0");

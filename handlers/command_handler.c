@@ -1014,7 +1014,7 @@ cmd_result_t cmd_help(char* response, size_t response_size) {
         "  getgpioconfig             - Get all GPIO configuration\r\n"
         "  setrtmode,bytes/channel   - Set return mode (bytes=2bytes, channel=per-channel)\r\n"
         "  getrtmode                 - Get return mode\r\n"
-        "  settriggermode,toggle/trigger - Set trigger mode (channel mode only: toggle=on-change, trigger=cycle)\r\n"
+        "  settriggermode,toggle/trigger - Set trigger mode (channel mode only: toggle=on-change, trigger=on-press)\r\n"
         "  gettriggermode            - Get trigger mode\r\n"
         "System:\r\n"
         "  setautoresponse,0/1       - Enable/Disable auto response on input change\r\n"
