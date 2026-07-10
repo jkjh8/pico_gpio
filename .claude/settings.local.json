@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cmake .. -G Ninja)"
+      "Bash(cmake .. -G Ninja)",
+      "Bash(\"/c/Program Files/CMake/bin/cmake\" --build . --target main -- -j 4)"
     ]
   }
 }
